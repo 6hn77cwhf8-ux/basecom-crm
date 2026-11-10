@@ -1,0 +1,30 @@
+# Produção na Scaleway. Variáveis em /opt/basecom/.env (nunca no repositório).
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile
+    env_file: /opt/basecom/.env
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on: [server]
+volumes:
+  caddy-data:
+  caddy-config:
