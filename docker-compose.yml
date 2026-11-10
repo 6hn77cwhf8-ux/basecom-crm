@@ -1,0 +1,14 @@
+# Ambiente local de desenvolvimento. Em produção a base de dados é o PostgreSQL gerido da Scaleway.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: basecom
+      POSTGRES_PASSWORD: basecom-dev
+      POSTGRES_DB: basecom_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+volumes:
+  db-data:

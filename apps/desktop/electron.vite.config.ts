@@ -1,0 +1,9 @@
+import { defineConfig } from "electron-vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  main: {},
+  // Com sandbox ativo, o Electron só aceita preload em CommonJS.
+  preload: { build: { rollupOptions: { output: { format: "cjs", entryFileNames: "[name].cjs" } } } },
+  renderer: { plugins: [react()] },
+});
