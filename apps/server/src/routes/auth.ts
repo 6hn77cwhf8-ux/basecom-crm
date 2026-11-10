@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
-import { AuthError, confirmTotp, login, logout, userForToken, type PublicUser } from "../auth/service.js";
+import { AuthError, changePassword, confirmTotp, login, logout, userForToken, type PublicUser } from "../auth/service.js";
 
 declare module "fastify" {
   interface FastifyRequest { user?: PublicUser }
@@ -12,12 +12,18 @@ function bearer(req: FastifyRequest): string | null {
   return h?.startsWith("Bearer ") ? h.slice(7) : null;
 }
 
-/** Usar em todas as rotas protegidas: responde 401 sem sessão válida. */
-export function requireAuth(db: Db) {
+/**
+ * Usar em todas as rotas protegidas: responde 401 sem sessão válida.
+ * Com `roles`, responde 403 a quem não tem um desses perfis.
+ * Enquanto a palavra-passe provisória não for trocada, só deixa trocar a palavra-passe.
+ */
+export function requireAuth(db: Db, roles?: PublicUser["role"][], opts: { allowPendingPassword?: boolean } = {}) {
   return async (req: FastifyRequest) => {
     const token = bearer(req);
     const user = token ? await userForToken(db, token) : null;
     if (!user) throw new AuthError(401, "Sessão terminada. Entre novamente.");
+    if (user.mustChangePassword && !opts.allowPendingPassword) throw new AuthError(403, "Tem de alterar a palavra-passe provisória.");
+    if (roles && !roles.includes(user.role)) throw new AuthError(403, "Não tem permissão para esta ação.");
     req.user = user;
   };
 }
@@ -25,12 +31,7 @@ export function requireAuth(db: Db) {
 export async function authRoutes(app: FastifyInstance, opts: { db: Db; encryptionKey: string }) {
   const { db, encryptionKey } = opts;
 
-  app.setErrorHandler((err, _req, reply) => {
-    if (err instanceof AuthError) return reply.code(err.status).send({ error: err.message });
-    if (err instanceof z.ZodError) return reply.code(400).send({ error: "Dados em falta ou inválidos." });
-    app.log.error(err);
-    return reply.code(500).send({ error: "Ocorreu um erro. Tente novamente." });
-  });
+
 
   app.post("/auth/login", async (req) => {
     const body = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
@@ -42,9 +43,15 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; encryptio
     return confirmTotp(db, encryptionKey, body.challengeToken, body.code, body.device);
   });
 
-  app.get("/auth/me", { preHandler: requireAuth(db) }, async (req) => ({ user: req.user }));
+  app.get("/auth/me", { preHandler: requireAuth(db, undefined, { allowPendingPassword: true }) }, async (req) => ({ user: req.user }));
 
-  app.post("/auth/logout", { preHandler: requireAuth(db) }, async (req) => {
+  app.post("/auth/password", { preHandler: requireAuth(db, undefined, { allowPendingPassword: true }) }, async (req) => {
+    const body = z.object({ current: z.string().min(1), next: z.string().min(1) }).parse(req.body);
+    await changePassword(db, req.user!.id, body.current, body.next);
+    return { ok: true };
+  });
+
+  app.post("/auth/logout", { preHandler: requireAuth(db, undefined, { allowPendingPassword: true }) }, async (req) => {
     await logout(db, bearer(req)!);
     return { ok: true };
   });

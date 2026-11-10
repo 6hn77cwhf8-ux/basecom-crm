@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, pgEnum, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, boolean, integer, jsonb } from "drizzle-orm/pg-core";
 
 /** Perfis aprovados (Fase 02, matriz de permissões). */
 export const roleEnum = pgEnum("role", ["admin", "team_lead", "sales"]);
@@ -15,6 +15,8 @@ export const users = pgTable("users", {
   /** Segredo do Microsoft Authenticator, encriptado. Nulo até a 2FA estar ativa. */
   totpSecretEnc: text("totp_secret_enc"),
   totpEnabled: boolean("totp_enabled").notNull().default(false),
+  /** Palavra-passe provisória: tem de ser trocada na próxima entrada. */
+  mustChangePassword: boolean("must_change_password").notNull().default(true),
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -53,4 +55,12 @@ export const auditLog = pgTable("audit_log", {
   entityId: text("entity_id"),
   details: text("details"),
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Configurações editáveis pelo Administrador (chave → valor). */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id),
 });

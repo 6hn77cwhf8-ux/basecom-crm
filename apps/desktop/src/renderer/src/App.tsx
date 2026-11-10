@@ -1,27 +1,36 @@
 import { useEffect, useState } from "react";
 import { api, type User } from "./api";
 import { Login } from "./Login";
+import { ChangePassword } from "./ChangePassword";
+import { NAV, Shell, type PageId } from "./Shell";
+import { Team } from "./pages/Team";
+import { Settings } from "./pages/Settings";
+import { Placeholder } from "./pages/Placeholder";
+
+const PHASE: Partial<Record<PageId, string>> = {
+  painel: "Arranque B", empresas: "Fase 2", agenda: "Fase 3", novos: "Fase 3", atuais: "Fase 3", carteira: "Fase 3", oportunidades: "Fase 3",
+  pendencias: "Arranque B", tickets: "Arranque B", vendas: "Arranque B", objetivos: "Arranque B", relatorios: "Arranque B",
+};
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(api.hasToken());
+  const [page, setPage] = useState<PageId>("equipa");
 
   useEffect(() => {
     if (!api.hasToken()) return;
     api.me().then(setUser).catch(() => undefined).finally(() => setChecking(false));
   }, []);
 
+  const logout = () => api.logout().then(() => setUser(null));
   if (checking) return null;
-  if (!user) return <Login onDone={setUser} />;
+  if (!user) return <Login onDone={(u) => { setUser(u); setPage(u.role === "sales" ? "painel" : "equipa"); }} />;
+  if (user.mustChangePassword) return <ChangePassword onLogout={logout} onDone={() => setUser({ ...user, mustChangePassword: false })} />;
 
-  // Ecrã provisório até ao menu lateral e ao Painel (passos seguintes da fase 1).
+  const label = NAV.find((n) => n.id === page)?.label ?? "";
   return (
-    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#F5F5F7", fontFamily: "Manrope, -apple-system, 'Segoe UI', sans-serif" }}>
-      <section style={{ background: "#FFFFFF", border: "1px solid #E5E5EA", borderRadius: 14, padding: "32px 40px", textAlign: "center", display: "flex", flexDirection: "column", gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 26 }}>Olá, {user.name}</h1>
-        <p style={{ margin: 0, color: "#6E6E73" }}>Entrou com verificação em dois passos.</p>
-        <button onClick={() => api.logout().then(() => setUser(null))} style={{ fontFamily: "inherit", height: 40, borderRadius: 10, border: "1px solid #E5E5EA", background: "#FFFFFF", cursor: "pointer", fontWeight: 600 }}>Sair</button>
-      </section>
-    </main>
+    <Shell user={user} page={page} onNavigate={setPage} onLogout={logout}>
+      {page === "equipa" ? <Team me={user} /> : page === "config" ? <Settings /> : <Placeholder title={label} phase={PHASE[page] ?? "Fase seguinte"} />}
+    </Shell>
   );
 }
