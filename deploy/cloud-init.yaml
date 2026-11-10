@@ -1,0 +1,52 @@
+#cloud-config
+# Arranque do servidor de produção (Scaleway DEV1-M, Ubuntu 24.04).
+# Os valores __ASSIM__ são preenchidos no momento da criação; nunca guardar segredos aqui.
+package_update: true
+packages: [docker.io, docker-compose-v2, docker-buildx, git]
+timezone: Europe/Lisbon
+write_files:
+  - path: /opt/basecom/.env
+    permissions: "0600"
+    content: |
+      DATABASE_URL=__DATABASE_URL__
+      ENCRYPTION_KEY=__ENCRYPTION_KEY__
+  - path: /opt/basecom/deploy_key
+    permissions: "0600"
+    content: |
+      __DEPLOY_KEY__
+  - path: /etc/systemd/system/basecom-update.service
+    content: |
+      [Unit]
+      Description=BASECOM CRM - verificar nova versão
+      After=docker.service network-online.target
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/basecom/app/deploy/update.sh
+  - path: /etc/systemd/system/basecom-update.timer
+    content: |
+      [Unit]
+      Description=BASECOM CRM - verificar nova versão de 5 em 5 minutos
+      [Timer]
+      OnBootSec=2min
+      OnUnitActiveSec=5min
+      [Install]
+      WantedBy=timers.target
+  - path: /opt/basecom/first-install.sh
+    permissions: "0700"
+    content: |
+      #!/usr/bin/env bash
+      # Espera até a deploy key estar aceite no GitHub (até 24 h) e faz a primeira instalação.
+      set -u
+      export GIT_SSH_COMMAND="ssh -i /opt/basecom/deploy_key -o StrictHostKeyChecking=accept-new"
+      for i in $(seq 1 288); do
+        git clone --quiet --branch production __REPO__ /opt/basecom/app && break
+        sleep 300
+      done
+      cd /opt/basecom/app || exit 1
+      git config core.sshCommand "$GIT_SSH_COMMAND"
+      docker compose -f deploy/docker-compose.prod.yml up -d --build
+      systemctl enable --now basecom-update.timer
+runcmd:
+  - [systemctl, enable, --now, docker]
+  - [systemctl, daemon-reload]
+  - [bash, -c, "nohup /opt/basecom/first-install.sh > /var/log/basecom-first-install.log 2>&1 &"]
