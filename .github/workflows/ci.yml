@@ -8,8 +8,19 @@ on:
 jobs:
   verificar:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: basecom
+          POSTGRES_PASSWORD: basecom-dev
+          POSTGRES_DB: basecom_crm
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U basecom" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      DATABASE_URL: postgres://basecom:basecom-dev@localhost:5432/basecom_crm
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
