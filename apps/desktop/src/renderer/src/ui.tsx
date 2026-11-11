@@ -35,3 +35,27 @@ export function ErrorText({ children }: { children: ReactNode }) {
 
 export const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-PT") : "—");
 export const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" });
+
+/** 21225 → «21.225» (separador de milhares com ponto, como pedido para o CRM). */
+export const fmtInt = (n: number | null | undefined) => (n == null ? "—" : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, "."));
+/** 1234.5 → «1.234,50 €». */
+export const fmtEur = (v: number | string | null | undefined) => {
+  if (v == null || v === "") return "—";
+  const [i, d] = Number(v).toFixed(2).split(".");
+  return `${fmtInt(Number(i))},${d} €`;
+};
+
+export function Kpi({ label, value, hint, active, onClick }: { label: string; value: ReactNode; hint?: ReactNode; active?: boolean; onClick?: () => void }) {
+  const style: CSSProperties = { ...card, flex: 1, minWidth: 0, padding: "14px 16px", textAlign: "left", display: "flex", flexDirection: "column", gap: 4, borderColor: active ? c.ink : c.line, fontFamily: "inherit", color: c.ink };
+  const body = (
+    <>
+      <span style={{ fontSize: 12, color: c.muted, fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 26, lineHeight: "30px", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+      {hint && <span style={{ fontSize: 12, color: c.muted }}>{hint}</span>}
+    </>
+  );
+  return onClick ? <button type="button" onClick={onClick} aria-pressed={active} style={{ ...style, cursor: "pointer" }}>{body}</button> : <div style={style}>{body}</div>;
+}
+
+export const th: CSSProperties = { padding: "10px 12px", fontWeight: 600, borderBottom: `1px solid ${c.line}`, textAlign: "left", whiteSpace: "nowrap" };
+export const td: CSSProperties = { padding: "10px 12px", borderBottom: `1px solid ${c.line}`, verticalAlign: "middle" };

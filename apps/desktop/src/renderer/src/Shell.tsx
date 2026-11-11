@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { c, font } from "./ui";
-import { ROLE_LABEL, type Role, type User } from "./api";
+import { api, ROLE_LABEL, type Role, type SearchHit, type User } from "./api";
 import logo from "./assets/logo-horizontal.webp";
 import simbolo from "./assets/simbolo.webp";
 
@@ -30,7 +30,7 @@ const Icon = ({ d }: { d: string }) => (
 
 function readOpen() { try { return localStorage.getItem("bc_nav") !== "0"; } catch { return true; } }
 
-export function Shell({ user, page, onNavigate, onLogout, children }: { user: User; page: PageId; onNavigate: (p: PageId) => void; onLogout: () => void; children: ReactNode }) {
+export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, children }: { user: User; page: PageId; onNavigate: (p: PageId) => void; onLogout: () => void; onOpenCompany: (id: string) => void; children: ReactNode }) {
   const [open, setOpen] = useState(readOpen);
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem("bc_nav", v ? "1" : "0"); } catch { /* sem armazenamento */ } };
   const items = NAV.filter((n) => !n.roles || n.roles.includes(user.role));
@@ -46,7 +46,7 @@ export function Shell({ user, page, onNavigate, onLogout, children }: { user: Us
             <Icon d={open ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"} />
           </button>
         </div>
-        {open && <input disabled placeholder="Pesquisar (em breve)" aria-label="Pesquisar empresas" style={{ fontFamily: "inherit", height: 36, border: `1px solid ${c.line}`, borderRadius: 10, padding: "0 10px", fontSize: 13, background: c.surface, marginBottom: 10 }} />}
+        {open && <SearchBox onOpen={onOpenCompany} />}
         {items.map((n) => {
           const on = n.id === page;
           return (
@@ -70,6 +70,50 @@ export function Shell({ user, page, onNavigate, onLogout, children }: { user: Us
         </div>
       </nav>
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
+    </div>
+  );
+}
+
+/** Pesquisa global: NIF, telefone, nome, decisor ou email. Enter abre o primeiro resultado. */
+function SearchBox({ onOpen }: { onOpen: (id: string) => void }) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const [sel, setSel] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (q.trim().length < 2) { setHits(null); return; }
+    const t = setTimeout(() => api.search(q).then((r) => { setHits(r); setSel(0); }).catch(() => setHits([])), 200);
+    return () => clearTimeout(t);
+  }, [q]);
+  useEffect(() => {
+    const out = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setHits(null); };
+    document.addEventListener("mousedown", out);
+    return () => document.removeEventListener("mousedown", out);
+  }, []);
+  const open = (id: string) => { onOpen(id); setHits(null); setQ(""); };
+  return (
+    <div ref={box} style={{ position: "relative", marginBottom: 10 }}>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Pesquisar NIF, nome, telefone…" aria-label="Pesquisar empresas"
+        onKeyDown={(e) => {
+          if (!hits?.length) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setSel((sel + 1) % hits.length); }
+          if (e.key === "ArrowUp") { e.preventDefault(); setSel((sel - 1 + hits.length) % hits.length); }
+          if (e.key === "Enter") open(hits[sel]!.id);
+          if (e.key === "Escape") setHits(null);
+        }}
+        style={{ width: "100%", boxSizing: "border-box", height: 36, border: `1px solid ${c.line}`, borderRadius: 10, padding: "0 10px", fontSize: 13, background: c.surface }} />
+      {hits && (
+        <div role="listbox" style={{ position: "absolute", top: 40, left: 0, right: 0, zIndex: 40, background: c.card, border: `1px solid ${c.line}`, borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.10)", padding: 6 }}>
+          <div style={{ fontSize: 12, color: c.muted, padding: "4px 8px" }}>{hits.length ? `${hits.length === 8 ? "Primeiros 8" : hits.length} resultado${hits.length === 1 ? "" : "s"}` : "Sem resultados"}</div>
+          {hits.map((h, i) => (
+            <button key={h.id} role="option" aria-selected={i === sel} onMouseEnter={() => setSel(i)} onClick={() => open(h.id)}
+              style={{ display: "flex", flexDirection: "column", gap: 2, width: "100%", textAlign: "left", border: 0, borderRadius: 8, padding: "8px", cursor: "pointer", background: i === sel ? c.brandSoft : "transparent", color: c.ink }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{h.name}</span>
+              <span style={{ fontSize: 12, color: c.muted }}>NIF {h.nif} · {h.municipality ?? "—"} · {h.owner ?? "sem carteira"}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

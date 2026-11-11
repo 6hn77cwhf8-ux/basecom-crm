@@ -9,6 +9,34 @@ export type Settings = {
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
   timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number };
 };
+export type CompanyRow = {
+  id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null;
+  ownerId: string | null; owner: string | null; walletKind: "NC" | "FC"; doNotContact: boolean; needsReview: string | null;
+  nifValid: boolean; operator: string | null; loyaltyEnd: string | null;
+};
+export type CompanyKpis = { total: number; noOwner: number; withOwner: number; nc: number; fc: number; clients: number; dnc: number; review: number };
+export type CompanyFilters = Partial<{ q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; offset: number; limit: number }>;
+export type Contact = { id: string; kind: "phone" | "email"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string };
+export type Note = { id: string; kind: string; text: string; at: string; user: string | null; batchId: string | null };
+export type CompanyDetail = {
+  company: CompanyRow & { size: string | null; employeesBand: string | null; l2bMonthly: string | null; address: string | null; postalCode: string | null; economicGroup: string | null; lastSourceYear: number | null; sources: string | null; createdAt: string; updatedAt: string };
+  contacts: Contact[]; notes: Note[];
+};
+export type SearchHit = { id: string; nif: string; name: string; municipality: string | null; owner: string | null; accountType: string };
+export type SheetAction = "import" | "review" | "skip";
+export type SheetAnalysis = { name: string; rows: number; headers: string[]; unknownColumns: string[]; action: SheetAction; validNif: number; invalidNif: number; emptyNif: number; phones: number; badPhones: number; noContact: number };
+export type Upload = { id: string; number: number; fileName: string; sheets: SheetAnalysis[]; fields: Record<string, string>; mapping: Record<string, string>; trialSize: number };
+export type PreviewSummary = { total: number; byResult: Record<string, number>; clients: number; prospects: number; withOwner: number };
+export type ImportRow = { id: string; sheet: string; rowNumber: number; nif: string | null; name: string | null; result: string; detail: string | null; accountType: string | null; owner: string | null };
+export type Batch = { id: string; number: number; kind: string; fileName: string; status: string; summary: { preview?: PreviewSummary; committed?: { created: number; updated: number } }; createdAt: string; committedAt: string | null; revertedAt: string | null; createdBy: string | null };
+
+const qs = (o: Record<string, unknown>) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== "" && v !== null) p.set(k, String(v));
+  const s = p.toString();
+  return s ? `?${s}` : "";
+};
+
 export const ROLE_LABEL: Record<Role, string> = { admin: "Administrador", team_lead: "Chefe de Equipa", sales: "Comercial" };
 export type LoginStep =
   | { step: "totp"; challengeToken: string }
@@ -55,4 +83,19 @@ export const api = {
   settings: () => call<{ settings: Settings }>("/settings").then((r) => r.settings),
   saveSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => call(`/settings/${key}`, { method: "PUT", body: JSON.stringify(value) }),
   audit: () => call<{ entries: AuditEntry[] }>("/audit").then((r) => r.entries),
+
+  companies: (f: CompanyFilters) => call<{ total: number; rows: CompanyRow[] }>(`/companies${qs(f)}`),
+  companyKpis: () => call<CompanyKpis>("/companies/kpis"),
+  municipalities: () => call<{ municipalities: string[] }>("/companies/municipalities").then((r) => r.municipalities),
+  company: (id: string) => call<CompanyDetail>(`/companies/${id}`),
+  search: (q: string) => call<{ results: SearchHit[] }>(`/search${qs({ q })}`).then((r) => r.results),
+
+  imports: () => call<{ batches: Batch[] }>("/imports").then((r) => r.batches),
+  uploadBase: (file: File) => file.arrayBuffer().then((buf) => call<Upload>("/imports/base", { method: "POST", body: buf, headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } })),
+  previewImport: (id: string, body: { sheets: Record<string, SheetAction>; mapping: Record<string, string>; limit: number | null }) =>
+    call<{ id: string; number: number; summary: PreviewSummary }>(`/imports/${id}/preview`, { method: "POST", body: JSON.stringify(body) }),
+  importRows: (id: string, q: { result?: string; search?: string; offset?: number; limit?: number }) => call<{ total: number; rows: ImportRow[] }>(`/imports/${id}/rows${qs(q)}`),
+  commitImport: (id: string, code: string) => call<{ number: number; created: number; updated: number }>(`/imports/${id}/commit`, { method: "POST", body: JSON.stringify({ code }) }),
+  revertImport: (id: string, code: string) => call<{ number: number }>(`/imports/${id}/revert`, { method: "POST", body: JSON.stringify({ code }) }),
+  discardImport: (id: string) => call(`/imports/${id}/discard`, { method: "POST", body: "{}" }),
 };

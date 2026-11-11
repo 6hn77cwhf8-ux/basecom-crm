@@ -10,6 +10,9 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@basecom/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@fontsource-variable/manrope':
         specifier: ^5.3.0
         version: 5.3.0

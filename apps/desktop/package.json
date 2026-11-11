@@ -1,6 +1,6 @@
 {
   "name": "@basecom/desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -13,6 +13,7 @@
     "dist:mac": "electron-vite build && electron-builder --mac --x64 --publish never"
   },
   "devDependencies": {
+    "@basecom/shared": "workspace:*",
     "@fontsource-variable/manrope": "^5.3.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",

@@ -13,18 +13,24 @@ export type CompanyFilters = {
   status?: "dnc" | "review" | "nif"; municipality?: string; offset?: number; limit?: number;
 };
 
+const ACCENTED = "áàâãäéèêëíìîïóòôõöúùûüç";
+const PLAIN = "aaaaaeeeeiiiiooooouuuuc";
+
 /** Pesquisa por NIF, telefone, nome da empresa, decisor ou email. */
 function searchCond(q: string): SQL | undefined {
   const t = q.trim();
   if (!t) return undefined;
   const digits = t.replace(/\D/g, "");
   const like = `%${t}%`;
-  const parts: SQL[] = [sql`${companies.name} ilike ${like}`];
+  // Sem acentos: «clinica» encontra «Clínica».
+  const fold = (col: SQL | typeof companies.name) => sql`translate(lower(${col}), ${ACCENTED}, ${PLAIN})`;
+  const plain = `%${t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}%`;
+  const parts: SQL[] = [sql`${fold(companies.name)} like ${plain}`];
   if (digits.length >= 3) {
     parts.push(sql`${companies.nif} like ${digits + "%"}`);
     parts.push(sql`exists (select 1 from ${companyContacts} cc where cc.company_id = ${companies.id} and cc.value like ${"%" + digits + "%"})`);
   }
-  if (t.length >= 3) parts.push(sql`exists (select 1 from ${companyContacts} cc where cc.company_id = ${companies.id} and (cc.person_name ilike ${like} or cc.value ilike ${like}))`);
+  if (t.length >= 3) parts.push(sql`exists (select 1 from ${companyContacts} cc where cc.company_id = ${companies.id} and (${fold(sql`cc.person_name`)} like ${plain} or cc.value ilike ${like}))`);
   return sql`(${sql.join(parts, sql` or `)})`;
 }
 

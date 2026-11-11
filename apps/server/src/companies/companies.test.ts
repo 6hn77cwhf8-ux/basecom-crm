@@ -20,7 +20,7 @@ describe.skipIf(!url)("empresas: lista, pesquisa e ficha", () => {
     const t = newToken();
     token = t.token;
     await db.insert(sessions).values({ tokenHash: t.hash, userId, expiresAt: new Date(Date.now() + 3600_000) });
-    const [c] = await db.insert(companies).values({ nif, name: `Zeta Pesquisa ${tag} Lda`, nameKey: `zeta ${tag}`, accountType: "client", municipality: `Concelho ${tag}`, ownerId: userId }).returning();
+    const [c] = await db.insert(companies).values({ nif, name: `Zeta Clínica ${tag} Lda`, nameKey: `zeta ${tag}`, accountType: "client", municipality: `Concelho ${tag}`, ownerId: userId }).returning();
     coId = c!.id;
     await db.insert(companyContacts).values([
       { companyId: coId, kind: "phone", value: `91${tag}9`, phoneType: "mobile", isPrimary: true, personName: `Decisora ${tag}`, salutation: "Senhora" },
@@ -37,7 +37,7 @@ describe.skipIf(!url)("empresas: lista, pesquisa e ficha", () => {
   const get = (u: string) => app.inject({ method: "GET", url: u, headers: { authorization: `Bearer ${token}` } });
 
   it("encontra a empresa por NIF, telefone, nome e decisor", async () => {
-    for (const q of [nif, `91${tag}9`, `Zeta Pesquisa ${tag}`, `Decisora ${tag}`, `geral${tag}`]) {
+    for (const q of [nif, `91${tag}9`, `zeta clinica ${tag}`, `ZETA CLÍNICA ${tag}`, `Decisora ${tag}`, `geral${tag}`]) {
       const r = (await get(`/search?q=${encodeURIComponent(q)}`)).json();
       expect(r.results.map((x: { id: string }) => x.id), q).toContain(coId);
     }
