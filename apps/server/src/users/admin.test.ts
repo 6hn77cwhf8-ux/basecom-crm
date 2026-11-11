@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { inArray, sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createDb } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { buildApp } from "../app.js";
@@ -27,7 +26,6 @@ describe.skipIf(!url)("gestão de utilizadores e configurações", () => {
 
   let adminToken = "";
   beforeAll(async () => {
-    await migrate(db, { migrationsFolder: new URL("../../drizzle", import.meta.url).pathname });
     await db.insert(users).values({ name: "Adm", email: adminEmail, role: "admin", passwordHash: await hashPassword("Provisoria-1"), mustChangePassword: false });
     adminToken = await signIn(adminEmail, "Provisoria-1");
   });

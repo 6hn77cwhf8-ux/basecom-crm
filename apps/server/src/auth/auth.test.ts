@@ -4,7 +4,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createDb } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { buildApp } from "../app.js";
@@ -20,7 +19,6 @@ describe.skipIf(!url)("login com 2FA (Microsoft Authenticator)", () => {
   const email = `teste-${Date.now()}@basecom.pt`;
 
   beforeAll(async () => {
-    await migrate(db, { migrationsFolder: new URL("../../drizzle", import.meta.url).pathname });
     await db.insert(users).values({ name: "Teste", email, role: "sales", passwordHash: await hashPassword("Correta-123") });
   });
   afterAll(async () => {
