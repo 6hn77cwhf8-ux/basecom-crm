@@ -28,6 +28,20 @@ export type CompanyDetail = {
   contacts: Contact[]; notes: Note[];
   wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };
+export type Outcome = { id: string; label: string; group: "refuse" | "callback" | "noanswer" | "proposal" | "sale" | "other"; effect: string; active: boolean };
+export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other"; days?: number; monthsBefore?: number; contractMonths?: number; active: boolean };
+export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[] }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
+export type DialerEntry = {
+  entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };
+  campaign: { id: string; name: string; mode: "new" | "current" };
+  company: { id: string; name: string; nif: string; accountType: "client" | "prospect"; walletKind: "NC" | "FC"; owner: string | null; municipality: string | null; operator: string | null; loyaltyEnd: string | null; l2bMonthly: string | null };
+  phone: { id: string; value: string; type: string | null } | null;
+  otherPhones: { id: string; value: string; type: string | null }[];
+  script: string; decisors: string[];
+  history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
+};
+export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string } };
+export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type ScheduledChange = { id: string; companyId: string; company: string; nif: string; kind: string; effectiveFrom: string; reason: string | null; toOwnerId: string | null; toOwner: string | null; createdAt: string };
 export type SearchHit = { id: string; nif: string; name: string; municipality: string | null; owner: string | null; accountType: string };
 export type SheetAction = "import" | "review" | "skip";
@@ -110,6 +124,15 @@ export const api = {
   createCampaign: (b: { name: string; mode: "new" | "current"; script: string; filters: CampaignFilters; memberIds: string[] }) => call<{ id: string; added: number }>("/campaigns", { method: "POST", body: JSON.stringify(b) }),
   updateCampaign: (id: string, b: Partial<{ name: string; script: string; status: Campaign["status"]; memberIds: string[] }>) => call(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   refreshCampaign: (id: string) => call<{ added: number }>(`/campaigns/${id}/refresh`, { method: "POST", body: "{}" }),
+
+  catalogs: () => call<Catalogs>("/catalogs"),
+  dialerNext: (campaignId: string) => call<{ next: DialerEntry | null }>("/dialer/next", { method: "POST", body: JSON.stringify({ campaignId }) }).then((r) => r.next),
+  dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
+  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string }) => call<{ id: string; startedAt: string }>("/calls", { method: "POST", body: JSON.stringify(b) }),
+  endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
+  saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
+  tasks: () => call<{ tasks: Task[] }>("/tasks").then((r) => r.tasks),
+  doneTask: (id: string) => call(`/tasks/${id}/done`, { method: "POST", body: "{}" }),
 
   imports: () => call<{ batches: Batch[] }>("/imports").then((r) => r.batches),
   uploadBase: (file: File) => file.arrayBuffer().then((buf) => call<Upload>("/imports/base", { method: "POST", body: buf, headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } })),
