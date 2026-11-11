@@ -7,6 +7,7 @@ import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { setupRoutes } from "./routes/setup.js";
+import { importRoutes } from "./routes/imports.js";
 
 export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean }) {
   const app = Fastify({ logger: deps.logger ?? false });
@@ -23,5 +24,6 @@ export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean
   app.register(authRoutes, { db: deps.db, encryptionKey: deps.encryptionKey });
   app.register(adminRoutes, { db: deps.db });
   app.register(setupRoutes, { db: deps.db, encryptionKey: deps.encryptionKey });
+  app.register(importRoutes, { db: deps.db, encryptionKey: deps.encryptionKey });
   return app;
 }

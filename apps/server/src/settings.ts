@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { DEFAULT_OPERATORS } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
 
@@ -25,6 +26,26 @@ export const SETTINGS = {
       breakMinutes: z.number().int().min(0).max(120),
     }),
     defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24 },
+  },
+  /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
+  importBase: {
+    schema: z.object({
+      /** Ex-comerciais: as empresas delas entram sem carteira (Basecom). */
+      formerSales: z.array(z.string().min(1)).max(50),
+      /** Nome que significa «sem carteira» na coluna Comercial Responsável. */
+      noOwnerName: z.string().min(1),
+      trialSize: z.number().int().min(10).max(5000),
+      operators: z.object({ list: z.array(z.string().min(1)).min(1).max(50), aliases: z.record(z.string(), z.string()) }),
+      /** Coluna do Excel → campo do CRM (guardado na última importação). */
+      mapping: z.record(z.string(), z.string()),
+    }),
+    defaults: {
+      formerSales: ["Rute Pereira", "Ana Margarida Almeida", "Ana"],
+      noOwnerName: "Basecom",
+      trialSize: 500,
+      operators: DEFAULT_OPERATORS,
+      mapping: {} as Record<string, string>,
+    },
   },
 } as const;
 

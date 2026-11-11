@@ -113,3 +113,15 @@ export async function changePassword(db: Db, userId: string, current: string, ne
 export function toPublic(u: typeof users.$inferSelect): PublicUser {
   return { id: u.id, name: u.name, email: u.email, role: u.role, mustChangePassword: u.mustChangePassword };
 }
+
+/**
+ * Confirmação 2FA de uma ação sensível (importar, anular um lote, exportar): o utilizador
+ * já tem sessão, mas tem de mostrar o código atual do Microsoft Authenticator.
+ */
+export async function verifyStepUp(db: Db, key: string, userId: string, code: string, action: string) {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user?.totpSecretEnc || !verifyTotp(decrypt(user.totpSecretEnc, key), user.email, String(code ?? ""))) {
+    await audit(db, userId, "codigo_2fa_errado", action);
+    throw new AuthError(403, "Código incorreto. Confirme o código no Microsoft Authenticator.");
+  }
+}

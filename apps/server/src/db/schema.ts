@@ -1,4 +1,6 @@
-import { pgTable, uuid, text, timestamp, pgEnum, boolean, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, boolean, integer, jsonb, numeric, date, serial, index, customType } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
 /** Perfis aprovados (Fase 02, matriz de permissões). */
 export const roleEnum = pgEnum("role", ["admin", "team_lead", "sales"]);
@@ -64,3 +66,106 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid("updated_by").references(() => users.id),
 });
+
+/* ───────────── Fase 2: Empresas ───────────── */
+
+/** Cliente NOS ou prospeto (folhas NC e NN da base). */
+export const accountTypeEnum = pgEnum("account_type", ["client", "prospect"]);
+/** NC por omissão; FC só por alteração manual (conta 50 %). */
+export const walletKindEnum = pgEnum("wallet_kind", ["NC", "FC"]);
+
+export const importBatches = pgTable("import_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Número do lote, mostrado no ecrã («Lote 3»). */
+  number: serial("number").notNull(),
+  kind: text("kind").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSha256: text("file_sha256").notNull(),
+  /** O ficheiro original fica guardado com o lote, para consulta e auditoria. */
+  fileData: bytea("file_data").notNull(),
+  /** preview → committed → reverted (ou discarded, se nunca foi gravado). */
+  status: text("status").notNull().default("preview"),
+  options: jsonb("options").notNull(),
+  summary: jsonb("summary").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  committedAt: timestamp("committed_at", { withTimezone: true }),
+  revertedAt: timestamp("reverted_at", { withTimezone: true }),
+});
+
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  nif: text("nif").notNull().unique(),
+  nifValid: boolean("nif_valid").notNull().default(true),
+  name: text("name").notNull(),
+  /** Nome limpo para comparar duplicados. */
+  nameKey: text("name_key").notNull(),
+  accountType: accountTypeEnum("account_type").notNull(),
+  size: text("size"),
+  employeesBand: text("employees_band"),
+  /** Mensalidade contratada com a NOS (Valor L2B). */
+  l2bMonthly: numeric("l2b_monthly", { precision: 12, scale: 2 }),
+  loyaltyEnd: date("loyalty_end"),
+  address: text("address"),
+  postalCode: text("postal_code"),
+  locality: text("locality"),
+  municipality: text("municipality"),
+  operator: text("operator"),
+  economicGroup: text("economic_group"),
+  /** Dono da carteira; nulo = sem carteira («Basecom»). */
+  ownerId: uuid("owner_id").references(() => users.id),
+  walletKind: walletKindEnum("wallet_kind").notNull().default("NC"),
+  /** RGPD: nunca é reativada por uma importação. */
+  doNotContact: boolean("do_not_contact").notNull().default(false),
+  /** Duplicado provável (nome parecido + telefone ou código postal): lista de revisão. */
+  needsReview: text("needs_review"),
+  lastSourceYear: integer("last_source_year"),
+  sources: text("sources"),
+  batchId: uuid("batch_id").references(() => importBatches.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("companies_name_key_idx").on(t.nameKey), index("companies_owner_idx").on(t.ownerId), index("companies_postal_idx").on(t.postalCode)]);
+
+/** Telefones e emails da empresa. Um número marcado «Incorreto» nunca é reativado por importação. */
+export const companyContacts = pgTable("company_contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  /** Telefone em 9 algarismos ou email em minúsculas. */
+  value: text("value").notNull(),
+  phoneType: text("phone_type"),
+  personName: text("person_name"),
+  salutation: text("salutation"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  status: text("status").notNull().default("valid"),
+  batchId: uuid("batch_id").references(() => importBatches.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("company_contacts_value_idx").on(t.value), index("company_contacts_company_idx").on(t.companyId)]);
+
+/** Histórico da empresa: notas importadas, campanhas antigas e, mais tarde, resultados de chamadas. */
+export const companyNotes = pgTable("company_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  text: text("text").notNull(),
+  userId: uuid("user_id").references(() => users.id),
+  batchId: uuid("batch_id").references(() => importBatches.id),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("company_notes_company_idx").on(t.companyId)]);
+
+/** Zona de preparação: cada linha do ficheiro com o resultado previsto, antes de gravar. */
+export const importRows = pgTable("import_rows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  batchId: uuid("batch_id").notNull().references(() => importBatches.id, { onDelete: "cascade" }),
+  sheet: text("sheet").notNull(),
+  rowNumber: integer("row_number").notNull(),
+  nif: text("nif"),
+  name: text("name"),
+  /** new | update | duplicate_review | nif_to_verify | blocked | review | rejected */
+  result: text("result").notNull(),
+  detail: text("detail"),
+  data: jsonb("data").notNull(),
+  /** Valores anteriores numa atualização, para anular o lote. */
+  before: jsonb("before"),
+  companyId: uuid("company_id"),
+}, (t) => [index("import_rows_batch_idx").on(t.batchId)]);
