@@ -15,7 +15,12 @@ export function setupToken(encryptionKey: string) {
   return createHmac("sha256", Buffer.from(encryptionKey, "base64")).update("basecom-primeiro-administrador").digest("hex");
 }
 
-const body = z.object({ token: z.string(), name: z.string().min(2), email: z.string().email() });
+const person = z.object({ name: z.string().min(2), email: z.string().email() });
+const body = person.extend({
+  token: z.string(),
+  /** Restante equipa inicial (Comerciais), criada na mesma operação. */
+  sales: z.array(person).max(20).default([]),
+});
 
 export async function setupRoutes(app: FastifyInstance, opts: { db: Db; encryptionKey: string }) {
   const { db } = opts;
@@ -25,18 +30,28 @@ export async function setupRoutes(app: FastifyInstance, opts: { db: Db; encrypti
     const input = body.parse(req.body);
     const given = Buffer.from(input.token);
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw new AuthError(403, "Código de arranque inválido.");
-    const password = randomBytes(9).toString("base64url");
-    const passwordHash = await hashPassword(password);
+    const people = [{ ...input, role: "admin" as const }, ...input.sales.map((p) => ({ ...p, role: "sales" as const }))];
+    const emails = people.map((p) => p.email.trim().toLowerCase());
+    if (new Set(emails).size !== emails.length) throw new AuthError(400, "Há emails repetidos.");
+    const prepared = await Promise.all(people.map(async (p, i) => {
+      const password = randomBytes(9).toString("base64url");
+      return { name: p.name.trim(), email: emails[i]!, role: p.role, password, passwordHash: await hashPassword(password) };
+    }));
     // Bloqueio dentro da transação: dois pedidos em simultâneo não criam dois administradores.
     const created = await db.transaction(async (tx) => {
       await tx.execute(sql`lock table ${users} in exclusive mode`);
       const [{ n }] = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from ${users}`)).rows as [{ n: number }];
       if (n > 0) return null;
-      const [u] = await tx.insert(users).values({ name: input.name.trim(), email: input.email.trim().toLowerCase(), role: "admin", passwordHash }).returning();
-      await tx.insert(auditLog).values({ userId: u!.id, action: "primeiro_administrador_criado", entity: "user", entityId: u!.id, details: input.name.trim() });
-      return u!;
+      const rows = await tx.insert(users).values(prepared.map(({ password: _p, ...u }) => u)).returning();
+      const admin = rows.find((u) => u.role === "admin")!;
+      await tx.insert(auditLog).values(rows.map((u) => ({
+        userId: admin.id, action: u.id === admin.id ? "primeiro_administrador_criado" : "utilizador_criado",
+        entity: "user", entityId: u.id, details: `${u.name} · ${u.role === "admin" ? "Administrador" : "Comercial"}`,
+      })));
+      return rows;
     });
     if (!created) throw new AuthError(409, "O sistema já tem utilizadores. Use o ecrã Equipa.");
-    return reply.code(201).send({ email: created.email, tempPassword: password });
+    const accounts = prepared.map((p) => ({ name: p.name, email: p.email, role: p.role, tempPassword: p.password }));
+    return reply.code(201).send({ accounts });
   });
 }
