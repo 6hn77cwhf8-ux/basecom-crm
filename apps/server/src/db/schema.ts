@@ -117,6 +117,10 @@ export const companies = pgTable("companies", {
   walletKind: walletKindEnum("wallet_kind").notNull().default("NC"),
   /** RGPD: nunca é reativada por uma importação. */
   doNotContact: boolean("do_not_contact").notNull().default(false),
+  /** Empresa encerrada (resultado «Empresa encerrada»): sai de todas as campanhas. */
+  inactive: boolean("inactive").notNull().default(false),
+  /** Não entra em campanhas antes desta data (prazo de reutilização do motivo de recusa). */
+  campaignEligibleFrom: date("campaign_eligible_from"),
   /** Duplicado provável (nome parecido + telefone ou código postal): lista de revisão. */
   needsReview: text("needs_review"),
   district: text("district"),
@@ -204,3 +208,47 @@ export const walletChanges = pgTable("wallet_changes", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
 }, (t) => [index("wallet_changes_company_idx").on(t.companyId), index("wallet_changes_status_idx").on(t.status, t.effectiveFrom)]);
+
+/* ───────────── Fase 3: Trabalho comercial ───────────── */
+
+/**
+ * Campanhas: «Novos clientes» (Power Dialer) ou «Clientes atuais» (Preview Dialer).
+ * Os filtros escolhem as empresas; o script tem campos automáticos ({comercial}, {empresa}, {decisor1}, {decisor2}).
+ */
+export const campaigns = pgTable("campaigns", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /** new = Novos clientes (Power Dialer) · current = Clientes atuais (Preview Dialer) */
+  mode: text("mode").notNull(),
+  /** active | paused | ended — só o Chefe de Equipa ou o Administrador pausam ou param. */
+  status: text("status").notNull().default("active"),
+  script: text("script").notNull().default(""),
+  filters: jsonb("filters").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const campaignMembers = pgTable("campaign_members", {
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id),
+}, (t) => [index("campaign_members_user_idx").on(t.userId)]);
+
+/** Uma empresa numa campanha: estado, tentativas e próxima tentativa. */
+export const campaignEntries = pgTable("campaign_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  /** Nulo = conjunto comum da campanha; preenchido = só esse comercial (a sua carteira ou «Agendar para mim»). */
+  assignedTo: uuid("assigned_to").references(() => users.id),
+  /** pending | done | exhausted | removed */
+  status: text("status").notNull().default("pending"),
+  nextAt: timestamp("next_at", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  lastOutcome: text("last_outcome"),
+  /** Reserva enquanto um comercial a tem no ecrã (evita duas pessoas a ligar à mesma empresa). */
+  lockedBy: uuid("locked_by").references(() => users.id),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("campaign_entries_queue_idx").on(t.campaignId, t.status, t.nextAt), index("campaign_entries_company_idx").on(t.companyId)]);
