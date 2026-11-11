@@ -63,7 +63,7 @@ export function Shell({ user, page, onNavigate, onLogout, children }: { user: Us
           {open && (
             <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
               <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</span>
-              <span style={{ fontSize: 12, color: c.muted }}>{ROLE_LABEL[user.role]}</span>
+              <span style={{ fontSize: 12, color: c.muted }}>{ROLE_LABEL[user.role]} · v{__APP_VERSION__}</span>
             </span>
           )}
           {open && <button onClick={onLogout} style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>Sair</button>}

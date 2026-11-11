@@ -20,6 +20,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
             CRM<span style={{ color: c.brand }}>.</span>
           </p>
           <p style={{ margin: 0, fontSize: 14, lineHeight: "20px", color: "#C7C7CC", maxWidth: 320 }}>Acesso reservado à equipa BASECOM.</p>
+          <p style={{ margin: 0, fontSize: 12, color: "#8E8E93" }}>Versão {__APP_VERSION__}</p>
         </div>
       </aside>
       <section style={{ display: "grid", placeItems: "center", padding: 48 }}>
