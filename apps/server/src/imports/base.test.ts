@@ -66,9 +66,9 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     const nc = up.sheets.find((s) => s.name === "NC")!;
     expect(nc).toMatchObject({ rows: 6, validNif: 5, invalidNif: 1, action: "import" });
     expect(up.sheets.find((s) => s.name === "Sem contacto")!.action).toBe("skip");
-    expect(up.sheets.find((s) => s.name === "A rever")!.action).toBe("review");
+    expect(up.sheets.find((s) => s.name === "A rever")!.action).toBe("skip"); // só NC e NN por omissão (11 nov)
 
-    const sheets = Object.fromEntries(up.sheets.map((s) => [s.name, s.action]));
+    const sheets = { ...Object.fromEntries(up.sheets.map((s) => [s.name, s.action])), "A rever": "review" as const };
     const pv = await previewBase(db, adminId, up.id, { sheets, mapping: DEFAULT_MAPPING, limit: null });
     expect(pv.summary.byResult).toEqual({ new: 3, nif_to_verify: 1, review: 2, duplicate_review: 1 });
     const rows = (await listBatchRows(db, up.id, {})).rows;

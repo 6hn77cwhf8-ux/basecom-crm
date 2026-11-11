@@ -39,12 +39,13 @@ export const DEFAULT_MAPPING: Record<string, Field> = {
 };
 
 export type SheetAction = "import" | "review" | "skip";
-/** Decisões de 10 nov: «Sem contacto» fica para depois, «Removidos» entra, «A rever» e «Grupos sem NIF» vão para revisão. */
-export function defaultSheetAction(name: string, headers: string[]): SheetAction {
-  const n = name.toLowerCase();
-  if (n === "sem contacto" || n === "resumo" || n === "fontes") return "skip";
-  if (n.startsWith("a rever") || n.includes("sem nif")) return "review";
-  return headers.some((h) => h === "NIF da Empresa") ? "import" : "skip";
+/**
+ * Decisão de 11 nov (substitui a de 10 nov): só entram as folhas NC e NN. As restantes
+ * (fontes, análises, empresas sem contacto) ficam por importar; o Administrador pode mudar no ecrã.
+ */
+export function defaultSheetAction(name: string, _headers: string[]): SheetAction {
+  const n = name.trim().toUpperCase();
+  return n === "NC" || n === "NN" ? "import" : "skip";
 }
 
 export type Result = "new" | "update" | "duplicate_review" | "nif_to_verify" | "blocked" | "review" | "rejected";
