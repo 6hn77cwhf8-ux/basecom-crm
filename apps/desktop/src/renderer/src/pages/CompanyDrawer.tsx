@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { formatPhone } from "@basecom/shared";
-import { api, type CompanyDetail } from "../api";
+import { api, type CompanyDetail, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtDateTime, fmtEur } from "../ui";
 import { StatusChips } from "./Companies";
+import { KIND_LABEL, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
 
 type Tab = "resumo" | "contactos" | "historico" | "oportunidades" | "vendas" | "tickets";
 const TABS: { id: Tab; label: string; later?: string }[] = [
@@ -36,15 +37,18 @@ function Rgu({ rgu }: { rgu: Record<string, number> | null }) {
   );
 }
 
-const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota" };
+const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota", wallet: "Carteira" };
 
 /** Ficha da empresa em gaveta (maqueta «Ficha»): abre por cima do ecrã atual; «Voltar» fecha. */
-export function CompanyDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClose: () => void }) {
   const [d, setD] = useState<CompanyDetail | null>(null);
   const [tab, setTab] = useState<Tab>("resumo");
   const [error, setError] = useState("");
 
-  useEffect(() => { setD(null); setTab("resumo"); api.company(id).then(setD).catch((e) => setError(e.message)); }, [id]);
+  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | null>(null);
+  const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
+  useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
+  const after = () => { setDialog(null); load(); };
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);
@@ -56,6 +60,7 @@ export function CompanyDrawer({ id, onClose }: { id: string; onClose: () => void
   const emails = d?.contacts.filter((x) => x.kind === "email") ?? [];
   const main = phones.find((p) => p.isPrimary) ?? phones[0];
   const later = "Chega na Fase 3, com o Power Dialer e as oportunidades.";
+  const canEdit = !!co && (me.role === "admin" || (!!co.ownerId && co.ownerId === me.id));
 
   return (
     <div role="dialog" aria-modal="true" aria-label={co?.name ?? "Ficha da empresa"} style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex" }}>
@@ -81,6 +86,20 @@ export function CompanyDrawer({ id, onClose }: { id: string; onClose: () => void
                 <button style={btnDark} disabled title={later}>Ligar</button>
               </div>
             </header>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {me.role === "admin" && <button style={small} onClick={() => setDialog("transfer")}>Transferir carteira</button>}
+              {co.ownerId && (me.role === "admin" || co.ownerId === me.id) && <button style={small} onClick={() => setDialog("kind")}>Mudar para {co.walletKind === "NC" ? "FC" : "NC"}</button>}
+              {!co.doNotContact && <button style={small} onClick={() => setDialog("dnc")}>Marcar «Não contactar»</button>}
+              {co.doNotContact && me.role === "admin" && <button style={small} onClick={() => setDialog("undnc")}>Retirar «Não contactar»</button>}
+            </div>
+            {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
+            {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"
+              text={co.walletKind === "NC" ? "Em FC, a empresa conta 50 % em tudo (pontos, valor concluído). Só por alteração manual." : "Volta a contar 100 %."}
+              onClose={() => setDialog(null)} onConfirm={async (r) => { await api.setWalletKind(co.id, co.walletKind === "NC" ? "FC" : "NC", r); after(); }} />}
+            {dialog === "dnc" && <ReasonDialog title="Marcar «Não contactar»" danger confirm="Marcar" text="Oposição ao contacto (RGPD). A empresa sai das campanhas e nenhuma importação a reativa. Só o Administrador pode retirar."
+              onClose={() => setDialog(null)} onConfirm={async (r) => { await api.setDoNotContact(co.id, true, r); after(); }} />}
+            {dialog === "undnc" && <ReasonDialog title="Retirar «Não contactar»" confirm="Retirar" text="Use só com prova de que a oposição foi retirada (fica em auditoria)."
+              onClose={() => setDialog(null)} onConfirm={async (r) => { await api.setDoNotContact(co.id, false, r); after(); }} />}
             {co.needsReview && <Notice tone="warn">{co.needsReview}</Notice>}
             {co.doNotContact && <Notice tone="bad">Empresa marcada «Não contactar» (RGPD). Não entra em campanhas e nenhuma importação a reativa.</Notice>}
 
@@ -126,12 +145,12 @@ export function CompanyDrawer({ id, onClose }: { id: string; onClose: () => void
                     <div>{co.nboCampaign ?? "—"}</div>
                   </div>
                 </Card>
-                <div style={{ gridColumn: "1 / -1" }}><Contacts d={d!} /></div>
+                <div style={{ gridColumn: "1 / -1" }}><Contacts d={d!} canEdit={canEdit} onChange={load} /></div>
                 <div style={{ gridColumn: "1 / -1" }}><History d={d!} limit={5} onMore={() => setTab("historico")} /></div>
               </div>
             )}
-            {tab === "contactos" && <Contacts d={d!} />}
-            {tab === "historico" && <History d={d!} />}
+            {tab === "contactos" && <Contacts d={d!} canEdit={canEdit} onChange={load} />}
+            {tab === "historico" && <><WalletHistory d={d!} /><History d={d!} /></>}
             {TABS.find((t) => t.id === tab)?.later && (
               <section style={{ ...card, padding: 32, textAlign: "center", color: c.muted }}>Chega no {TABS.find((t) => t.id === tab)!.later}, tal como nas maquetas aprovadas.</section>
             )}
@@ -163,18 +182,35 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
   );
 }
 
-function Contacts({ d }: { d: CompanyDetail }) {
+const small = { ...btn, height: 30, fontSize: 12 };
+
+function WalletHistory({ d }: { d: CompanyDetail }) {
+  if (!d.wallet.length) return null;
+  return (
+    <Card title="Histórico de carteira">
+      {d.wallet.map((w) => (
+        <div key={w.id} style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
+          <span><b>{KIND_LABEL[w.kind] ?? w.kind}</b> → {w.toOwner ?? "sem carteira"} <span style={{ color: c.muted }}>· {w.reason}</span></span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center", whiteSpace: "nowrap" }}><span style={{ color: c.muted }}>desde {fmtDate(w.effectiveFrom)}</span><StatusChip s={w.status} /></span>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function Contacts({ d, canEdit, onChange }: { d: CompanyDetail; canEdit: boolean; onChange: () => void }) {
   return (
     <Card title="Contactos">
       {d.contacts.length === 0 && <p style={{ fontSize: 14, color: c.muted }}>Sem contactos.</p>}
       {d.contacts.map((x) => (
-        <div key={x.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 16, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
+        <div key={x.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 16, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
           <span style={{ fontWeight: x.isPrimary ? 600 : 400 }}>{x.personName ? `${x.salutation ? x.salutation + " " : ""}${x.personName}` : <span style={{ color: c.muted }}>Contacto da empresa</span>}</span>
           <span style={{ textDecoration: x.status === "incorrect" ? "line-through" : "none" }}>
             {x.kind === "phone" ? `${formatPhone(x.value)} · ${x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}` : x.kind === "person" ? <span style={{ color: c.muted }}>Sem telefone nem email</span> : x.value}
             {x.isPrimary && " · principal"}
           </span>
           {x.kind === "person" ? <Chip>2.º decisor</Chip> : x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : <Chip tone="ok">Válido</Chip>}
+          {canEdit && x.kind !== "person" ? <button style={{ ...small, height: 26 }} onClick={() => api.setContactStatus(x.id, x.status === "incorrect" ? "valid" : "incorrect").then(onChange)}>{x.status === "incorrect" ? "Marcar válido" : "Marcar incorreto"}</button> : <span />}
         </div>
       ))}
     </Card>

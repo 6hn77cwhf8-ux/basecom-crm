@@ -389,6 +389,10 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
     }
 
     await tx.execute(sql`update import_rows r set company_id = c.id from companies c where r.batch_id = ${batchId} and c.batch_id = ${batchId} and c.nif = r.nif`);
+    // Histórico de carteira: as empresas que entram já com responsável ficam registadas com origem «importação».
+    await tx.execute(sql`insert into wallet_changes (company_id, to_owner_id, kind, effective_from, status, reason, created_by, applied_at)
+      select c.id, c.owner_id, 'import', current_date, 'applied', 'Comercial Responsável indicado na base importada', ${userId}, now()
+      from companies c where c.batch_id = ${batchId} and c.owner_id is not null`);
 
     // Atualizações: regras por campo do documento (nunca muda a carteira, nunca apaga contactos).
     for (const r of rows.filter((x) => x.result === "update" && x.companyId)) {

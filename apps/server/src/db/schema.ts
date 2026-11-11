@@ -183,3 +183,24 @@ export const importRows = pgTable("import_rows", {
   before: jsonb("before"),
   companyId: uuid("company_id"),
 }, (t) => [index("import_rows_batch_idx").on(t.batchId)]);
+
+/**
+ * Histórico de carteira (fluxo 5.2): cada atribuição, transferência, devolução ou conquista.
+ * As transferências valem a partir do início de um ciclo; ficam «agendadas» até essa data.
+ */
+export const walletChanges = pgTable("wallet_changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  fromOwnerId: uuid("from_owner_id").references(() => users.id),
+  /** Nulo = sem carteira («Basecom»). */
+  toOwnerId: uuid("to_owner_id").references(() => users.id),
+  /** import | transfer | release | conquest */
+  kind: text("kind").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  /** scheduled | applied | cancelled */
+  status: text("status").notNull(),
+  reason: text("reason"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+}, (t) => [index("wallet_changes_company_idx").on(t.companyId), index("wallet_changes_status_idx").on(t.status, t.effectiveFrom)]);

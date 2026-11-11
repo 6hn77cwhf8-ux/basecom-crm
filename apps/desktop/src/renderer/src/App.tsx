@@ -39,7 +39,7 @@ export function App() {
         ? <ImportWizard onBack={() => setImporting(false)} />
         : <Companies me={user} onOpen={setCompanyId} onImport={() => setImporting(true)} />)
         : page === "equipa" ? <Team me={user} /> : page === "config" ? <Settings /> : <Placeholder title={label} phase={PHASE[page] ?? "Fase seguinte"} />}
-      {companyId && <CompanyDrawer id={companyId} onClose={() => setCompanyId(null)} />}
+      {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
     </Shell>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CompanyFilters, type CompanyKpis, type CompanyRow, type FilterOptions, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtInt, input, Kpi, PageHeader, td, th } from "../ui";
+import { ScheduledDialog, TransferDialog } from "./Wallet";
 
 const PAGE = 50;
 
@@ -15,6 +16,10 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   const [opts, setOpts] = useState<FilterOptions>({ municipalities: [], districts: [], sectors: [] });
   const [error, setError] = useState("");
   const isAdmin = me.role === "admin";
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [dialog, setDialog] = useState<"transfer" | "scheduled" | null>(null);
+  const [notice, setNotice] = useState("");
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     api.companyKpis().then(setKpis).catch((e) => setError(e.message));
@@ -26,7 +31,10 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   useEffect(() => { const t = setTimeout(() => { setF((o) => ({ ...o, q })); setPage(0); }, 250); return () => clearTimeout(t); }, [q]);
   useEffect(() => {
     api.companies({ ...f, offset: page * PAGE, limit: PAGE }).then(setData).catch((e) => setError(e.message));
-  }, [f, page]);
+  }, [f, page, reload]);
+  const togglePick = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const pageIds = data?.rows.map((r) => r.id) ?? [];
+  const allPicked = pageIds.length > 0 && pageIds.every((id) => picked.has(id));
 
   const set = (k: keyof CompanyFilters, v: string) => { setF((o) => ({ ...o, [k]: v || undefined })); setPage(0); };
   const active = useMemo(() => Object.entries(f).filter(([, v]) => v).length, [f]);
@@ -36,7 +44,22 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   return (
     <>
       <PageHeader eyebrow="Base de dados" title="Empresas"
-        actions={isAdmin && <button style={btnDark} onClick={onImport} title="Só o Administrador">Importar ficheiro</button>} />
+        actions={isAdmin && <>
+          <button style={btn} onClick={() => setDialog("scheduled")}>Transferências agendadas</button>
+          <button style={btnDark} onClick={onImport} title="Só o Administrador">Importar ficheiro</button>
+        </>} />
+      {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: "#E8F5EC", color: "#1E6F33", fontSize: 14, fontWeight: 600 }}>{notice}</p>}
+      {isAdmin && picked.size > 0 && (
+        <div style={{ ...card, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, borderColor: c.ink }}>
+          <b style={{ fontSize: 14 }}>{fmtInt(picked.size)} empresa{picked.size === 1 ? "" : "s"} selecionada{picked.size === 1 ? "" : "s"}</b>
+          <span style={{ flex: 1 }} />
+          <button style={btn} onClick={() => setPicked(new Set())}>Limpar seleção</button>
+          <button style={btnDark} onClick={() => setDialog("transfer")}>Transferir carteira</button>
+        </div>
+      )}
+      {dialog === "transfer" && <TransferDialog companyIds={[...picked]} label={`${fmtInt(picked.size)} empresa(s) selecionada(s)`} onClose={() => setDialog(null)}
+        onDone={(msg) => { setDialog(null); setPicked(new Set()); setNotice(msg); setReload((x) => x + 1); api.companyKpis().then(setKpis).catch(() => undefined); }} />}
+      {dialog === "scheduled" && <ScheduledDialog onClose={() => setDialog(null)} onChange={() => setReload((x) => x + 1)} />}
 
       <div style={{ display: "flex", gap: 12 }}>
         <Kpi label="Total de empresas" value={fmtInt(kpis?.total)} hint={kpis ? `${fmtInt(kpis.clients)} clientes NOS` : undefined} onClick={clear} active={active === 0} />
@@ -79,11 +102,14 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
         <div style={{ overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>
+              {isAdmin && <th style={{ ...th, width: 28 }}><input type="checkbox" aria-label="Selecionar todas desta página" checked={allPicked}
+                onChange={() => setPicked((p) => { const n = new Set(p); pageIds.forEach((id) => (allPicked ? n.delete(id) : n.add(id))); return n; })} /></th>}
               {["NIF", "Empresa", "Tipo", "Distrito", "Concelho", "Setor", "Responsável", "Carteira", "Estado"].map((h) => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {data?.rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} style={{ background: picked.has(r.id) ? c.brandSoft : undefined }}>
+                  {isAdmin && <td style={td}><input type="checkbox" aria-label={`Selecionar ${r.name}`} checked={picked.has(r.id)} onChange={() => togglePick(r.id)} /></td>}
                   <td style={{ ...td, fontVariantNumeric: "tabular-nums", color: c.muted }}>{r.nif}</td>
                   <td style={td}><button onClick={() => onOpen(r.id)} style={{ border: 0, background: "none", padding: 0, cursor: "pointer", fontWeight: 600, fontSize: 13, textAlign: "left", color: c.ink }}>{r.name}</button></td>
                   <td style={td}>{r.accountType === "client" ? "Cliente" : "NN"}</td>
@@ -96,7 +122,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
                 </tr>
               ))}
               {data && data.rows.length === 0 && (
-                <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: c.muted, padding: 32 }}>
+                <tr><td colSpan={isAdmin ? 10 : 9} style={{ ...td, textAlign: "center", color: c.muted, padding: 32 }}>
                   {kpis?.total === 0 ? "Ainda não há empresas. O Administrador importa a base em «Importar ficheiro»." : "Nenhum resultado com estes filtros."}
                   {active > 0 && <> <button style={{ ...btn, height: 30, marginLeft: 8 }} onClick={clear}>Limpar filtros</button></>}
                 </td></tr>

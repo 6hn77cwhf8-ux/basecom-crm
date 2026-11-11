@@ -24,7 +24,9 @@ export type CompanyDetail = {
     annualRevenue: string | null; locationsPotential: string | null; rgu: Record<string, number> | null; product: string | null; technology: string | null;
     loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null };
   contacts: Contact[]; notes: Note[];
+  wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };
+export type ScheduledChange = { id: string; companyId: string; company: string; nif: string; kind: string; effectiveFrom: string; reason: string | null; toOwnerId: string | null; toOwner: string | null; createdAt: string };
 export type SearchHit = { id: string; nif: string; name: string; municipality: string | null; owner: string | null; accountType: string };
 export type SheetAction = "import" | "review" | "skip";
 export type SheetAnalysis = { name: string; rows: number; headers: string[]; unknownColumns: string[]; action: SheetAction; validNif: number; invalidNif: number; emptyNif: number; phones: number; badPhones: number; noContact: number };
@@ -92,6 +94,14 @@ export const api = {
   filterOptions: () => call<FilterOptions>("/companies/options"),
   company: (id: string) => call<CompanyDetail>(`/companies/${id}`),
   search: (q: string) => call<{ results: SearchHit[] }>(`/search${qs({ q })}`).then((r) => r.results),
+
+  transfer: (b: { companyIds: string[]; toOwnerId: string | null; when: "current" | "next"; reason: string }) =>
+    call<{ scheduled: number; effectiveFrom: string; cycle: string; applied: number }>("/companies/transfer", { method: "POST", body: JSON.stringify(b) }),
+  scheduledTransfers: () => call<{ changes: ScheduledChange[] }>("/wallet/scheduled").then((r) => r.changes),
+  cancelTransfer: (id: string) => call(`/wallet/scheduled/${id}/cancel`, { method: "POST", body: "{}" }),
+  setWalletKind: (id: string, kind: "NC" | "FC", reason: string) => call(`/companies/${id}/wallet-kind`, { method: "POST", body: JSON.stringify({ kind, reason }) }),
+  setDoNotContact: (id: string, value: boolean, reason: string) => call(`/companies/${id}/do-not-contact`, { method: "POST", body: JSON.stringify({ value, reason }) }),
+  setContactStatus: (id: string, status: "valid" | "incorrect") => call(`/contacts/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
 
   imports: () => call<{ batches: Batch[] }>("/imports").then((r) => r.batches),
   uploadBase: (file: File) => file.arrayBuffer().then((buf) => call<Upload>("/imports/base", { method: "POST", body: buf, headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } })),
