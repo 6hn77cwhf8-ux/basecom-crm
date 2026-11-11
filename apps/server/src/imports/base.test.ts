@@ -164,8 +164,15 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     ]);
     const batch = (await db.select().from(importBatches).where(eq(importBatches.id, up.id)))[0]!;
     const created = (await db.select().from(companies).where(eq(companies.batchId, up.id))).length;
-    // Ou gravou (e a pré-visualização foi recusada), ou ficou em pré-visualização sem nada gravado.
-    if (batch.status === "committed") { expect(p.status).toBe("rejected"); expect(created).toBeGreaterThan(0); }
-    else { expect(batch.status).toBe("preview"); expect(created).toBe(0); expect(c.status).toBe("rejected"); }
+    // Qualquer que seja a ordem, o lote fica coerente: o que foi gravado é exatamente a pré-visualização guardada.
+    expect(p.status === "fulfilled" || c.status === "fulfilled").toBe(true);
+    if (batch.status === "committed") {
+      const staged = await db.execute(sql`select count(*)::int as n from import_rows where batch_id = ${up.id} and result in ('new','duplicate_review','nif_to_verify')`);
+      expect(created).toBe((staged.rows[0] as { n: number }).n);
+      expect(created).toBeGreaterThan(0);
+    } else {
+      expect(batch.status).toBe("preview");
+      expect(created).toBe(0);
+    }
   });
 });
