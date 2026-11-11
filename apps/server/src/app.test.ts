@@ -20,3 +20,12 @@ describe("GET /health", () => {
     expect(res.json().database).toBe("erro");
   });
 });
+
+describe("GET /", () => {
+  it("mostra uma página simples a quem abre o endereço no navegador", async () => {
+    const db = { execute: async () => ({ rows: [] }) } as unknown as Db;
+    const res = await buildApp({ db, encryptionKey: KEY }).inject({ method: "GET", url: "/" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("Servidor ativo");
+  });
+});
