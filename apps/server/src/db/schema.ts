@@ -307,3 +307,21 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   doneAt: timestamp("done_at", { withTimezone: true }),
 }, (t) => [index("tasks_user_idx").on(t.assignedTo, t.status, t.dueAt), index("tasks_company_idx").on(t.companyId)]);
+
+/**
+ * Registo de tempos e de ponto (catálogo, secção 14): cada período num estado.
+ * working = A trabalhar · training = Formação · break = Intervalo · switch = Mudança de campanha.
+ * O primeiro período do dia é a entrada; o fim do último é a saída. Registo inalterável:
+ * correções do Administrador ficam com justificação e autor (ainda por fazer).
+ */
+export const timeEntries = pgTable("time_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  state: text("state").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  /** Último sinal de vida da aplicação: se fechar sem sair, o período termina aqui. */
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Quem pôs neste estado, se não foi o próprio (formação marcada pelo Chefe de Equipa ou Administrador). */
+  setBy: uuid("set_by").references(() => users.id),
+}, (t) => [index("time_entries_user_idx").on(t.userId, t.startedAt)]);

@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
+import { currentState, setState } from "../time/service.js";
 
 /**
  * Power Dialer (catálogo, secções 2 e 14): fila por comercial, chamadas e consequências automáticas.
@@ -85,6 +86,12 @@ export async function releaseEntry(db: Db, user: PublicUser, entryId: string) {
 }
 
 export async function startCall(db: Db, user: PublicUser, input: { companyId: string; contactId?: string | null; entryId?: string | null; source: string }) {
+  // Fora de «A trabalhar» não se marcam chamadas de campanha; depois de mudar de campanha, a chamada volta a pôr a trabalhar.
+  if (input.entryId) {
+    const st = await currentState(db, user.id);
+    if (st === "break" || st === "training") throw new AuthError(409, st === "break" ? "Está em intervalo. Volte a «A trabalhar» para ligar." : "Está em formação. Volte a «A trabalhar» para ligar.");
+    if (st !== "working") await setState(db, user, user.id, "working");
+  }
   let phone: string | null = null;
   if (input.contactId) {
     const ct = await db.query.companyContacts.findFirst({ where: eq(companyContacts.id, input.contactId) });

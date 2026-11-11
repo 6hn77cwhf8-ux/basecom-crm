@@ -45,6 +45,7 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
   afterAll(async () => {
     await db.delete(campaigns).where(inArray(campaigns.id, campIds));
     await db.execute(sql`delete from calls where user_id in ${[ana.id, bia.id]}`);
+    await db.execute(sql`delete from time_entries where user_id in ${[ana.id, bia.id]}`);
     await db.delete(companies).where(inArray(companies.id, coIds));
     await db.execute(sql`delete from audit_log where user_id in ${[admin.id, ana.id, bia.id]}`);
     await db.delete(users).where(inArray(users.id, [admin.id, ana.id, bia.id]));
@@ -76,15 +77,17 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
   });
 
   it("Número errado sem outro número: «Sem contacto válido»", async () => {
-    // A empresa 1 só tem um número. Liberta reservas e põe as outras para amanhã, só para isolar o caso.
+    // Empresa própria deste teste, com um só número. Liberta reservas e põe as outras para amanhã, só para isolar o caso.
+    const solo = await company(90, 1);
+    await db.insert(campaignEntries).values({ campaignId, companyId: solo });
     await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null }).where(eq(campaignEntries.campaignId, campaignId));
-    await db.update(campaignEntries).set({ nextAt: new Date(Date.now() + 86400_000) }).where(and(eq(campaignEntries.campaignId, campaignId), sql`company_id <> ${coIds[1]!}::uuid`, eq(campaignEntries.status, "pending")));
+    await db.update(campaignEntries).set({ nextAt: new Date(Date.now() + 86400_000) }).where(and(eq(campaignEntries.campaignId, campaignId), sql`company_id <> ${solo}::uuid`, eq(campaignEntries.status, "pending")));
     let n;
     try { ({ n } = await call(bia, { outcomeId: "wrong_number" })); }
     finally { await db.update(campaignEntries).set({ nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending"))); }
-    expect(n.company.id).toBe(coIds[1]);
-    expect((await entryOf(coIds[1]!)).status).toBe("exhausted");
-    expect((await db.select().from(companyContacts).where(eq(companyContacts.companyId, coIds[1]!)))[0]!.status).toBe("incorrect");
+    expect(n.company.id).toBe(solo);
+    expect((await entryOf(solo)).status).toBe("exhausted");
+    expect((await db.select().from(companyContacts).where(eq(companyContacts.companyId, solo)))[0]!.status).toBe("incorrect");
   });
 
   it("Recusa com motivo: sai da campanha e só volta depois do prazo", async () => {

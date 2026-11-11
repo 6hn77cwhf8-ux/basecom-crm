@@ -1,3 +1,4 @@
+import { setState } from "../time/service.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
@@ -52,6 +53,7 @@ export async function authRoutes(app: FastifyInstance, opts: { db: Db; encryptio
   });
 
   app.post("/auth/logout", { preHandler: requireAuth(db, undefined, { allowPendingPassword: true }) }, async (req) => {
+    await setState(db, req.user!, req.user!.id, "off"); // saída no registo de ponto
     await logout(db, bearer(req)!);
     return { ok: true };
   });

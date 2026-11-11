@@ -57,6 +57,13 @@
       "when": 1794428392008,
       "tag": "0007_chamadas_tarefas",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794431139267,
+      "tag": "0008_ponto",
+      "breakpoints": true
     }
   ]
 }
