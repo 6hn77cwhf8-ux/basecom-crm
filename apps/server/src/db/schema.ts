@@ -119,12 +119,26 @@ export const companies = pgTable("companies", {
   doNotContact: boolean("do_not_contact").notNull().default(false),
   /** Duplicado provável (nome parecido + telefone ou código postal): lista de revisão. */
   needsReview: text("needs_review"),
+  district: text("district"),
+  sector: text("sector"),
+  annualRevenue: numeric("annual_revenue", { precision: 14, scale: 2 }),
+  locationsPotential: text("locations_potential"),
+  /** Serviços NOS do cliente (folha «Lista Famílias»: VM, DM, IM, VF, DF, IF, TV, IT, Alarmes). */
+  rgu: jsonb("rgu").$type<Record<string, number>>(),
+  product: text("product"),
+  technology: text("technology"),
+  loyaltyMonths: integer("loyalty_months"),
+  /** Dados do portal NOS: CLIENTE, EX-CLIENTE ou PROSPECT; mês de saída da NOS. */
+  portalStatus: text("portal_status"),
+  nosExitMonth: text("nos_exit_month"),
+  /** Campanha NBO do portal, com a oferta («Campanha — Oferta»). */
+  nboCampaign: text("nbo_campaign"),
   lastSourceYear: integer("last_source_year"),
   sources: text("sources"),
   batchId: uuid("batch_id").references(() => importBatches.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("companies_name_key_idx").on(t.nameKey), index("companies_owner_idx").on(t.ownerId), index("companies_postal_idx").on(t.postalCode)]);
+}, (t) => [index("companies_name_key_idx").on(t.nameKey), index("companies_owner_idx").on(t.ownerId), index("companies_postal_idx").on(t.postalCode), index("companies_district_idx").on(t.district), index("companies_sector_idx").on(t.sector)]);
 
 /** Telefones e emails da empresa. Um número marcado «Incorreto» nunca é reativado por importação. */
 export const companyContacts = pgTable("company_contacts", {

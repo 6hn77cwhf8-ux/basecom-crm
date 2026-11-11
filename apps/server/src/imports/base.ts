@@ -22,8 +22,17 @@ export const FIELDS = {
   owner: "Comercial responsável", economicGroup: "Grupo económico", decisor: "Decisor (contacto principal)", email: "Email",
   address: "Morada", postalCode: "Código postal", municipality: "Concelho", locality: "Localidade", operator: "Operadora atual",
   lastFeedback: "Último feedback (histórico)", feedbackHistory: "Histórico de feedback", lastSourceYear: "Ano da última fonte",
-  sources: "Fontes (origem)", reason: "Motivo (nota)", ignore: "Não importar",
+  sources: "Fontes (origem)", reason: "Motivo (nota)",
+  title: "Título do decisor", title2: "Título do 2.º decisor", decisor2: "2.º decisor", email2: "Email do 2.º decisor",
+  extraPhones: "Telefones adicionais (separados por ;)", district: "Distrito", sector: "Setor", annualRevenue: "Faturação anual (€)",
+  locationsPotential: "Potencial de localizações", product: "Produto NOS", technology: "Tecnologia", loyaltyMonths: "Meses de permanência",
+  portalStatus: "Estado no portal NOS", nosExit: "Data de saída da NOS", nboCampaign: "Campanha NBO",
+  rguVM: "RGU Voz Móvel (VM)", rguDM: "RGU Dados Móveis (DM)", rguIM: "RGU Internet Móvel (IM)", rguVF: "RGU Voz Fixa (VF)",
+  rguDF: "RGU Dados Fixos (DF)", rguIF: "RGU Internet Fixa (IF)", rguTV: "RGU TV", rguIT: "RGU IT", rguAlarmes: "RGU Alarmes",
+  ignore: "Não importar",
 } as const;
+
+export const RGU_KEYS = ["VM", "DM", "IM", "VF", "DF", "IF", "TV", "IT", "Alarmes"] as const;
 export type Field = keyof typeof FIELDS;
 
 /** Mapeamento aprovado no fecho da Fase 01 (tabela «Mapeamento das colunas da base»). */
@@ -36,6 +45,13 @@ export const DEFAULT_MAPPING: Record<string, Field> = {
   "Decisor": "decisor", "Email": "email", "Operadora": "operator", "Último Feedback": "lastFeedback", "Histórico Feedback": "feedbackHistory",
   "Ganho Fecho 2026 (€)": "ignore", "Ano Última Fonte": "lastSourceYear", "Tags": "ignore", "Fontes": "sources",
   "Feedback": "ignore", "Data": "ignore", "Comentários": "ignore", "Motivo da remoção": "reason",
+  // Formato acordado a 11 nov (ficheiro «BASECOM_Importacao_CRM», 47 colunas).
+  "Título": "title", "Título 2": "title2", "Decisor 2": "decisor2", "Email 2": "email2", "Contactos adicionais": "extraPhones",
+  "Distrito": "district", "Setor": "sector", "Setor (CAE agregado)": "sector", "Faturação Anual (€)": "annualRevenue",
+  "Potencial Nº Localizações": "locationsPotential", "Produto": "product", "Tecnologia": "technology", "Meses Permanência": "loyaltyMonths",
+  "Estado no Portal": "portalStatus", "Data Saída NOS": "nosExit", "Campanha NBO": "nboCampaign",
+  "Voz Móvel (VM)": "rguVM", "Dados Móveis (DM)": "rguDM", "Internet Móvel (IM)": "rguIM", "Voz Fixa (VF)": "rguVF",
+  "Dados Fixos (DF)": "rguDF", "Internet Fixa (IF)": "rguIF", "TV": "rguTV", "IT": "rguIT", "Alarmes": "rguAlarmes",
 };
 
 export type SheetAction = "import" | "review" | "skip";
@@ -62,11 +78,35 @@ export type Staged = {
   operator: string | null; economicGroup: string | null; ownerId: string | null; ownerLabel: string;
   lastSourceYear: number | null; sources: string | null;
   phones: { value: string; type: string }[]; email: string | null; decisor: { salutation: string | null; name: string } | null;
+  decisor2: { salutation: string | null; name: string } | null; email2: string | null;
+  extra: Extra;
   notes: { kind: string; text: string }[];
 };
 
+/** Campos simples que passam tal e qual para a empresa (na atualização: substituem se vierem preenchidos). */
+export type Extra = {
+  district: string | null; sector: string | null; annualRevenue: number | null; locationsPotential: string | null;
+  rgu: Record<string, number> | null; product: string | null; technology: string | null; loyaltyMonths: number | null;
+  portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null;
+};
+const EXTRA_KEYS = ["district", "sector", "annualRevenue", "locationsPotential", "rgu", "product", "technology", "loyaltyMonths", "portalStatus", "nosExitMonth", "nboCampaign"] as const;
+function extraColumns(e: Extra) {
+  return { ...e, annualRevenue: e.annualRevenue == null ? null : String(e.annualRevenue) };
+}
+
 const s = (v: unknown) => (v == null ? "" : String(v).trim());
 const orNull = (v: unknown) => s(v) || null;
+
+/**
+ * Tranca o lote até ao fim da transação e confirma o estado: a pré-visualização, a gravação
+ * e a anulação nunca correm ao mesmo tempo sobre o mesmo lote.
+ */
+async function lockBatch(tx: Db, batchId: string, allowed: string[], msg: string) {
+  const r = await tx.execute(sql`select status from import_batches where id = ${batchId} for update`);
+  const status = (r.rows[0] as { status?: string } | undefined)?.status;
+  if (!status) throw new AuthError(404, "Lote não encontrado.");
+  if (!allowed.includes(status)) throw new AuthError(409, msg);
+}
 
 // ───────────── Passo 1: carregar e analisar ─────────────
 
@@ -164,6 +204,7 @@ export async function previewBase(db: Db, userId: string, batchId: string, opts:
   await classifyAgainstDb(db, rows);
 
   await db.transaction(async (tx) => {
+    await lockBatch(tx as unknown as Db, batchId, ["uploaded", "preview"], "Este lote já foi gravado ou anulado.");
     await tx.delete(importRows).where(eq(importRows.batchId, batchId));
     for (let i = 0; i < rows.length; i += 1000) await tx.insert(importRows).values(rows.slice(i, i + 1000));
     const summary = summarise(rows);
@@ -221,8 +262,32 @@ class Ctx {
       if (p && !phones.some((x) => x.value === p.national)) phones.push({ value: p.national, type: p.type });
       else if (!p) notes.push({ kind: "note", text: `Telefone inválido na base: ${raw}` });
     }
-    const dec = s(get("decisor"));
+    // Telefones adicionais (a partir do 5.º), separados por «;».
+    for (const raw of s(get("extraPhones")).split(/[;,|/\n]+/)) {
+      if (!raw.trim()) continue;
+      const p = normalizePhone(raw);
+      if (p && !phones.some((x) => x.value === p.national)) phones.push({ value: p.national, type: p.type });
+      else if (!p) notes.push({ kind: "note", text: `Telefone inválido na base: ${raw.trim()}` });
+    }
+    const person = (title: unknown, name: unknown) => {
+      const n = s(name);
+      if (!n) return null;
+      const sp = splitSalutation(n);
+      return { salutation: s(title) || sp.salutation, name: sp.name };
+    };
     const email = s(get("email")).toLowerCase();
+    const email2 = s(get("email2")).toLowerCase();
+    const int = (v: unknown) => { const x = toEuros(v); return x != null && Number.isInteger(x) ? x : null; };
+    const rgu: Record<string, number> = {};
+    for (const k of RGU_KEYS) { const v = int(get(`rgu${k}` as Field)); if (v != null) rgu[k] = v; }
+    const exit = s(get("nosExit"));
+    const extra: Extra = {
+      district: orNull(get("district")), sector: orNull(get("sector")), annualRevenue: toEuros(get("annualRevenue")),
+      locationsPotential: orNull(get("locationsPotential")), rgu: Object.keys(rgu).length ? rgu : null,
+      product: orNull(get("product")), technology: orNull(get("technology")), loyaltyMonths: int(get("loyaltyMonths")),
+      portalStatus: orNull(get("portalStatus")), nosExitMonth: /^\d{4}-\d{2}/.test(exit) ? exit.slice(0, 7) : exit || null,
+      nboCampaign: orNull(get("nboCampaign")),
+    };
     const year = Number(get("lastSourceYear"));
     return {
       nif, nifValid: isValidNif(nif), name, nameKey: normalizeCompanyName(name), accountType,
@@ -231,7 +296,9 @@ class Ctx {
       locality: orNull(get("locality")), municipality: orNull(get("municipality")), operator: op.operator,
       economicGroup: orNull(get("economicGroup")), ownerId, ownerLabel,
       lastSourceYear: Number.isInteger(year) && year > 1990 && year < 2100 ? year : null, sources: orNull(get("sources")),
-      phones, email: email && email.includes("@") ? email : null, decisor: dec ? splitSalutation(dec) : null, notes,
+      phones, email: email && email.includes("@") ? email : null, decisor: person(get("title"), get("decisor")),
+      decisor2: person(get("title2"), get("decisor2")), email2: email2 && email2.includes("@") && email2 !== email ? email2 : null,
+      extra, notes,
     };
   }
 }
@@ -296,10 +363,11 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
   const batch = await db.query.importBatches.findFirst({ where: eq(importBatches.id, batchId) });
   if (!batch) throw new AuthError(404, "Lote não encontrado.");
   if (batch.status !== "preview") throw new AuthError(409, "Este lote não está em pré-visualização.");
-  const rows = await db.select().from(importRows).where(eq(importRows.batchId, batchId));
   const counts = { created: 0, updated: 0, skipped: 0 };
 
   await db.transaction(async (tx) => {
+    await lockBatch(tx as unknown as Db, batchId, ["preview"], "Este lote não está em pré-visualização (já foi gravado, anulado ou está a ser preparado).");
+    const rows = await tx.select().from(importRows).where(eq(importRows.batchId, batchId));
     // Empresas novas, em blocos.
     const fresh = rows.filter((r) => WRITE.includes(r.result));
     for (let i = 0; i < fresh.length; i += 500) {
@@ -311,6 +379,7 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
           employeesBand: d.employeesBand, l2bMonthly: d.l2bMonthly == null ? null : String(d.l2bMonthly), loyaltyEnd: d.loyaltyEnd,
           address: d.address, postalCode: d.postalCode, locality: d.locality, municipality: d.municipality, operator: d.operator,
           economicGroup: d.economicGroup, ownerId: d.ownerId, lastSourceYear: d.lastSourceYear, sources: d.sources,
+          ...(d.extra ? extraColumns(d.extra) : {}),
           needsReview: r.result === "duplicate_review" ? r.detail : null, batchId,
         };
       })).returning({ id: companies.id, nif: companies.nif });
@@ -326,12 +395,17 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
       const d = r.data as Staged;
       const cur = await tx.query.companies.findFirst({ where: eq(companies.id, r.companyId!) });
       if (!cur || cur.doNotContact) { counts.skipped++; continue; }
-      const before = { name: cur.name, nameKey: cur.nameKey, address: cur.address, postalCode: cur.postalCode, municipality: cur.municipality, locality: cur.locality, loyaltyEnd: cur.loyaltyEnd, l2bMonthly: cur.l2bMonthly, size: cur.size };
+      const before: Record<string, unknown> = { name: cur.name, nameKey: cur.nameKey, address: cur.address, postalCode: cur.postalCode, municipality: cur.municipality, locality: cur.locality, loyaltyEnd: cur.loyaltyEnd, l2bMonthly: cur.l2bMonthly, size: cur.size };
+      const extraSet: Record<string, unknown> = {};
+      if (d.extra) {
+        const cols = extraColumns(d.extra) as Record<string, unknown>;
+        for (const k of EXTRA_KEYS) if (cols[k] != null) { before[k] = (cur as Record<string, unknown>)[k]; extraSet[k] = cols[k]; }
+      }
       await tx.update(companies).set({
         name: d.name, nameKey: d.nameKey, address: d.address ?? cur.address, postalCode: d.postalCode ?? cur.postalCode,
         municipality: d.municipality ?? cur.municipality, locality: d.locality ?? cur.locality,
         loyaltyEnd: d.loyaltyEnd ?? cur.loyaltyEnd, l2bMonthly: d.l2bMonthly == null ? cur.l2bMonthly : String(d.l2bMonthly),
-        size: d.size ?? cur.size, updatedAt: new Date(),
+        size: d.size ?? cur.size, ...extraSet, updatedAt: new Date(),
       }).where(eq(companies.id, cur.id));
       const known = new Set((await tx.select({ v: companyContacts.value }).from(companyContacts).where(eq(companyContacts.companyId, cur.id))).map((x) => x.v));
       const knownNotes = new Set((await tx.select({ t: companyNotes.text }).from(companyNotes).where(eq(companyNotes.companyId, cur.id))).map((x) => x.t));
@@ -355,6 +429,10 @@ async function insertChildren(tx: Db, items: { id: string; d: Staged; known: Set
       contacts.push({ companyId: id, kind: "phone", value: p.value, phoneType: p.type, isPrimary: firstNew && i === 0, personName: i === 0 ? d.decisor?.name ?? null : null, salutation: i === 0 ? d.decisor?.salutation ?? null : null, batchId });
     });
     if (d.email && !known.has(d.email)) contacts.push({ companyId: id, kind: "email", value: d.email, isPrimary: firstNew, personName: d.decisor?.name ?? null, salutation: d.decisor?.salutation ?? null, batchId });
+    // 2.º decisor: com email fica no email; sem email fica como pessoa de contacto.
+    const d2 = d.decisor2;
+    if (d.email2 && !known.has(d.email2)) contacts.push({ companyId: id, kind: "email", value: d.email2, personName: d2?.name ?? null, salutation: d2?.salutation ?? null, batchId });
+    else if (d2 && !d.email2 && !known.has(d2.name)) contacts.push({ companyId: id, kind: "person", value: d2.name, personName: d2.name, salutation: d2.salutation, batchId });
     for (const n of d.notes) if (!knownNotes.has(n.text)) notes.push({ companyId: id, kind: n.kind, text: n.text, userId, batchId });
   }
   for (let i = 0; i < contacts.length; i += 1000) await tx.insert(companyContacts).values(contacts.slice(i, i + 1000));
@@ -368,6 +446,7 @@ export async function revertBatch(db: Db, userId: string, batchId: string) {
   if (!batch) throw new AuthError(404, "Lote não encontrado.");
   if (batch.status !== "committed") throw new AuthError(409, "Só um lote gravado pode ser anulado.");
   await db.transaction(async (tx) => {
+    await lockBatch(tx as unknown as Db, batchId, ["committed"], "Só um lote gravado pode ser anulado.");
     for (const r of await tx.select().from(importRows).where(and(eq(importRows.batchId, batchId), eq(importRows.result, "update")))) {
       if (r.before && r.companyId) await tx.update(companies).set({ ...(r.before as object), updatedAt: new Date() }).where(eq(companies.id, r.companyId));
     }

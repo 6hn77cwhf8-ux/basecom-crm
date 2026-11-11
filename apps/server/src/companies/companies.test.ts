@@ -4,6 +4,7 @@ import { createDb } from "../db/client.js";
 import { companies, companyContacts, companyNotes, sessions, users } from "../db/schema.js";
 import { buildApp } from "../app.js";
 import { newToken } from "../auth/crypto.js";
+import { normalizeCompanyName } from "@basecom/shared";
 
 const url = process.env.DATABASE_URL;
 
@@ -20,7 +21,7 @@ describe.skipIf(!url)("empresas: lista, pesquisa e ficha", () => {
     const t = newToken();
     token = t.token;
     await db.insert(sessions).values({ tokenHash: t.hash, userId, expiresAt: new Date(Date.now() + 3600_000) });
-    const [c] = await db.insert(companies).values({ nif, name: `Zeta Clínica ${tag} Lda`, nameKey: `zeta ${tag}`, accountType: "client", municipality: `Concelho ${tag}`, ownerId: userId }).returning();
+    const [c] = await db.insert(companies).values({ nif, name: `Zeta Clínica ${tag} Lda`, nameKey: normalizeCompanyName(`Zeta Clínica ${tag} Lda`), accountType: "client", municipality: `Concelho ${tag}`, ownerId: userId }).returning();
     coId = c!.id;
     await db.insert(companyContacts).values([
       { companyId: coId, kind: "phone", value: `91${tag}9`, phoneType: "mobile", isPrimary: true, personName: `Decisora ${tag}`, salutation: "Senhora" },

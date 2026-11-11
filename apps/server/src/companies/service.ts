@@ -2,6 +2,7 @@ import { and, asc, desc, eq, isNotNull, isNull, sql, type SQL } from "drizzle-or
 import type { Db } from "../db/client.js";
 import { companies, companyContacts, companyNotes, users } from "../db/schema.js";
 import { AuthError } from "../auth/service.js";
+import { normalizeCompanyName } from "@basecom/shared";
 
 /**
  * Empresas: qualquer utilizador encontra qualquer empresa e vê o histórico (maquetas, ecrã Empresas);
@@ -10,27 +11,33 @@ import { AuthError } from "../auth/service.js";
 
 export type CompanyFilters = {
   q?: string; accountType?: "client" | "prospect"; owner?: string; wallet?: "NC" | "FC";
-  status?: "dnc" | "review" | "nif"; municipality?: string; offset?: number; limit?: number;
+  status?: "dnc" | "review" | "nif"; municipality?: string; district?: string; sector?: string; offset?: number; limit?: number;
 };
 
 const ACCENTED = "áàâãäéèêëíìîïóòôõöúùûüç";
 const PLAIN = "aaaaaeeeeiiiiooooouuuuc";
 
-/** Pesquisa por NIF, telefone, nome da empresa, decisor ou email. */
+/**
+ * Pesquisa por NIF, telefone, nome da empresa, decisor ou email.
+ * Só algarismos → NIF e telefones. Texto → nome sem acentos (já guardado na importação), decisor e email.
+ */
 function searchCond(q: string): SQL | undefined {
   const t = q.trim();
   if (!t) return undefined;
   const digits = t.replace(/\D/g, "");
-  const like = `%${t}%`;
-  // Sem acentos: «clinica» encontra «Clínica».
-  const fold = (col: SQL | typeof companies.name) => sql`translate(lower(${col}), ${ACCENTED}, ${PLAIN})`;
-  const plain = `%${t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}%`;
-  const parts: SQL[] = [sql`${fold(companies.name)} like ${plain}`];
-  if (digits.length >= 3) {
-    parts.push(sql`${companies.nif} like ${digits + "%"}`);
-    parts.push(sql`exists (select 1 from ${companyContacts} cc where cc.company_id = ${companies.id} and cc.value like ${"%" + digits + "%"})`);
+  if (/^[\d\s+.-]+$/.test(t)) {
+    if (digits.length < 3) return sql`false`;
+    return sql`(${companies.nif} like ${digits + "%"} or ${companies.id} in (select cc.company_id from ${companyContacts} cc where cc.value like ${"%" + digits + "%"}))`;
   }
-  if (t.length >= 3) parts.push(sql`exists (select 1 from ${companyContacts} cc where cc.company_id = ${companies.id} and (${fold(sql`cc.person_name`)} like ${plain} or cc.value ilike ${like}))`);
+  const plain = `%${t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}%`;
+  const key = normalizeCompanyName(t);
+  const parts: SQL[] = [];
+  if (key) parts.push(sql`${companies.nameKey} like ${"%" + key + "%"}`);
+  parts.push(sql`${companies.name} ilike ${"%" + t + "%"}`);
+  if (t.length >= 3) {
+    parts.push(sql`${companies.id} in (select cc.company_id from ${companyContacts} cc where cc.person_name is not null and translate(lower(cc.person_name), ${ACCENTED}, ${PLAIN}) like ${plain})`);
+    parts.push(sql`${companies.id} in (select cc.company_id from ${companyContacts} cc where cc.kind = 'email' and cc.value like ${"%" + t.toLowerCase() + "%"})`);
+  }
   return sql`(${sql.join(parts, sql` or `)})`;
 }
 
@@ -45,6 +52,8 @@ function where(f: CompanyFilters) {
   if (f.status === "review") c.push(isNotNull(companies.needsReview));
   if (f.status === "nif") c.push(eq(companies.nifValid, false));
   if (f.municipality) c.push(eq(companies.municipality, f.municipality));
+  if (f.district) c.push(eq(companies.district, f.district));
+  if (f.sector) c.push(eq(companies.sector, f.sector));
   return and(...c.filter(Boolean));
 }
 
@@ -53,7 +62,8 @@ export async function listCompanies(db: Db, f: CompanyFilters) {
   const [{ total }] = (await db.select({ total: sql<number>`count(*)::int` }).from(companies).where(w)) as [{ total: number }];
   const rows = await db.select({
     id: companies.id, nif: companies.nif, name: companies.name, accountType: companies.accountType,
-    municipality: companies.municipality, locality: companies.locality, ownerId: companies.ownerId, owner: users.name,
+    municipality: companies.municipality, locality: companies.locality, district: companies.district, sector: companies.sector,
+    ownerId: companies.ownerId, owner: users.name,
     walletKind: companies.walletKind, doNotContact: companies.doNotContact, needsReview: companies.needsReview,
     nifValid: companies.nifValid, operator: companies.operator, loyaltyEnd: companies.loyaltyEnd,
   }).from(companies).leftJoin(users, eq(users.id, companies.ownerId)).where(w)
@@ -76,9 +86,11 @@ export async function companyKpis(db: Db) {
   return k!;
 }
 
-export async function municipalities(db: Db) {
-  const rows = await db.selectDistinct({ m: companies.municipality }).from(companies).where(isNotNull(companies.municipality)).orderBy(companies.municipality);
-  return rows.map((r) => r.m!);
+/** Valores para os filtros (concelhos, distritos e setores existentes). */
+export async function filterOptions(db: Db) {
+  const list = async (col: "municipality" | "district" | "sector") =>
+    (await db.selectDistinct({ v: companies[col] }).from(companies).where(isNotNull(companies[col])).orderBy(companies[col])).map((r) => r.v!);
+  return { municipalities: await list("municipality"), districts: await list("district"), sectors: await list("sector") };
 }
 
 /** Pesquisa global da barra lateral: as 8 melhores correspondências. */

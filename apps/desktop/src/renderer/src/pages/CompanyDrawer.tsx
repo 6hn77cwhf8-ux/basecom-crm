@@ -9,6 +9,33 @@ const TABS: { id: Tab; label: string; later?: string }[] = [
   { id: "resumo", label: "Resumo" }, { id: "contactos", label: "Contactos" }, { id: "historico", label: "Histórico" },
   { id: "oportunidades", label: "Oportunidades", later: "Fase 3" }, { id: "vendas", label: "Vendas", later: "Arranque B" }, { id: "tickets", label: "Tickets e pendências", later: "Arranque B" },
 ];
+const PORTAL: Record<string, string> = { CLIENTE: "Cliente", "EX-CLIENTE": "Ex-cliente", PROSPECT: "Prospeto" };
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const fmtMonth = (ym: string) => { const [y, m] = ym.split("-"); return m ? `${MONTHS[Number(m) - 1]} ${y}` : ym; };
+/** Famílias de produto (Lista Famílias NOS). */
+const RGU_LABEL: [string, string][] = [["VM", "Voz Móvel"], ["DM", "Dados Móveis"], ["IM", "Internet Móvel"], ["VF", "Voz Fixa"], ["DF", "Dados Fixos"], ["IF", "Internet Fixa"], ["TV", "TV"], ["IT", "IT"], ["Alarmes", "Alarmes"]];
+
+function Rgu({ rgu }: { rgu: Record<string, number> | null }) {
+  if (!rgu) return <Row k="RGU" v="—" />;
+  const total = Object.values(rgu).reduce((a, b) => a + b, 0);
+  return (
+    <div style={{ padding: "10px 0 2px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 8 }}><span style={{ color: c.muted }}>RGU</span><span style={{ fontWeight: 600 }}>{total} no total</span></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {RGU_LABEL.map(([k, label]) => {
+          const n = rgu[k] ?? 0;
+          return (
+            <div key={k} title={label} style={{ border: `1px solid ${c.line}`, borderRadius: 10, padding: "6px 8px", background: n ? c.brandSoft : "transparent", display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontSize: 12, color: n ? c.ink : c.muted }}><b>{k}</b> {label !== k ? label : ""}</span>
+              <span style={{ fontSize: 16, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: n ? c.ink : c.muted }}>{n}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota" };
 
 /** Ficha da empresa em gaveta (maqueta «Ficha»): abre por cima do ecrã atual; «Voltar» fecha. */
@@ -68,12 +95,12 @@ export function CompanyDrawer({ id, onClose }: { id: string; onClose: () => void
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <Card title="Dados da empresa">
                   <Row k="Tipo de conta" v={co.accountType === "client" ? "Cliente NOS" : "Prospeto (NN)"} />
+                  <Row k="Setor" v={co.sector ?? "—"} />
                   <Row k="Dimensão" v={[co.size, co.employeesBand && `${co.employeesBand} colaboradores`].filter(Boolean).join(" · ") || "—"} />
-                  <Row k="Operadora atual" v={co.operator ?? "—"} />
-                  <Row k="Valor L2B" v={co.l2bMonthly ? `${fmtEur(co.l2bMonthly)}/mês` : "—"} />
-                  <Row k="Fim de fidelização" v={fmtDate(co.loyaltyEnd)} />
+                  <Row k="Faturação anual" v={co.annualRevenue ? fmtEur(co.annualRevenue) : "—"} />
+                  <Row k="Potencial de localizações" v={co.locationsPotential ?? "—"} />
                   <Row k="Grupo económico" v={co.economicGroup ?? "—"} />
-                  <Row k="Última atualização da informação" v={co.lastSourceYear ? String(co.lastSourceYear) : "—"} />
+                  {co.lastSourceYear && <Row k="Última atualização da informação" v={String(co.lastSourceYear)} />}
                 </Card>
                 <Card title="Contacto principal">
                   <Row k="Decisor" v={main?.personName ? `${main.salutation ? main.salutation + " " : ""}${main.personName}` : "—"} />
@@ -81,6 +108,23 @@ export function CompanyDrawer({ id, onClose }: { id: string; onClose: () => void
                   <Row k="Email" v={emails[0]?.value ?? "—"} />
                   <Row k="Morada" v={co.address ?? "—"} />
                   <Row k="Código postal" v={[co.postalCode, co.locality].filter(Boolean).join(" ") || "—"} />
+                  <Row k="Concelho · Distrito" v={[co.municipality, co.district].filter(Boolean).join(" · ") || "—"} />
+                </Card>
+                <Card title="Serviços NOS">
+                  <Row k="Operadora atual" v={co.operator ?? "—"} />
+                  <Row k="Valor L2B" v={co.l2bMonthly ? `${fmtEur(co.l2bMonthly)}/mês` : "—"} />
+                  <Row k="Fim de fidelização" v={fmtDate(co.loyaltyEnd)} />
+                  <Row k="Meses de permanência" v={co.loyaltyMonths != null ? String(co.loyaltyMonths) : "—"} />
+                  <Row k="Produto · Tecnologia" v={[co.product, co.technology].filter(Boolean).join(" · ") || "—"} />
+                  <Rgu rgu={co.rgu} />
+                </Card>
+                <Card title="Portal NOS">
+                  <Row k="Estado no portal" v={co.portalStatus ? <Chip tone={co.portalStatus === "CLIENTE" ? "ok" : co.portalStatus === "EX-CLIENTE" ? "warn" : "neutral"}>{PORTAL[co.portalStatus] ?? co.portalStatus}</Chip> : "—"} />
+                  <Row k="Saída da NOS" v={co.nosExitMonth ? fmtMonth(co.nosExitMonth) : "—"} />
+                  <div style={{ padding: "8px 0", fontSize: 14 }}>
+                    <div style={{ color: c.muted, marginBottom: 4 }}>Campanha NBO</div>
+                    <div>{co.nboCampaign ?? "—"}</div>
+                  </div>
                 </Card>
                 <div style={{ gridColumn: "1 / -1" }}><Contacts d={d!} /></div>
                 <div style={{ gridColumn: "1 / -1" }}><History d={d!} limit={5} onMore={() => setTab("historico")} /></div>
@@ -127,10 +171,10 @@ function Contacts({ d }: { d: CompanyDetail }) {
         <div key={x.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 16, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
           <span style={{ fontWeight: x.isPrimary ? 600 : 400 }}>{x.personName ? `${x.salutation ? x.salutation + " " : ""}${x.personName}` : <span style={{ color: c.muted }}>Contacto da empresa</span>}</span>
           <span style={{ textDecoration: x.status === "incorrect" ? "line-through" : "none" }}>
-            {x.kind === "phone" ? `${formatPhone(x.value)} · ${x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}` : x.value}
+            {x.kind === "phone" ? `${formatPhone(x.value)} · ${x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}` : x.kind === "person" ? <span style={{ color: c.muted }}>Sem telefone nem email</span> : x.value}
             {x.isPrimary && " · principal"}
           </span>
-          {x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : <Chip tone="ok">Válido</Chip>}
+          {x.kind === "person" ? <Chip>2.º decisor</Chip> : x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : <Chip tone="ok">Válido</Chip>}
         </div>
       ))}
     </Card>

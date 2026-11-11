@@ -38,7 +38,7 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
   });
   const preview = (isTrial = trial) => run("A preparar a pré-visualização…", async () => {
     const r = await api.previewImport(up!.id, { sheets, mapping, limit: isTrial ? up!.trialSize : null });
-    setSummary(r.summary); setStep(3);
+    setSummary(r.summary); setTrial(isTrial); setStep(3);
   });
   const cancel = () => run("", async () => { if (up && !done) await api.discardImport(up.id); onBack(); });
 
@@ -119,13 +119,13 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
         </section>
       )}
 
-      {step >= 3 && up && summary && <Preview id={up.id} summary={summary} trial={trial} done={done}
-        onFull={() => { setTrial(false); preview(false); }} onBack={() => setStep(2)} onConfirm={() => setStep(4)} />}
+      {step >= 3 && up && summary && <Preview id={up.id} summary={summary} trial={trial} done={done} busy={!!busy}
+        onFull={() => preview(false)} onBack={() => setStep(2)} onConfirm={() => setStep(4)} />}
 
-      {step === 4 && up && !done && <Confirm summary={summary!} onCancel={() => setStep(3)} onCode={(code) => run("A gravar…", async () => { setDone(await api.commitImport(up.id, code)); loadBatches(); })} />}
+      {step === 4 && up && !done && <Confirm summary={summary!} busy={!!busy} onCancel={() => setStep(3)} onCode={(code) => run("A gravar…", async () => { setDone(await api.commitImport(up.id, code)); loadBatches(); })} />}
       {done && (
         <section role="status" style={{ ...card, padding: 20, borderColor: c.ink }}>
-          <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>Lote {done.number} gravado</h2>
+          <h2 data-testid="lote-gravado" style={{ margin: "0 0 6px", fontSize: 18 }}>Lote {done.number} gravado</h2>
           <p style={{ margin: 0, fontSize: 14 }}>{fmtInt(done.created)} empresas novas e {fmtInt(done.updated)} atualizadas. Se algo não estiver certo, pode anular o lote inteiro na lista abaixo.</p>
         </section>
       )}
@@ -135,7 +135,7 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
   );
 }
 
-function Preview({ id, summary, trial, done, onFull, onBack, onConfirm }: { id: string; summary: PreviewSummary; trial: boolean; done: unknown; onFull: () => void; onBack: () => void; onConfirm: () => void }) {
+function Preview({ id, summary, trial, done, busy, onFull, onBack, onConfirm }: { id: string; summary: PreviewSummary; trial: boolean; done: unknown; busy: boolean; onFull: () => void; onBack: () => void; onConfirm: () => void }) {
   const [result, setResult] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
@@ -184,16 +184,16 @@ function Preview({ id, summary, trial, done, onFull, onBack, onConfirm }: { id: 
       </section>
       {!done && (
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button style={btn} onClick={onBack}>Voltar ao mapeamento</button>
-          {trial && <button style={btn} onClick={onFull}>Pré-visualizar o ficheiro completo</button>}
-          <button style={btnDark} onClick={onConfirm}>{trial ? "Gravar o ensaio" : "Gravar tudo"}</button>
+          <button style={btn} disabled={busy} onClick={onBack}>Voltar ao mapeamento</button>
+          {trial && <button style={btn} disabled={busy} onClick={onFull}>Pré-visualizar o ficheiro completo</button>}
+          <button style={btnDark} disabled={busy} onClick={onConfirm}>{trial ? "Gravar o ensaio" : "Gravar tudo"}</button>
         </div>
       )}
     </section>
   );
 }
 
-function Confirm({ summary, onCancel, onCode }: { summary: PreviewSummary; onCancel: () => void; onCode: (code: string) => void }) {
+function Confirm({ summary, busy, onCancel, onCode }: { summary: PreviewSummary; busy: boolean; onCancel: () => void; onCode: (code: string) => void }) {
   const [code, setCode] = useState("");
   const toWrite = ["new", "update", "duplicate_review", "nif_to_verify"].reduce((a, r) => a + (summary.byResult[r] ?? 0), 0);
   const submit = (e: FormEvent) => { e.preventDefault(); onCode(code); };
@@ -204,8 +204,8 @@ function Confirm({ summary, onCancel, onCode }: { summary: PreviewSummary; onCan
         <p style={{ margin: 0, fontSize: 14, color: c.muted }}>Introduza o código de 6 dígitos do Microsoft Authenticator. O lote fica numerado e pode ser anulado por inteiro.</p>
       </div>
       <Field label="Código"><input style={{ ...input, width: 140, fontSize: 18, letterSpacing: ".25em", textAlign: "center" }} inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} autoFocus required /></Field>
-      <button type="button" style={btn} onClick={onCancel}>Voltar</button>
-      <button style={btnDark} disabled={code.length !== 6}>Confirmar importação</button>
+      <button type="button" style={btn} disabled={busy} onClick={onCancel}>Voltar</button>
+      <button style={btnDark} disabled={busy || code.length !== 6}>{busy ? "A gravar…" : "Confirmar importação"}</button>
     </form>
   );
 }

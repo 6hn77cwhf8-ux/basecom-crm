@@ -10,16 +10,19 @@ export type Settings = {
   timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number };
 };
 export type CompanyRow = {
-  id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null;
+  id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null; district: string | null; sector: string | null;
   ownerId: string | null; owner: string | null; walletKind: "NC" | "FC"; doNotContact: boolean; needsReview: string | null;
   nifValid: boolean; operator: string | null; loyaltyEnd: string | null;
 };
 export type CompanyKpis = { total: number; noOwner: number; withOwner: number; nc: number; fc: number; clients: number; dnc: number; review: number };
-export type CompanyFilters = Partial<{ q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; offset: number; limit: number }>;
-export type Contact = { id: string; kind: "phone" | "email"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string };
+export type CompanyFilters = Partial<{ q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; offset: number; limit: number }>;
+export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[] };
+export type Contact = { id: string; kind: "phone" | "email" | "person"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string };
 export type Note = { id: string; kind: string; text: string; at: string; user: string | null; batchId: string | null };
 export type CompanyDetail = {
-  company: CompanyRow & { size: string | null; employeesBand: string | null; l2bMonthly: string | null; address: string | null; postalCode: string | null; economicGroup: string | null; lastSourceYear: number | null; sources: string | null; createdAt: string; updatedAt: string };
+  company: CompanyRow & { size: string | null; employeesBand: string | null; l2bMonthly: string | null; address: string | null; postalCode: string | null; economicGroup: string | null; lastSourceYear: number | null; sources: string | null; createdAt: string; updatedAt: string;
+    annualRevenue: string | null; locationsPotential: string | null; rgu: Record<string, number> | null; product: string | null; technology: string | null;
+    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null };
   contacts: Contact[]; notes: Note[];
 };
 export type SearchHit = { id: string; nif: string; name: string; municipality: string | null; owner: string | null; accountType: string };
@@ -86,7 +89,7 @@ export const api = {
 
   companies: (f: CompanyFilters) => call<{ total: number; rows: CompanyRow[] }>(`/companies${qs(f)}`),
   companyKpis: () => call<CompanyKpis>("/companies/kpis"),
-  municipalities: () => call<{ municipalities: string[] }>("/companies/municipalities").then((r) => r.municipalities),
+  filterOptions: () => call<FilterOptions>("/companies/options"),
   company: (id: string) => call<CompanyDetail>(`/companies/${id}`),
   search: (q: string) => call<{ results: SearchHit[] }>(`/search${qs({ q })}`).then((r) => r.results),
 

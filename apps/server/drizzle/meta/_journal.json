@@ -29,6 +29,13 @@
       "when": 1794407233183,
       "tag": "0003_empresas",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794424608719,
+      "tag": "0004_ficha_completa",
+      "breakpoints": true
     }
   ]
 }
