@@ -1,0 +1,22 @@
+# Instaladores da aplicação de computador (gerados no GitHub: .github/workflows/desktop.yml).
+appId: pt.basecom.crm
+productName: BASECOM CRM
+copyright: BASECOM
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+npmRebuild: false
+artifactName: BASECOM-CRM-${version}-${os}.${ext}
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: always
+  shortcutName: BASECOM CRM
+mac:
+  target: [dmg]
+  category: public.app-category.business

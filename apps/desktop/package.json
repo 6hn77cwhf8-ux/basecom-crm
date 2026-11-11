@@ -8,11 +8,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo \"(sem testes ainda)\""
-  },
-  "dependencies": {
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "test": "echo \"(sem testes ainda)\"",
+    "dist:win": "electron-vite build && electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --x64 --publish never"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
@@ -20,8 +18,13 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.7"
-  }
+  },
+  "description": "BASECOM CRM — aplicação de computador",
+  "author": "BASECOM"
 }
