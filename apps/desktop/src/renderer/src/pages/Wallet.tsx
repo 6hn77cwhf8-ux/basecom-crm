@@ -12,7 +12,7 @@ function cycles() {
   return { current: `${cur.label} (desde ${d(cur.start)})`, next: `${next.label} (a partir de ${d(next.start)})` };
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, width = 520 }: { title: string; onClose: () => void; children: ReactNode; width?: number }) {
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);
@@ -20,7 +20,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose]);
   return (
     <div role="dialog" aria-modal="true" aria-label={title} style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(11,11,11,0.32)" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 520, maxWidth: "92vw", maxHeight: "86vh", overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 8px 32px rgba(0,0,0,.18)" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width, maxWidth: "92vw", maxHeight: "86vh", overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 8px 32px rgba(0,0,0,.18)" }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{title}</h2>
         {children}
       </div>

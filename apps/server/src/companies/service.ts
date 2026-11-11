@@ -88,9 +88,13 @@ export async function companyKpis(db: Db) {
 
 /** Valores para os filtros (concelhos, distritos e setores existentes). */
 export async function filterOptions(db: Db) {
-  const list = async (col: "municipality" | "district" | "sector") =>
+  const list = async (col: "municipality" | "district" | "sector" | "operator" | "product" | "technology" | "portalStatus" | "size") =>
     (await db.selectDistinct({ v: companies[col] }).from(companies).where(isNotNull(companies[col])).orderBy(companies[col])).map((r) => r.v!);
-  return { municipalities: await list("municipality"), districts: await list("district"), sectors: await list("sector") };
+  return {
+    municipalities: await list("municipality"), districts: await list("district"), sectors: await list("sector"),
+    operators: await list("operator"), products: await list("product"), technologies: await list("technology"),
+    portalStatuses: await list("portalStatus"), sizes: await list("size"),
+  };
 }
 
 /** Pesquisa global da barra lateral: as 8 melhores correspondências. */

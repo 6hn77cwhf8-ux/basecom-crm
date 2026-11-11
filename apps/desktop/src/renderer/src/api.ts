@@ -16,7 +16,9 @@ export type CompanyRow = {
 };
 export type CompanyKpis = { total: number; noOwner: number; withOwner: number; nc: number; fc: number; clients: number; dnc: number; review: number };
 export type CompanyFilters = Partial<{ q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; offset: number; limit: number }>;
-export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[] };
+export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[]; operators?: string[]; products?: string[]; technologies?: string[]; portalStatuses?: string[]; sizes?: string[] };
+export type CampaignFilters = Partial<{ accountType: "client" | "prospect"; districts: string[]; municipalities: string[]; sectors: string[]; operators: string[]; sizes: string[]; products: string[]; technologies: string[]; portalStatus: string[]; loyaltyEndFrom: string; loyaltyEndTo: string; onlyWithoutOwner: boolean }>;
+export type Campaign = { id: string; name: string; mode: "new" | "current"; status: "active" | "paused" | "ended"; script: string; filters: CampaignFilters; createdAt: string; members: { id: string; name: string }[]; total: number; pending: number; ready: number; done: number; exhausted: number };
 export type Contact = { id: string; kind: "phone" | "email" | "person"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string };
 export type Note = { id: string; kind: string; text: string; at: string; user: string | null; batchId: string | null };
 export type CompanyDetail = {
@@ -102,6 +104,12 @@ export const api = {
   setWalletKind: (id: string, kind: "NC" | "FC", reason: string) => call(`/companies/${id}/wallet-kind`, { method: "POST", body: JSON.stringify({ kind, reason }) }),
   setDoNotContact: (id: string, value: boolean, reason: string) => call(`/companies/${id}/do-not-contact`, { method: "POST", body: JSON.stringify({ value, reason }) }),
   setContactStatus: (id: string, status: "valid" | "incorrect") => call(`/contacts/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  campaigns: () => call<{ campaigns: Campaign[] }>("/campaigns").then((r) => r.campaigns),
+  previewCampaign: (filters: CampaignFilters, memberIds: string[]) => call<{ total: number; clients: number; in_wallet: number }>("/campaigns/preview", { method: "POST", body: JSON.stringify({ filters, memberIds }) }),
+  createCampaign: (b: { name: string; mode: "new" | "current"; script: string; filters: CampaignFilters; memberIds: string[] }) => call<{ id: string; added: number }>("/campaigns", { method: "POST", body: JSON.stringify(b) }),
+  updateCampaign: (id: string, b: Partial<{ name: string; script: string; status: Campaign["status"]; memberIds: string[] }>) => call(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  refreshCampaign: (id: string) => call<{ added: number }>(`/campaigns/${id}/refresh`, { method: "POST", body: "{}" }),
 
   imports: () => call<{ batches: Batch[] }>("/imports").then((r) => r.batches),
   uploadBase: (file: File) => file.arrayBuffer().then((buf) => call<Upload>("/imports/base", { method: "POST", body: buf, headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } })),
