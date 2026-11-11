@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { c, font } from "./ui";
 import { ROLE_LABEL, type Role, type User } from "./api";
+import logo from "./assets/logo-horizontal.webp";
+import simbolo from "./assets/simbolo.webp";
 
 export type PageId = "painel" | "agenda" | "empresas" | "novos" | "atuais" | "carteira" | "pendencias" | "tickets" | "oportunidades" | "vendas" | "equipa" | "objetivos" | "relatorios" | "config";
 
@@ -36,14 +38,15 @@ export function Shell({ user, page, onNavigate, onLogout, children }: { user: Us
 
   return (
     <div style={{ display: "flex", height: "100vh", background: c.surface, color: c.ink, fontFamily: font }}>
-      <nav aria-label="Navegação principal" style={{ flex: `0 0 ${open ? 232 : 64}px`, background: c.card, borderRight: `1px solid ${c.line}`, padding: "16px 12px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: open ? "space-between" : "center", padding: "2px 0 12px 8px" }}>
-          {open && <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".08em" }}>BASECOM <span style={{ color: c.muted, fontWeight: 700 }}>CRM</span></span>}
+      <nav aria-label="Navegação principal" style={{ flex: `0 0 ${open ? 256 : 64}px`, background: c.card, borderRight: `1px solid ${c.line}`, padding: "16px 12px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: open ? "row" : "column", alignItems: "center", justifyContent: open ? "space-between" : "center", gap: open ? 0 : 10, padding: open ? "4px 0 16px 10px" : "4px 0 12px" }}>
+          {!open && <img src={simbolo} alt="BASECOM" style={{ width: 26, height: "auto" }} />}
+          {open ? <img src={logo} alt="BASECOM" style={{ width: 132, height: "auto" }} /> : null}
           <button onClick={toggle} aria-label={open ? "Fechar menu" : "Abrir menu"} title={open ? "Fechar menu" : "Abrir menu"} style={{ border: 0, background: "transparent", cursor: "pointer", color: c.muted, width: 32, height: 32, borderRadius: 8 }}>
             <Icon d={open ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"} />
           </button>
         </div>
-        {open && <input disabled placeholder="Pesquisa (disponível na fase 2)" aria-label="Pesquisar empresas" style={{ fontFamily: "inherit", height: 36, border: `1px solid ${c.line}`, borderRadius: 10, padding: "0 10px", fontSize: 13, background: c.surface, marginBottom: 10 }} />}
+        {open && <input disabled placeholder="Pesquisar (em breve)" aria-label="Pesquisar empresas" style={{ fontFamily: "inherit", height: 36, border: `1px solid ${c.line}`, borderRadius: 10, padding: "0 10px", fontSize: 13, background: c.surface, marginBottom: 10 }} />}
         {items.map((n) => {
           const on = n.id === page;
           return (

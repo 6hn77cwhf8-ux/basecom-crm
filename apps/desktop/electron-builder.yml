@@ -8,6 +8,7 @@ files:
   - out/**/*
   - package.json
 npmRebuild: false
+icon: resources/icon.png
 artifactName: BASECOM-CRM-${version}-${os}.${ext}
 win:
   target: [nsis]
