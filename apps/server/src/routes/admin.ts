@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { createUser, listAudit, listSessions, listUsers, resetPassword, resetTotp, revokeSession, updateUser } from "../users/service.js";
-import { getAllSettings, setSetting, SETTINGS, type SettingKey } from "../settings.js";
+import { getAllSettings, getSetting, setSetting, SETTINGS, type SettingKey } from "../settings.js";
 
 const role = z.enum(["admin", "team_lead", "sales"]);
 const date = z.string().date().nullable().optional().transform((v) => (v ? new Date(`${v}T00:00:00Z`) : v === null ? null : undefined));
@@ -33,6 +33,8 @@ export async function adminRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.delete("/sessions/:id", admin, async (req) => { await revokeSession(db, req.user!.id, id.parse(req.params).id); return { ok: true }; });
 
   app.get("/settings", admin, async () => ({ settings: await getAllSettings(db) }));
+  // Catálogos e limites de tempo: todos os perfis precisam deles para trabalhar (Power Dialer, resultados).
+  app.get("/catalogs", { preHandler: requireAuth(db) }, async () => ({ catalogs: await getSetting(db, "catalogs"), timeLimits: await getSetting(db, "timeLimits") }));
   app.put("/settings/:key", admin, async (req) => {
     const { key } = z.object({ key: z.enum(Object.keys(SETTINGS) as [SettingKey, ...SettingKey[]]) }).parse(req.params);
     return { value: await setSetting(db, key, req.body, req.user!.id) };

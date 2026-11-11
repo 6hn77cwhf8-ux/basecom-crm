@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { DEFAULT_OPERATORS } from "@basecom/shared";
+import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
 
@@ -46,6 +46,28 @@ export const SETTINGS = {
       operators: DEFAULT_OPERATORS,
       mapping: {} as Record<string, string>,
     },
+  },
+  /** Catálogos operacionais (Fase 02, tópico 2): resultados, tentativas, motivos, oportunidades e tarefas. */
+  catalogs: {
+    schema: z.object({
+      outcomes: z.array(z.object({
+        id: z.string().min(1), label: z.string().min(1).max(80), active: z.boolean(),
+        group: z.enum(["refuse", "callback", "noanswer", "proposal", "sale", "other"]),
+        effect: z.enum(["no_answer", "busy", "voicemail", "wrong_number", "decisor_absent", "call_later", "not_interested", "interested", "proposal_sent", "negotiating", "sale", "company_closed", "do_not_contact", "other_wallet"]),
+      })).min(1),
+      attempts: z.object({
+        noAnswerRetryMinutes: z.number().int().min(1).max(1440), busyRetryMinutes: z.number().int().min(1).max(1440),
+        maxAttemptsPerDay: z.number().int().min(1).max(20), maxAttemptsTotal: z.number().int().min(1).max(50), maxVoicemailsPerNumber: z.number().int().min(1).max(20),
+      }),
+      reasons: z.array(z.object({
+        id: z.string().min(1), label: z.string().min(1).max(120), active: z.boolean(),
+        effect: z.enum(["cooldown", "loyalty_end", "new_contract", "followup_task", "company_closed", "other"]),
+        days: z.number().int().min(0).max(3650).optional(), monthsBefore: z.number().int().min(0).max(60).optional(), contractMonths: z.number().int().min(1).max(120).optional(),
+      })).min(1),
+      opportunities: z.object({ warnDays: z.number().int().min(1).max(60), lateDays: z.number().int().min(1).max(90), lostReopenDays: z.number().int().min(0).max(3650) }),
+      taskTypes: z.array(z.string().min(1).max(60)).min(1),
+    }),
+    defaults: { outcomes: DEFAULT_OUTCOMES, attempts: DEFAULT_ATTEMPT_RULES, reasons: DEFAULT_REASONS, opportunities: DEFAULT_OPPORTUNITY_RULES, taskTypes: DEFAULT_TASK_TYPES },
   },
 } as const;
 
