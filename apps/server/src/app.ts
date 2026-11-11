@@ -22,6 +22,13 @@ export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean
     app.log.error(err);
     return reply.code(500).send({ error: "Ocorreu um erro. Tente novamente." });
   });
+  // Pedidos sem conteúdo com «application/json» (ex.: «Sair») são aceites como objeto vazio, em vez de erro.
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    const text = String(body ?? "").trim();
+    if (!text) return done(null, {});
+    try { done(null, JSON.parse(text)); } catch { const e = new Error("JSON inválido") as Error & { statusCode: number }; e.statusCode = 400; done(e, undefined); }
+  });
   // A aplicação usa token (não cookies); o servidor aceita pedidos da aplicação de computador.
   app.register(cors, { origin: true, methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] });
   app.register(healthRoutes, { db: deps.db });

@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ROLE_LABEL, type Role, type TeamMember, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader } from "../ui";
+import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th } from "../ui";
+import { mmss, STATE_LABEL } from "./WorkState";
+import type { DaySummary } from "../api";
 
 export function Team({ me }: { me: User }) {
   const isAdmin = me.role === "admin";
@@ -67,6 +69,7 @@ export function Team({ me }: { me: User }) {
         </table>
       </section>
       <p style={{ margin: 0, fontSize: 12, color: c.muted }}>Desativar não apaga o histórico; termina as sessões abertas. Cada alteração fica na auditoria.</p>
+      {isAdmin && <Ponto />}
     </>
   );
 }
@@ -96,5 +99,40 @@ function NewUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (wh
         <button style={btnDark}>Criar utilizador</button>
       </div>
     </form>
+  );
+}
+
+/** Ponto · hoje (maqueta «Equipa»): o Administrador vê os tempos individuais de toda a estrutura. */
+function Ponto() {
+  const [rows, setRows] = useState<(DaySummary & { id: string; name: string })[] | null>(null);
+  const [error, setError] = useState("");
+  const load = () => api.teamTime().then(setRows).catch((e) => setError(e.message));
+  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, []);
+  const hm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) : "—");
+  const red = (on: boolean) => (on ? { color: "#D70015", fontWeight: 700 } : {});
+  return (
+    <section style={{ ...card, overflow: "hidden" }}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${c.line}` }}>
+        <b style={{ fontSize: 16 }}>Ponto · hoje</b>
+        <p style={{ margin: "2px 0 0", fontSize: 13, color: c.muted }}>Horas de login = registo de ponto. Limites: intervalo, formação por iniciativa própria e mudança de campanha (Configurações → Limites de tempo). Validação jurídica pendente.</p>
+      </div>
+      <ErrorText>{error}</ErrorText>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída", "A trabalhar", "Formação (própria)", "Intervalo", "Mudança", "Total", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <tbody>{rows?.map((r) => (
+          <tr key={r.id}>
+            <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
+            <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
+            <td style={td}>{hm(r.entrada)}</td><td style={td}>{hm(r.saida)}</td>
+            <td style={td}>{mmss(r.seconds.working)}</td>
+            <td style={{ ...td, ...red(r.over.training) }}>{mmss(r.seconds.training)} ({mmss(r.used.ownTraining)})</td>
+            <td style={{ ...td, ...red(r.over.break) }}>{mmss(r.seconds.break)}</td>
+            <td style={{ ...td, ...red(r.over.switch) }}>{mmss(r.seconds.switch)}</td>
+            <td style={{ ...td, fontWeight: 700 }}>{mmss(r.total)}</td>
+            <td style={{ ...td, textAlign: "right" }}>{r.state && r.state !== "training" && <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("training", r.id).then(load).catch((e) => setError(e.message))}>Pôr em formação</button>}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </section>
   );
 }

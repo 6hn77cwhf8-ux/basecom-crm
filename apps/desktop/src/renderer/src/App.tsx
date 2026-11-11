@@ -29,6 +29,13 @@ export function App() {
   }, []);
 
   const logout = () => api.logout().then(() => setUser(null));
+  // Sinal de vida a cada minuto: regista a entrada e mantém o ponto certo; se a aplicação fechar, o período termina no último sinal.
+  useEffect(() => {
+    if (!user || user.mustChangePassword) return;
+    api.heartbeat().catch(() => undefined);
+    const t = setInterval(() => api.heartbeat().catch(() => undefined), 60_000);
+    return () => clearInterval(t);
+  }, [user?.id, user?.mustChangePassword]);
   if (checking) return null;
   if (!user) return <Login onDone={(u) => { setUser(u); setPage("empresas"); }} />;
   if (user.mustChangePassword) return <ChangePassword onLogout={logout} onDone={() => setUser({ ...user, mustChangePassword: false })} />;

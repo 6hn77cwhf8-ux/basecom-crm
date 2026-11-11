@@ -29,3 +29,11 @@ describe("GET /", () => {
     expect(res.body).toContain("Servidor ativo");
   });
 });
+
+describe("pedidos sem conteúdo", () => {
+  it("POST com application/json e corpo vazio não dá erro 500 (ex.: «Sair»)", async () => {
+    const db = { execute: async () => ({ rows: [] }) } as unknown as Db;
+    const res = await buildApp({ db, encryptionKey: KEY }).inject({ method: "POST", url: "/auth/logout", headers: { "content-type": "application/json" } });
+    expect(res.statusCode).toBe(401); // sem sessão, mas não 500
+  });
+});

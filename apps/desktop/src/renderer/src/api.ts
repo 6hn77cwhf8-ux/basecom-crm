@@ -42,6 +42,13 @@ export type DialerEntry = {
 };
 export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string } };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
+export type WorkState = "working" | "training" | "break" | "switch";
+export type DaySummary = {
+  day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;
+  seconds: Record<WorkState, number>; limits: { breakSeconds: number; trainingSeconds: number; switchSeconds: number };
+  used: { break: number; ownTraining: number; switch: number }; over: { break: boolean; training: boolean; switch: boolean };
+  periods: { state: WorkState; from: string; to: string | null; byOther: boolean }[];
+};
 export type ScheduledChange = { id: string; companyId: string; company: string; nif: string; kind: string; effectiveFrom: string; reason: string | null; toOwnerId: string | null; toOwner: string | null; createdAt: string };
 export type SearchHit = { id: string; nif: string; name: string; municipality: string | null; owner: string | null; accountType: string };
 export type SheetAction = "import" | "review" | "skip";
@@ -90,7 +97,7 @@ export const api = {
   },
   me: () => call<{ user: User }>("/auth/me").then((r) => r.user),
   logout: async () => {
-    await call("/auth/logout", { method: "POST" }).catch(() => undefined);
+    await call("/auth/logout", { method: "POST", body: "{}" }).catch(() => undefined);
     token = null;
     sessionStorage.removeItem("basecom_token");
   },
@@ -133,6 +140,11 @@ export const api = {
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
   tasks: () => call<{ tasks: Task[] }>("/tasks").then((r) => r.tasks),
   doneTask: (id: string) => call(`/tasks/${id}/done`, { method: "POST", body: "{}" }),
+
+  heartbeat: () => call<{ state: WorkState }>("/time/heartbeat", { method: "POST", body: "{}" }),
+  setWorkState: (state: WorkState, userId?: string) => call<DaySummary>("/time/state", { method: "POST", body: JSON.stringify({ state, userId }) }),
+  today: (userId?: string) => call<DaySummary>(`/time/today${userId ? `?userId=${userId}` : ""}`),
+  teamTime: () => call<{ people: (DaySummary & { id: string; name: string; role: Role })[] }>("/time/team").then((r) => r.people),
 
   imports: () => call<{ batches: Batch[] }>("/imports").then((r) => r.batches),
   uploadBase: (file: File) => file.arrayBuffer().then((buf) => call<Upload>("/imports/base", { method: "POST", body: buf, headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } })),

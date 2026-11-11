@@ -3,6 +3,7 @@ import { formatPhone } from "@basecom/shared";
 import { api, type Campaign, type Catalogs, type DialerEntry, type ResultInput, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
+import { WorkStates } from "./WorkState";
 
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "countdown" | "empty";
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -23,6 +24,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [group, setGroup] = useState<Group>("noanswer");
   const [count, setCount] = useState(0);
   const [lastSummary, setLastSummary] = useState("");
+  const [working, setWorking] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
@@ -67,7 +69,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   // Encadeamento: 10 s depois de guardar, a empresa seguinte é marcada automaticamente.
   const wait = cat?.timeLimits.nextCallSeconds ?? 10;
   const left = phase === "countdown" ? Math.max(0, wait - Math.floor((Date.now() - endedAt) / 1000)) : 0;
-  useEffect(() => { if (phase === "countdown" && left === 0) load(true); }, [phase, left, load]);
+  useEffect(() => { if (phase === "countdown" && left === 0 && working) load(true); }, [phase, left, load, working]);
 
   // Teclas 1 a 6: abrem o resultado durante a chamada.
   useEffect(() => {
@@ -88,14 +90,14 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%", minHeight: 0 }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Novos clientes</h1>
-        <select aria-label="Campanha" value={campaignId} onChange={(e) => { if (cur && phase === "ready") api.dialerRelease(cur.entry.id).catch(() => undefined); setCampaignId(e.target.value); }}
+        <select aria-label="Campanha" value={campaignId} onChange={(e) => { if (cur && phase === "ready") api.dialerRelease(cur.entry.id).catch(() => undefined); if (campaignId) api.setWorkState("switch").catch(() => undefined); setCampaignId(e.target.value); }}
           disabled={phase === "calling" || phase === "result"} style={{ height: 36, borderRadius: 10, border: `1px solid ${c.line}`, padding: "0 10px", fontSize: 14, fontWeight: 600, background: c.card }}>
           <option value="">Escolha a campanha…</option>
           {list.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
         </select>
         {campaign && <span style={{ fontSize: 13, color: c.muted }}>Power Dialer · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}
         <span style={{ flex: 1 }} />
-        <Chip tone="ok">A trabalhar</Chip>
+        <WorkStates disabled={phase === "calling" || phase === "result"} onChange={(d) => setWorking(d.state === "working" || d.state === "switch")} />
       </header>
       <ErrorText>{error}</ErrorText>
 
@@ -146,7 +148,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
             <section style={{ ...card, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Telefone · ligação manual até à app Android</span>
               {phase !== "calling"
-                ? <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading"} onClick={() => start()}>Iniciar chamada</button>
+                ? <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button>
                 : <button style={{ ...btnDark, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>}
               <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»).</span>
             </section>
@@ -163,9 +165,11 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       {phase === "countdown" && (
         <section style={{ ...card, padding: 32, textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
           <span style={{ fontSize: 14, color: c.muted }}>Resultado guardado: {lastSummary}</span>
-          <span style={{ fontSize: 40, fontWeight: 800 }}>{left}</span>
-          <span style={{ fontSize: 14 }}>Próxima empresa em {left} s</span>
-          <button style={btnDark} onClick={() => load(true)}>Ligar já</button>
+          {working ? <>
+            <span style={{ fontSize: 40, fontWeight: 800 }}>{left}</span>
+            <span style={{ fontSize: 14 }}>Próxima empresa em {left} s</span>
+            <button style={btnDark} onClick={() => load(true)}>Ligar já</button>
+          </> : <span style={{ fontSize: 16, fontWeight: 600 }}>Em pausa: carregue em «A trabalhar» para continuar.</span>}
         </section>
       )}
 
