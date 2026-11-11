@@ -1,6 +1,6 @@
 # BASECOM CRM — regras do projeto
 
-CRM interno da BASECOM (parceiro NOS Empresas). Dono do produto: Leonardo Rocha (Administrador).
+CRM interno da BASECOM (parceiro NOS Empresas). Empresa fiscal: INCOGNIT TRUTH UNIPESSOAL LDA (BASECOM é o nome comercial); as contas Scaleway e OVHcloud faturam em nome dela. Dono do produto: Leonardo Rocha (Administrador).
 Desenvolvimento feito pelo Leonardo e pelo Claude, em sessões de trabalho.
 
 ## Como trabalhar neste repositório
@@ -36,7 +36,7 @@ Em caso de dúvida, os documentos mandam sobre este resumo.
 
 ## Arquitetura
 
-- `apps/server` — servidor Node.js/TypeScript (monólito modular), PostgreSQL, em Docker. Produção: Scaleway (servidor DEV1-M + PostgreSQL gerido DB-DEV-S); cópias externas de hora a hora na OVHcloud.
+- `apps/server` — servidor Node.js/TypeScript (monólito modular), PostgreSQL, em Docker. Produção: Scaleway em Amesterdão (servidor DEV1-M + PostgreSQL gerido DB-DEV-S, rede privada); cópias externas de hora a hora na OVHcloud (Object Storage, Gravelines). Ver `deploy/README.md`.
 - `apps/desktop` — aplicação de computador Electron + React (Windows 10/11 e MacBook Pro 2019 Intel).
 - `apps/android` — app BASECOM para Android (fase 4): recebe o número do CRM, liga, devolve início/fim/chamadas recebidas. Telemóveis: 2× TCL 505 5G, 1× OPPO CPH2695.
 - `packages/shared` — tipos e regras de negócio puras (pontos, ciclos, comissões), testadas.
