@@ -47,6 +47,9 @@ describe("outros campos", () => {
   it("compara nomes sem «Lda», «Limitada» nem acentos", () => {
     expect(normalizeCompanyName("Color - Sociedade Comercial de Vernizes, Lda.")).toBe(normalizeCompanyName("COLOR SOCIEDADE COMERCIAL DE VERNIZES LIMITADA"));
     expect(normalizeCompanyName("Clínica Corpusmed, Lda")).toBe("clinica corpusmed");
+    expect(normalizeCompanyName("Alfa, Unipessoal, Lda")).toBe("alfa");
+    expect(normalizeCompanyName("Beta, S.A.")).toBe("beta");
+    expect(normalizeCompanyName("Ricardo Sá Pereira, Unipessoal, Lda")).not.toBe(normalizeCompanyName("Ricardo Pereira, Unipessoal, Lda"));
   });
   it("separa o histórico por «||»", () => {
     expect(splitHistory("LIGAR 06/05 || SEM CONTATO || NAO ATENDE")).toEqual(["LIGAR 06/05", "SEM CONTATO", "NAO ATENDE"]);

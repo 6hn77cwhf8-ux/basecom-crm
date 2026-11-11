@@ -41,17 +41,21 @@ export function formatPhone(national: string): string {
   return national.length === 9 ? `${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6)}` : national;
 }
 
-const LEGAL_WORDS = new Set(["lda", "limitada", "unipessoal", "sa", "sociedade", "soc", "s", "a", "lda.", "sgps", "crl", "e"]);
+const LEGAL_SUFFIX = new Set(["lda", "limitada", "unipessoal", "sa", "s", "a", "sgps", "crl"]);
 
-/** Nome limpo só para comparar duplicados: «Lda», «Lda.», «Limitada» e acentos não contam. */
+/**
+ * Nome limpo só para comparar duplicados: «Lda», «Lda.», «Limitada», «Unipessoal», «S.A.» no fim
+ * e acentos não contam. Só se tiram as terminações legais do fim: «Ricardo Sá Pereira» ≠ «Ricardo Pereira».
+ */
 export function normalizeCompanyName(name: string | null | undefined): string {
-  return String(name ?? "")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+  const words = String(name ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .split(" ")
-    .filter((w) => w && !LEGAL_WORDS.has(w))
-    .join(" ");
+    .filter(Boolean);
+  while (words.length > 1 && LEGAL_SUFFIX.has(words[words.length - 1]!)) words.pop();
+  return words.join(" ");
 }
 
 export type OperatorConfig = { list: string[]; aliases: Record<string, string> };
