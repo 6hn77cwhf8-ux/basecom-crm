@@ -10,6 +10,7 @@ import { setupRoutes } from "./routes/setup.js";
 import { importRoutes } from "./routes/imports.js";
 import { companyRoutes } from "./routes/companies.js";
 import { campaignRoutes } from "./routes/campaigns.js";
+import { dialerRoutes } from "./routes/dialer.js";
 
 export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean }) {
   const app = Fastify({ logger: deps.logger ?? false });
@@ -29,5 +30,6 @@ export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean
   app.register(importRoutes, { db: deps.db, encryptionKey: deps.encryptionKey });
   app.register(companyRoutes, { db: deps.db });
   app.register(campaignRoutes, { db: deps.db });
+  app.register(dialerRoutes, { db: deps.db });
   return app;
 }

@@ -252,3 +252,58 @@ export const campaignEntries = pgTable("campaign_entries", {
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("campaign_entries_queue_idx").on(t.campaignId, t.status, t.nextAt), index("campaign_entries_company_idx").on(t.companyId)]);
+
+/** Chamadas: início e fim, resultado, motivo, comentários e feedback de outra operadora. */
+export const calls = pgTable("calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+  entryId: uuid("entry_id").references(() => campaignEntries.id, { onDelete: "set null" }),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  contactId: uuid("contact_id").references(() => companyContacts.id, { onDelete: "set null" }),
+  phone: text("phone"),
+  /** new | current | wallet | ficha | agenda — de onde foi feita a chamada. */
+  source: text("source").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  outcomeId: text("outcome_id"),
+  effect: text("effect"),
+  reasonId: text("reason_id"),
+  comment: text("comment"),
+  details: jsonb("details"),
+  savedAt: timestamp("saved_at", { withTimezone: true }),
+  /** Segundos entre o fim da chamada e o registo do resultado (limite: 15 s, configurável). */
+  resultSeconds: integer("result_seconds"),
+}, (t) => [index("calls_company_idx").on(t.companyId), index("calls_user_idx").on(t.userId, t.startedAt), index("calls_entry_idx").on(t.entryId)]);
+
+/** Oportunidades (catálogo 3): Interesse → Levantamento → Proposta → Negociação → Documentos → Ganha/Perdida. */
+export const opportunities = pgTable("opportunities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").notNull().references(() => users.id),
+  /** interest | survey | proposal | negotiation | documents | won | lost */
+  stage: text("stage").notNull(),
+  services: text("services"),
+  lostReasonId: text("lost_reason_id"),
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+}, (t) => [index("opportunities_company_idx").on(t.companyId), index("opportunities_owner_idx").on(t.ownerId, t.stage)]);
+
+/** Tarefas (catálogo 7): criadas à mão ou automaticamente por chamadas, motivos e oportunidades. */
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  assignedTo: uuid("assigned_to").notNull().references(() => users.id),
+  dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  /** open | done | cancelled */
+  status: text("status").notNull().default("open"),
+  description: text("description"),
+  origin: text("origin").notNull(),
+  callId: uuid("call_id").references(() => calls.id, { onDelete: "set null" }),
+  opportunityId: uuid("opportunity_id").references(() => opportunities.id, { onDelete: "set null" }),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  doneAt: timestamp("done_at", { withTimezone: true }),
+}, (t) => [index("tasks_user_idx").on(t.assignedTo, t.status, t.dueAt), index("tasks_company_idx").on(t.companyId)]);
