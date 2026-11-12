@@ -146,7 +146,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
         </select>
         {campaign && <span style={{ fontSize: 13, color: c.muted }}>{campaign.dialMode === "preview" ? "Preview" : "Power Dialer"} · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}
         <span style={{ flex: 1 }} />
-        <WorkStates disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => setWorking(d.state === "working" || d.state === "switch")} />
+        <WorkStates disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => setWorking(d.state !== "break" && d.state !== "training")} />
       </header>
       <ErrorText>{error}</ErrorText>
 

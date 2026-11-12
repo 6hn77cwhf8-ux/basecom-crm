@@ -13,7 +13,8 @@ export function WorkStates({ onChange, disabled }: { onChange?: (s: DaySummary) 
   const [d, setD] = useState<DaySummary | null>(null);
   const [at, setAt] = useState(Date.now());
   const load = () => api.today().then((x) => { setD(x); setAt(Date.now()); onChange?.(x); }).catch(() => undefined);
-  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, []);
+  // Volta a ler logo a seguir ao primeiro sinal de presença (ao entrar, o estado ainda pode não existir).
+  useEffect(() => { load(); const first = setTimeout(load, 2500); const t = setInterval(load, 60_000); return () => { clearTimeout(first); clearInterval(t); }; }, []);
   const [, tick] = useState(0);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
   if (!d) return null;
