@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { verifyStepUp } from "../auth/service.js";
+import { deleteCompanies } from "../companies/wallet.js";
 import { commitBase, discardBatch, listBatchRows, listBatches, previewBase, revertBatch, uploadBase } from "../imports/base.js";
 
 const MAX_FILE = 40 * 1024 * 1024;
@@ -49,4 +50,10 @@ export async function importRoutes(app: FastifyInstance, opts: { db: Db; encrypt
   });
 
   app.post("/imports/:id/discard", admin, async (req) => { await discardBatch(db, req.user!.id, id.parse(req.params).id); return { ok: true }; });
+  // Apagar empresas (uma ou em massa): Administrador, justificação e código 2FA.
+  app.post("/companies/delete", admin, async (req) => {
+    const b = z.object({ ids: z.array(z.string().uuid()).min(1).max(30000), reason: z.string().max(500), code: z.string().min(6).max(8) }).parse(req.body);
+    await verifyStepUp(db, encryptionKey, req.user!.id, b.code, "apagar_empresas");
+    return deleteCompanies(db, req.user!, b.ids, b.reason);
+  });
 }

@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
 import { auditLog, companies, companyContacts, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
-import { addContact, applyDueWalletChanges, identifyWalletKind, auditForeignView, cancelScheduled, cycleStart, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind } from "./wallet.js";
+import { deleteCompanies, addContact, applyDueWalletChanges, identifyWalletKind, auditForeignView, cancelScheduled, cycleStart, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind } from "./wallet.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -95,5 +95,16 @@ describe.skipIf(!url)("carteiras", () => {
     await identifyWalletKind(db, toPublic(ana), co, "FC");
     expect(await db.query.companies.findFirst({ where: eq(companies.id, co) })).toMatchObject({ walletKind: "FC", walletKindConfirmed: true });
     await expect(identifyWalletKind(db, toPublic(bia), co, "NC")).rejects.toThrow(/já tem/);
+  });
+
+  it("apagar empresas: só o Administrador, com justificação; fica na auditoria", async () => {
+    const [x] = await db.insert(companies).values({ nif: `8${tag}99`, name: `Apagar ${tag}`, nameKey: `apagar ${tag}`, accountType: "prospect" }).returning();
+    await db.insert(companyContacts).values({ companyId: x!.id, kind: "phone", value: `93${tag}9` });
+    await expect(deleteCompanies(db, toPublic(ana), [x!.id], "lead duplicada")).rejects.toThrow(/Só o Administrador/);
+    await expect(deleteCompanies(db, toPublic(admin), [x!.id], "")).rejects.toThrow(/justificação/);
+    expect(await deleteCompanies(db, toPublic(admin), [x!.id], "Lead duplicada na base")).toEqual({ deleted: 1 });
+    expect(await db.query.companies.findFirst({ where: eq(companies.id, x!.id) })).toBeUndefined();
+    const a = await db.select().from(auditLog).where(and(eq(auditLog.userId, admin.id), eq(auditLog.action, "empresas_apagadas")));
+    expect(a[0]!.details).toContain(`8${tag}99`);
   });
 });

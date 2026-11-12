@@ -34,8 +34,8 @@ export function WorkStates({ onChange, disabled }: { onChange?: (s: DaySummary) 
   return (
     <div role="group" aria-label="Estado" style={{ display: "flex", gap: 6, alignItems: "center" }}>
       {chip("working", "A trabalhar")}
-      {chip("training", `Formação · ${mmss(trainLeft)}`, trainLeft < 0)}
-      {chip("break", `Intervalo · ${mmss(breakLeft)}`, breakLeft < 0)}
+      {chip("training", trainLeft < 0 ? `Formação · +${mmss(-trainLeft)} a mais` : `Formação · ${mmss(trainLeft)}`, trainLeft < 0)}
+      {chip("break", breakLeft < 0 ? `Intervalo · +${mmss(-breakLeft)} a mais` : `Intervalo · ${mmss(breakLeft)}`, breakLeft < 0)}
     </div>
   );
 }

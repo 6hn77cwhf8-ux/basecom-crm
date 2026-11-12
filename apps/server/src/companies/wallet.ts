@@ -193,3 +193,21 @@ export async function auditForeignView(db: Db, by: PublicUser, companyId: string
   if (by.role === "admin" || !ownerId || ownerId === by.id) return;
   await db.insert(auditLog).values({ userId: by.id, action: "consulta_outra_carteira", entity: "company", entityId: companyId });
 }
+
+/**
+ * Apagar empresas (leads): só o Administrador, com justificação e código 2FA (pedido no Teste 2).
+ * Apaga também contactos, histórico, chamadas, tarefas e oportunidades dessas empresas. Fica na auditoria com NIF e nome.
+ * Uma importação futura com o mesmo NIF volta a criar a empresa como nova.
+ */
+export async function deleteCompanies(db: Db, by: PublicUser, ids: string[], reason: string) {
+  if (by.role !== "admin") throw new AuthError(403, "Só o Administrador apaga empresas.");
+  if (reason.trim().length < 5) throw new AuthError(400, "Escreva a justificação.");
+  const rows = await db.select({ id: companies.id, nif: companies.nif, name: companies.name }).from(companies).where(inArray(companies.id, ids));
+  if (!rows.length) throw new AuthError(404, "Nenhuma empresa encontrada.");
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < rows.length; i += 1000) await tx.delete(companies).where(inArray(companies.id, rows.slice(i, i + 1000).map((r) => r.id)));
+    const list = rows.slice(0, 200).map((r) => `${r.nif} ${r.name}`).join("; ");
+    await tx.insert(auditLog).values({ userId: by.id, action: "empresas_apagadas", entity: "company", details: `${rows.length} empresa(s). Justificação: ${reason.trim()}. ${list}${rows.length > 200 ? " …" : ""}` });
+  });
+  return { deleted: rows.length };
+}

@@ -22,7 +22,7 @@ const PHASE: Partial<Record<PageId, string>> = {
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(api.hasToken());
-  const [page, setPage] = useState<PageId>("empresas");
+  const [page, setPage] = useState<PageId>("novos");
   const [importing, setImporting] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ export function App() {
     return () => clearInterval(t);
   }, [user?.id, user?.mustChangePassword]);
   if (checking) return null;
-  if (!user) return <Login onDone={(u) => { setUser(u); setPage("empresas"); }} />;
+  if (!user) return <Login onDone={(u) => { setUser(u); setPage("novos"); }} />;
   if (user.mustChangePassword) return <ChangePassword onLogout={logout} onDone={() => setUser({ ...user, mustChangePassword: false })} />;
 
   const label = NAV.find((n) => n.id === page)?.label ?? "";

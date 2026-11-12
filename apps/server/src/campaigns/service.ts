@@ -28,20 +28,22 @@ export const filtersSchema = z.object({
   loyaltyEndTo: z.string().date().optional(),
   /** Só empresas sem carteira (ignora as carteiras dos comerciais da campanha). */
   onlyWithoutOwner: z.boolean().optional(),
+  /** Valor L2B (mensalidade NOS): intervalos escolhidos (ex.: 0–50, 50–100) e/ou mínimo e máximo. */
+  l2bRanges: z.array(z.tuple([z.number().min(0), z.number().min(0).nullable()])).max(20).optional(),
+  l2bMin: z.number().min(0).optional(),
+  l2bMax: z.number().min(0).optional(),
+  /** Meses para o fim da permanência: até 9, até 21, mais de 21. */
+  loyaltyMonths: z.array(z.enum(["le9", "le21", "gt21"])).max(3).optional(),
+  /** Trazer para esta campanha empresas por trabalhar noutras campanhas (exceto as reservadas a um comercial). */
+  takeFromOtherCampaigns: z.boolean().optional(),
 });
 export type CampaignFilters = z.infer<typeof filtersSchema>;
 
 const inList = (col: SQL, v?: string[]) => (v && v.length ? sql`${col} in (${sql.join(v.map((x) => sql`${x}`), sql`, `)})` : undefined);
 
-/** Condição SQL das empresas elegíveis para uma campanha (alias «c»). */
-function eligible(f: CampaignFilters, memberIds: string[], excludeCampaignId?: string) {
+/** Filtros escolhidos pelo Administrador (alias «c»). */
+function filterCond(f: CampaignFilters) {
   const parts: (SQL | undefined)[] = [
-    sql`not c.do_not_contact`, sql`not c.inactive`,
-    sql`(c.campaign_eligible_from is null or c.campaign_eligible_from <= current_date)`,
-    sql`exists (select 1 from company_contacts cc where cc.company_id = c.id and cc.kind = 'phone' and cc.status = 'valid')`,
-    f.onlyWithoutOwner || !memberIds.length ? sql`c.owner_id is null`
-      : sql`(c.owner_id is null or c.owner_id in (${sql.join(memberIds.map((m) => sql`${m}::uuid`), sql`, `)}))`,
-    sql`not exists (select 1 from campaign_entries e join campaigns k on k.id = e.campaign_id where e.company_id = c.id and e.status = 'pending' and k.status <> 'ended'${excludeCampaignId ? sql` and k.id <> ${excludeCampaignId}::uuid` : sql``})`,
     f.accountType ? sql`c.account_type = ${f.accountType}` : undefined,
     inList(sql`c.district`, f.districts), inList(sql`c.municipality`, f.municipalities), inList(sql`c.sector`, f.sectors),
     inList(sql`c.operator`, f.operators), inList(sql`c.size`, f.sizes), inList(sql`c.product`, f.products),
@@ -49,20 +51,59 @@ function eligible(f: CampaignFilters, memberIds: string[], excludeCampaignId?: s
     inList(sql`trim(split_part(c.nbo_campaign, ' — ', 1))`, f.nboCampaigns),
     f.loyaltyEndFrom ? sql`c.loyalty_end >= ${f.loyaltyEndFrom}` : undefined,
     f.loyaltyEndTo ? sql`c.loyalty_end <= ${f.loyaltyEndTo}` : undefined,
+    f.l2bRanges?.length ? sql`(${sql.join(f.l2bRanges.map(([a, b]) => (b == null ? sql`c.l2b_monthly >= ${a}` : sql`(c.l2b_monthly >= ${a} and c.l2b_monthly < ${b})`)), sql` or `)})` : undefined,
+    f.l2bMin != null ? sql`c.l2b_monthly >= ${f.l2bMin}` : undefined,
+    f.l2bMax != null ? sql`c.l2b_monthly <= ${f.l2bMax}` : undefined,
+    f.loyaltyMonths?.length ? sql`(${sql.join(f.loyaltyMonths.map((m) => (m === "le9" ? sql`c.loyalty_months <= 9` : m === "le21" ? sql`c.loyalty_months <= 21` : sql`c.loyalty_months > 21`)), sql` or `)})` : undefined,
   ];
-  return sql.join(parts.filter(Boolean) as SQL[], sql` and `);
+  const ok = parts.filter(Boolean) as SQL[];
+  return ok.length ? sql.join(ok, sql` and `) : sql`true`;
+}
+
+/** Regras fixas (porque uma empresa pode ficar de fora), cada uma com o seu nome para explicar contagens a zero. */
+function ruleConds(f: CampaignFilters, memberIds: string[], excludeCampaignId?: string) {
+  const other = sql`exists (select 1 from campaign_entries e join campaigns k on k.id = e.campaign_id where e.company_id = c.id and e.status = 'pending' and k.status <> 'ended'${excludeCampaignId ? sql` and k.id <> ${excludeCampaignId}::uuid` : sql``}${f.takeFromOtherCampaigns ? sql` and (e.assigned_to is not null or e.locked_until > now())` : sql``})`;
+  return {
+    blocked: sql`(c.do_not_contact or c.inactive)`,
+    cooldown: sql`(c.campaign_eligible_from is not null and c.campaign_eligible_from > current_date)`,
+    noPhone: sql`not exists (select 1 from company_contacts cc where cc.company_id = c.id and cc.kind = 'phone' and cc.status = 'valid')`,
+    otherWallet: f.onlyWithoutOwner || !memberIds.length ? sql`c.owner_id is not null`
+      : sql`(c.owner_id is not null and c.owner_id not in (${sql.join(memberIds.map((m) => sql`${m}::uuid`), sql`, `)}))`,
+    otherCampaign: other,
+  };
+}
+
+/** Condição SQL das empresas elegíveis para uma campanha (alias «c»). */
+function eligible(f: CampaignFilters, memberIds: string[], excludeCampaignId?: string) {
+  const r = ruleConds(f, memberIds, excludeCampaignId);
+  return sql`${filterCond(f)} and not ${r.blocked} and not ${r.cooldown} and not ${r.noPhone} and not ${r.otherWallet} and not ${r.otherCampaign}`;
 }
 
 export async function previewCampaign(db: Db, f: CampaignFilters, memberIds: string[]) {
-  const r = await db.execute(sql`select count(*)::int as total,
-      count(*) filter (where c.account_type = 'client')::int as clients,
-      count(*) filter (where c.owner_id is not null)::int as in_wallet
-    from companies c where ${eligible(f, memberIds)}`);
-  return r.rows[0] as { total: number; clients: number; in_wallet: number };
+  const r0 = ruleConds(f, memberIds);
+  // Explica as que ficam de fora (cada empresa conta só no primeiro motivo, pela ordem abaixo).
+  const r = await db.execute(sql`select count(*)::int as matching,
+      count(*) filter (where ${eligible(f, memberIds)})::int as total,
+      count(*) filter (where ${eligible(f, memberIds)} and c.account_type = 'client')::int as clients,
+      count(*) filter (where ${eligible(f, memberIds)} and c.owner_id is not null)::int as in_wallet,
+      count(*) filter (where ${r0.blocked})::int as blocked,
+      count(*) filter (where not ${r0.blocked} and ${r0.cooldown})::int as cooldown,
+      count(*) filter (where not ${r0.blocked} and not ${r0.cooldown} and ${r0.noPhone})::int as no_phone,
+      count(*) filter (where not ${r0.blocked} and not ${r0.cooldown} and not ${r0.noPhone} and ${r0.otherWallet})::int as other_wallet,
+      count(*) filter (where not ${r0.blocked} and not ${r0.cooldown} and not ${r0.noPhone} and not ${r0.otherWallet} and ${r0.otherCampaign})::int as other_campaign
+    from companies c where ${filterCond(f)}`);
+  return r.rows[0] as { matching: number; total: number; clients: number; in_wallet: number; blocked: number; cooldown: number; no_phone: number; other_wallet: number; other_campaign: number };
 }
 
 /** Acrescenta à campanha as empresas elegíveis que ainda não estão nela. */
 async function fillEntries(db: Db, campaignId: string, f: CampaignFilters, memberIds: string[]) {
+  // Trazer de outras campanhas: as entradas por trabalhar (não reservadas a ninguém) saem das outras campanhas.
+  if (f.takeFromOtherCampaigns) {
+    await db.execute(sql`update campaign_entries e set status = 'removed' from campaigns k, companies c
+      where k.id = e.campaign_id and c.id = e.company_id and e.status = 'pending' and k.id <> ${campaignId}::uuid and k.status <> 'ended'
+        and e.assigned_to is null and (e.locked_until is null or e.locked_until < now())
+        and ${filterCond(f)} and not (c.do_not_contact or c.inactive)`);
+  }
   const r = await db.execute(sql`insert into campaign_entries (campaign_id, company_id, assigned_to)
     select ${campaignId}::uuid, c.id, c.owner_id from companies c
     where ${eligible(f, memberIds, campaignId)}
@@ -105,12 +146,12 @@ export async function updateCampaign(db: Db, by: PublicUser, id: string, patch: 
   });
 }
 
-export async function refreshCampaign(db: Db, by: PublicUser, id: string) {
+export async function refreshCampaign(db: Db, by: PublicUser, id: string, takeFromOtherCampaigns = false) {
   const c = await db.query.campaigns.findFirst({ where: eq(campaigns.id, id) });
   if (!c) throw new AuthError(404, "Campanha não encontrada.");
   if (c.status === "ended") throw new AuthError(409, "A campanha está terminada.");
   const members = (await db.select({ id: campaignMembers.userId }).from(campaignMembers).where(eq(campaignMembers.campaignId, id))).map((m) => m.id);
-  const added = await fillEntries(db, id, c.filters as CampaignFilters, members);
+  const added = await fillEntries(db, id, { ...(c.filters as CampaignFilters), ...(takeFromOtherCampaigns ? { takeFromOtherCampaigns: true } : {}) }, members);
   await db.insert(auditLog).values({ userId: by.id, action: "campanha_atualizada", entity: "campaign", entityId: id, details: `${added} empresas acrescentadas` });
   return { added };
 }

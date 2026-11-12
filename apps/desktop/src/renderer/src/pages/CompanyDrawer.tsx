@@ -3,7 +3,7 @@ import { formatPhone } from "@basecom/shared";
 import { api, type CompanyDetail, type Contact, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
 import { StatusChips } from "./Companies";
-import { KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
+import { DeleteDialog, KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
 
 type Tab = "resumo" | "contactos" | "historico" | "oportunidades" | "vendas" | "tickets";
 const TABS: { id: Tab; label: string; later?: string }[] = [
@@ -45,7 +45,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   const [tab, setTab] = useState<Tab>("resumo");
   const [error, setError] = useState("");
 
-  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
   useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
   const after = () => { setDialog(null); load(); };
@@ -98,7 +98,9 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               {co.ownerId && (me.role === "admin" || co.ownerId === me.id) && <button style={small} onClick={() => setDialog("kind")}>Mudar para {co.walletKind === "NC" ? "FC" : "NC"}</button>}
               {!co.doNotContact && <button style={small} onClick={() => setDialog("dnc")}>Marcar «Não contactar»</button>}
               {co.doNotContact && me.role === "admin" && <button style={small} onClick={() => setDialog("undnc")}>Retirar «Não contactar»</button>}
+              {me.role === "admin" && <button style={{ ...small, color: "#A1000F" }} onClick={() => setDialog("delete")}>Apagar empresa</button>}
             </div>
+            {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
             {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
             {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"

@@ -91,6 +91,11 @@ export async function listCompanies(db: Db, f: CompanyFilters) {
   return { total, rows };
 }
 
+/** Todos os ids que cumprem os filtros (para selecionar em massa: transferir ou apagar). */
+export async function listCompanyIds(db: Db, f: CompanyFilters) {
+  return (await db.select({ id: companies.id }).from(companies).leftJoin(users, eq(users.id, companies.ownerId)).where(where(f)).limit(30000)).map((r) => r.id);
+}
+
 /** Números do topo do ecrã Empresas (sem filtros). */
 export async function companyKpis(db: Db) {
   const [k] = await db.select({
@@ -119,6 +124,11 @@ export async function filterOptions(db: Db) {
     municipalitiesByDistrict: Object.fromEntries((await db.execute(sql`select district, array_agg(distinct municipality order by municipality) as m from companies
       where district is not null and municipality is not null group by district`)).rows.map((r) => [r.district as string, r.m as string[]])),
     nboCampaigns: (await db.execute(sql`select ${NBO_HEAD} as v, count(*)::int as n from companies where nbo_campaign is not null group by 1 order by 1`)).rows as { v: string; n: number }[],
+    // Intervalos de valor L2B e de meses para o fim da permanência, com quantas empresas há em cada um.
+    l2bBuckets: (await db.execute(sql`select b, count(*)::int as n from (select case when l2b_monthly < 50 then 0 when l2b_monthly < 100 then 1 when l2b_monthly < 200 then 2
+        when l2b_monthly < 300 then 3 when l2b_monthly < 400 then 4 when l2b_monthly < 500 then 5 else 6 end as b from companies where l2b_monthly is not null) x group by b order by b`)).rows as { b: number; n: number }[],
+    loyaltyBuckets: (await db.execute(sql`select count(*) filter (where loyalty_months <= 9)::int as le9, count(*) filter (where loyalty_months <= 21)::int as le21,
+        count(*) filter (where loyalty_months > 21)::int as gt21 from companies`)).rows[0] as { le9: number; le21: number; gt21: number },
   };
 }
 

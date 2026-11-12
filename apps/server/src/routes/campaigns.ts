@@ -29,5 +29,5 @@ export async function campaignRoutes(app: FastifyInstance, opts: { db: Db }) {
     await updateCampaign(db, req.user!, id.parse(req.params).id, b);
     return { ok: true };
   });
-  app.post("/campaigns/:id/refresh", admin, async (req) => refreshCampaign(db, req.user!, id.parse(req.params).id));
+  app.post("/campaigns/:id/refresh", admin, async (req) => refreshCampaign(db, req.user!, id.parse(req.params).id, z.object({ take: z.boolean().optional() }).parse(req.body ?? {}).take ?? false));
 }

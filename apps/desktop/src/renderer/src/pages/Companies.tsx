@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CompanyFilters, type CompanyKpis, type CompanyRow, type FilterOptions, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtEur, fmtInt, input, Kpi, PageHeader, td, th } from "../ui";
-import { ScheduledDialog, TransferDialog } from "./Wallet";
+import { DeleteDialog, ScheduledDialog, TransferDialog } from "./Wallet";
 
 const PAGE = 50;
 
@@ -17,7 +17,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   const [error, setError] = useState("");
   const isAdmin = me.role === "admin";
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [dialog, setDialog] = useState<"transfer" | "scheduled" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "scheduled" | "delete" | null>(null);
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
 
@@ -53,11 +53,15 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
         <div style={{ ...card, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, borderColor: c.ink }}>
           <b style={{ fontSize: 14 }}>{fmtInt(picked.size)} empresa{picked.size === 1 ? "" : "s"} selecionada{picked.size === 1 ? "" : "s"}</b>
           <span style={{ flex: 1 }} />
+          {data && data.total > picked.size && <button style={btn} onClick={() => api.companyIds({ ...f, offset: undefined, limit: undefined }).then((ids) => setPicked(new Set(ids))).catch((e) => setError(e.message))}>Selecionar as {fmtInt(data.total)} deste filtro</button>}
           <button style={btn} onClick={() => setPicked(new Set())}>Limpar seleção</button>
+          <button style={{ ...btn, color: "#A1000F" }} onClick={() => setDialog("delete")}>Apagar</button>
           <button style={btnDark} onClick={() => setDialog("transfer")}>Transferir carteira</button>
         </div>
       )}
       {dialog === "transfer" && <TransferDialog companyIds={[...picked]} label={`${fmtInt(picked.size)} empresa(s) selecionada(s)`} onClose={() => setDialog(null)}
+        onDone={(msg) => { setDialog(null); setPicked(new Set()); setNotice(msg); setReload((x) => x + 1); api.companyKpis().then(setKpis).catch(() => undefined); }} />}
+      {dialog === "delete" && <DeleteDialog ids={[...picked]} label={`${fmtInt(picked.size)} empresa(s)`} onClose={() => setDialog(null)}
         onDone={(msg) => { setDialog(null); setPicked(new Set()); setNotice(msg); setReload((x) => x + 1); api.companyKpis().then(setKpis).catch(() => undefined); }} />}
       {dialog === "scheduled" && <ScheduledDialog onClose={() => setDialog(null)} onChange={() => setReload((x) => x + 1)} />}
 

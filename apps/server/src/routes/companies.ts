@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { companyKpis, filterOptions, getCompany, listCompanies, quickSearch, SORT_KEYS } from "../companies/service.js";
+import { companyKpis, listCompanyIds, filterOptions, getCompany, listCompanies, quickSearch, SORT_KEYS } from "../companies/service.js";
 import { addContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
 
 /** Empresas: todos os perfis consultam (a carteira só limita tarefas e campanhas). */
@@ -10,17 +10,16 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
   const any = { preHandler: requireAuth(db) };
 
-  app.get("/companies", any, async (req) => {
-    const f = z.object({
+  const filters = z.object({
       q: z.string().max(100).optional(), accountType: z.enum(["client", "prospect"]).optional(),
       owner: z.union([z.literal("none"), z.literal("any"), z.string().uuid()]).optional(), wallet: z.enum(["NC", "FC"]).optional(),
       status: z.enum(["dnc", "review", "nif", "mismatch", "unidentified"]).optional(), municipality: z.string().max(100).optional(),
       district: z.string().max(100).optional(), sector: z.string().max(100).optional(),
       sort: z.enum(SORT_KEYS).optional(), dir: z.enum(["asc", "desc"]).optional(),
       offset: z.coerce.number().int().min(0).optional(), limit: z.coerce.number().int().min(1).max(200).optional(),
-    }).parse(req.query);
-    return listCompanies(db, f);
-  });
+    });
+  app.get("/companies", any, async (req) => listCompanies(db, filters.parse(req.query)));
+  app.get("/companies/ids", { preHandler: requireAuth(db, ["admin"]) }, async (req) => ({ ids: await listCompanyIds(db, filters.parse(req.query)) }));
   app.get("/companies/kpis", any, async () => companyKpis(db));
   app.get("/companies/options", any, async () => filterOptions(db));
   app.get("/search", any, async (req) => ({ results: await quickSearch(db, z.object({ q: z.string().max(100) }).parse(req.query).q) }));

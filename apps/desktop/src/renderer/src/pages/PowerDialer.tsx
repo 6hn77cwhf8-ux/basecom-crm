@@ -64,7 +64,12 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       if (autoCall && n.phone) await start(n); else setPhase("ready");
     } catch (e) { setError((e as Error).message); setPhase("idle"); }
   }, [campaignId]);
-  useEffect(() => { if (isAdmin) { try { localStorage.setItem("bc_campaign", campaignId); } catch { /* sem armazenamento */ } } if (campaignId) load(false); }, [campaignId]);
+  useEffect(() => { if (isAdmin) { try { localStorage.setItem("bc_campaign", campaignId); } catch { /* sem armazenamento */ } } setCur(null); setPhase("idle"); if (campaignId) load(false); }, [campaignId]);
+  // Sem tempos mortos: nunca fica sem campanha. Entra na definida pelo Administrador; se não houver, na primeira disponível.
+  useEffect(() => {
+    if (!list.length) return;
+    if (!campaignId || !list.some((k) => k.id === campaignId)) setCampaignId(list[0]!.id);
+  }, [list, campaignId]);
 
   async function start(n = cur) {
     if (!n?.phone) return;
@@ -136,7 +141,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
         {/* Entra logo na campanha que o Administrador definiu; o comercial pode mudar para outra das suas (conta como «Mudança de campanha»). */}
         <select aria-label="Campanha" value={campaignId} onChange={(e) => { if (cur && phase === "ready") api.dialerRelease(cur.entry.id).catch(() => undefined); if (campaignId) api.setWorkState("switch").catch(() => undefined); setCampaignId(e.target.value); }}
           disabled={phase === "calling" || phase === "result"} style={{ height: 36, borderRadius: 10, border: `1px solid ${c.line}`, padding: "0 10px", fontSize: 14, fontWeight: 600, background: c.card }}>
-          {(isAdmin || !campaignId) && <option value="">Escolha a campanha…</option>}
+          {!campaignId && <option value="">A carregar…</option>}
           {list.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
         </select>
         {campaign && <span style={{ fontSize: 13, color: c.muted }}>{campaign.dialMode === "preview" ? "Preview" : "Power Dialer"} · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}

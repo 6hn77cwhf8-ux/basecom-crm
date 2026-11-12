@@ -403,27 +403,57 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
       from companies c where c.batch_id = ${batchId} and c.owner_id is not null`);
 
     // Atualizações: regras por campo do documento (nunca muda a carteira, nunca apaga contactos).
-    for (const r of rows.filter((x) => x.result === "update" && x.companyId)) {
-      const d = r.data as Staged;
-      const cur = await tx.query.companies.findFirst({ where: eq(companies.id, r.companyId!) });
-      if (!cur || cur.doNotContact) { counts.skipped++; continue; }
-      const before: Record<string, unknown> = { name: cur.name, nameKey: cur.nameKey, address: cur.address, postalCode: cur.postalCode, municipality: cur.municipality, locality: cur.locality, loyaltyEnd: cur.loyaltyEnd, l2bMonthly: cur.l2bMonthly, size: cur.size };
-      const extraSet: Record<string, unknown> = {};
-      if (d.extra) {
-        const cols = extraColumns(d.extra) as Record<string, unknown>;
-        for (const k of EXTRA_KEYS) if (cols[k] != null) { before[k] = (cur as Record<string, unknown>)[k]; extraSet[k] = cols[k]; }
+    // Em blocos de 500 (poucas consultas por bloco, em vez de várias por empresa): 28 mil empresas em cerca de um minuto.
+    const upd = rows.filter((x) => x.result === "update" && x.companyId);
+    for (let i = 0; i < upd.length; i += 500) {
+      const part = upd.slice(i, i + 500);
+      const ids = part.map((r) => r.companyId!);
+      const curById = new Map((await tx.select().from(companies).where(inArray(companies.id, ids))).map((c) => [c.id, c]));
+      const known = new Map<string, Set<string>>();
+      for (const x of await tx.select({ c: companyContacts.companyId, v: companyContacts.value }).from(companyContacts).where(inArray(companyContacts.companyId, ids))) {
+        if (!known.has(x.c)) known.set(x.c, new Set()); known.get(x.c)!.add(x.v);
       }
-      await tx.update(companies).set({
-        name: d.name, nameKey: d.nameKey, address: d.address ?? cur.address, postalCode: d.postalCode ?? cur.postalCode,
-        municipality: d.municipality ?? cur.municipality, locality: d.locality ?? cur.locality,
-        loyaltyEnd: d.loyaltyEnd ?? cur.loyaltyEnd, l2bMonthly: d.l2bMonthly == null ? cur.l2bMonthly : String(d.l2bMonthly),
-        size: d.size ?? cur.size, ...extraSet, updatedAt: new Date(),
-      }).where(eq(companies.id, cur.id));
-      const known = new Set((await tx.select({ v: companyContacts.value }).from(companyContacts).where(eq(companyContacts.companyId, cur.id))).map((x) => x.v));
-      const knownNotes = new Set((await tx.select({ t: companyNotes.text }).from(companyNotes).where(eq(companyNotes.companyId, cur.id))).map((x) => x.t));
-      await insertChildren(tx as unknown as Db, [{ id: cur.id, d, known, knownNotes }], batchId, userId);
-      await tx.update(importRows).set({ before }).where(eq(importRows.id, r.id));
-      counts.updated++;
+      const knownNotes = new Map<string, Set<string>>();
+      for (const x of await tx.select({ c: companyNotes.companyId, t: companyNotes.text }).from(companyNotes).where(inArray(companyNotes.companyId, ids))) {
+        if (!knownNotes.has(x.c)) knownNotes.set(x.c, new Set()); knownNotes.get(x.c)!.add(x.t);
+      }
+      const sets: Record<string, unknown>[] = [];
+      const befores: { id: string; before: Record<string, unknown> }[] = [];
+      const children: { id: string; d: Staged; known: Set<string>; knownNotes: Set<string> }[] = [];
+      for (const r of part) {
+        const d = r.data as Staged;
+        const cur = curById.get(r.companyId!);
+        if (!cur || cur.doNotContact) { counts.skipped++; continue; }
+        const before: Record<string, unknown> = { name: cur.name, nameKey: cur.nameKey, address: cur.address, postalCode: cur.postalCode, municipality: cur.municipality, locality: cur.locality, loyaltyEnd: cur.loyaltyEnd, l2bMonthly: cur.l2bMonthly, size: cur.size };
+        const cols = (d.extra ? extraColumns(d.extra) : {}) as Record<string, unknown>;
+        for (const k of EXTRA_KEYS) if (cols[k] != null) before[k] = (cur as Record<string, unknown>)[k];
+        sets.push({
+          id: cur.id, name: d.name, name_key: d.nameKey, address: d.address, postal_code: d.postalCode, municipality: d.municipality, locality: d.locality,
+          loyalty_end: d.loyaltyEnd, l2b_monthly: d.l2bMonthly == null ? null : String(d.l2bMonthly), size: d.size,
+          district: cols.district ?? null, sector: cols.sector ?? null, annual_revenue: cols.annualRevenue ?? null, locations_potential: cols.locationsPotential ?? null,
+          rgu: cols.rgu ?? null, product: cols.product ?? null, technology: cols.technology ?? null, loyalty_months: cols.loyaltyMonths ?? null,
+          portal_status: cols.portalStatus ?? null, nos_exit_month: cols.nosExitMonth ?? null, nbo_campaign: cols.nboCampaign ?? null,
+        });
+        befores.push({ id: r.id, before });
+        children.push({ id: cur.id, d, known: known.get(cur.id) ?? new Set(), knownNotes: knownNotes.get(cur.id) ?? new Set() });
+        counts.updated++;
+      }
+      if (!sets.length) continue;
+      // Campo vazio no ficheiro mantém o valor atual (coalesce); o nome vem sempre do ficheiro.
+      await tx.execute(sql`update companies c set name = x.name, name_key = x.name_key,
+          address = coalesce(x.address, c.address), postal_code = coalesce(x.postal_code, c.postal_code), municipality = coalesce(x.municipality, c.municipality),
+          locality = coalesce(x.locality, c.locality), loyalty_end = coalesce(x.loyalty_end, c.loyalty_end), l2b_monthly = coalesce(x.l2b_monthly, c.l2b_monthly),
+          size = coalesce(x.size, c.size), district = coalesce(x.district, c.district), sector = coalesce(x.sector, c.sector),
+          annual_revenue = coalesce(x.annual_revenue, c.annual_revenue), locations_potential = coalesce(x.locations_potential, c.locations_potential),
+          rgu = coalesce(x.rgu, c.rgu), product = coalesce(x.product, c.product), technology = coalesce(x.technology, c.technology),
+          loyalty_months = coalesce(x.loyalty_months, c.loyalty_months), portal_status = coalesce(x.portal_status, c.portal_status),
+          nos_exit_month = coalesce(x.nos_exit_month, c.nos_exit_month), nbo_campaign = coalesce(x.nbo_campaign, c.nbo_campaign), updated_at = now()
+        from jsonb_to_recordset(${JSON.stringify(sets)}::jsonb) as x(id uuid, name text, name_key text, address text, postal_code text, municipality text, locality text,
+          loyalty_end date, l2b_monthly numeric, size text, district text, sector text, annual_revenue numeric, locations_potential text, rgu jsonb, product text,
+          technology text, loyalty_months int, portal_status text, nos_exit_month text, nbo_campaign text)
+        where c.id = x.id`);
+      await tx.execute(sql`update import_rows r set before = x.before from jsonb_to_recordset(${JSON.stringify(befores)}::jsonb) as x(id uuid, before jsonb) where r.id = x.id`);
+      await insertChildren(tx as unknown as Db, children, batchId, userId);
     }
     await tx.update(importBatches).set({ status: "committed", committedAt: new Date(), summary: { ...(batch.summary as object), committed: counts } }).where(eq(importBatches.id, batchId));
     await tx.insert(auditLog).values({ userId, action: "importacao_gravada", entity: "import_batch", entityId: batchId, details: `Lote ${batch.number}: ${counts.created} novas, ${counts.updated} atualizadas` });

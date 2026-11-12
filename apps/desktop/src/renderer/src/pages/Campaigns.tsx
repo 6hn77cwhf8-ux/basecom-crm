@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { DEFAULT_SCRIPTS } from "@basecom/shared";
-import { api, type Campaign, type CampaignFilters, type FilterOptions } from "../api";
+import { api, type Campaign, type CampaignFilters, type CampaignPreview, type FilterOptions } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtInt, input } from "../ui";
 import { Modal } from "./Wallet";
 
@@ -41,6 +41,7 @@ export function Campaigns() {
             {k.status !== "ended" && <>
               <button style={small} onClick={() => setEditing(k)}>Editar</button>
               <button style={small} onClick={() => act(() => api.refreshCampaign(k.id).then((r) => setNotice(`${fmtInt(r.added)} empresas acrescentadas a «${k.name}».`)))}>Atualizar lista</button>
+              <button style={small} title="Traz as empresas que cumprem os filtros e estão por trabalhar noutras campanhas (as reservadas a um comercial ficam)" onClick={() => confirm(`Trazer para «${k.name}» as empresas desta campanha que estão por trabalhar noutras campanhas? Saem dessas campanhas.`) && act(() => api.refreshCampaign(k.id, true).then((r) => setNotice(`${fmtInt(r.added)} empresas trazidas para «${k.name}».`)))}>Trazer de outras campanhas</button>
               <button style={small} onClick={() => act(() => api.updateCampaign(k.id, { status: k.status === "active" ? "paused" : "active" }))}>{k.status === "active" ? "Pausar" : "Retomar"}</button>
               <button style={{ ...small, color: "#A1000F" }} onClick={() => confirm(`Terminar «${k.name}»? As empresas por ligar ficam livres para outras campanhas.`) && act(() => api.updateCampaign(k.id, { status: "ended" }))}>Terminar</button>
             </>}
@@ -56,6 +57,7 @@ export function Campaigns() {
 }
 
 const small = { ...btn, height: 30, fontSize: 12 };
+const L2B_BUCKETS: [number, number | null][] = [[0, 50], [50, 100], [100, 200], [200, 300], [300, 400], [400, 500], [500, null]];
 const ta = { ...input, height: 88, padding: 10, resize: "vertical" as const, lineHeight: "20px" };
 
 /**
@@ -115,7 +117,7 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
   const [f, setF] = useState<CampaignFilters>(campaign?.filters ?? { accountType: "prospect" });
   const [users, setUsers] = useState<{ id: string; name: string; role: string }[]>([]);
   const [opts, setOpts] = useState<FilterOptions | null>(null);
-  const [count, setCount] = useState<{ total: number; clients: number; in_wallet: number } | null>(null);
+  const [count, setCount] = useState<CampaignPreview | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -184,9 +186,50 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
             <Multi label="Estado no portal NOS" all={opts?.portalStatuses} value={f.portalStatus} onChange={(v) => set("portalStatus", v)} />
             <Multi label="Tecnologia" all={opts?.technologies} value={f.technologies} onChange={(v) => set("technologies", v)} />
             <Multi label="Produto" all={opts?.products} value={f.products} onChange={(v) => set("products", v)} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Valor L2B (mensalidade) <span style={{ color: c.muted, fontWeight: 400 }}>{f.l2bRanges?.length || f.l2bMin != null || f.l2bMax != null ? "" : "· todos"}</span></span>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="number" min={0} placeholder="Mín." style={{ ...input, height: 32, width: 100 }} value={f.l2bMin ?? ""} onChange={(e) => set("l2bMin", e.target.value === "" ? undefined : Number(e.target.value))} />
+                <span>–</span>
+                <input type="number" min={0} placeholder="Máx." style={{ ...input, height: 32, width: 100 }} value={f.l2bMax ?? ""} onChange={(e) => set("l2bMax", e.target.value === "" ? undefined : Number(e.target.value))} />
+                <span style={{ fontSize: 12, color: c.muted }}>€/mês</span>
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {L2B_BUCKETS.map(([a, b], i) => {
+                  const on = !!f.l2bRanges?.some(([x, y]) => x === a && y === b);
+                  const n = opts?.l2bBuckets?.find((x) => x.b === i)?.n ?? 0;
+                  return <Toggle key={i} on={on} label={`${b == null ? `${a} € ou mais` : `${a} – ${b} €`} (${fmtInt(n)})`} onClick={() => {
+                    const cur = f.l2bRanges ?? [];
+                    const next = on ? cur.filter(([x, y]) => !(x === a && y === b)) : [...cur, [a, b] as [number, number | null]];
+                    set("l2bRanges", next.length ? next : undefined);
+                  }} />;
+                })}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Meses para o fim da permanência <span style={{ color: c.muted, fontWeight: 400 }}>{f.loyaltyMonths?.length ? "" : "· todos"}</span></span>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {([["le9", "Até 9 meses"], ["le21", "Até 21 meses"], ["gt21", "Mais de 21 meses"]] as const).map(([k, l]) => {
+                  const on = !!f.loyaltyMonths?.includes(k);
+                  return <Toggle key={k} on={on} label={`${l} (${fmtInt(opts?.loyaltyBuckets?.[k] ?? 0)})`} onClick={() => {
+                    const cur = f.loyaltyMonths ?? [];
+                    const next = on ? cur.filter((x) => x !== k) : [...cur, k];
+                    set("loyaltyMonths", next.length ? next : undefined);
+                  }} />;
+                })}
+              </div>
+            </div>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={!!f.onlyWithoutOwner} onChange={(e) => set("onlyWithoutOwner", e.target.checked || undefined)} /> Só empresas sem carteira</label>
-            <div role="status" style={{ padding: "10px 12px", borderRadius: 10, background: c.brandSoft, fontSize: 14 }}>
-              {count ? <><b>{fmtInt(count.total)}</b> empresas vão entrar · {fmtInt(count.clients)} clientes NOS · {fmtInt(count.in_wallet)} da carteira dos comerciais escolhidos (só para o respetivo responsável)</> : "A contar…"}
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={!!f.takeFromOtherCampaigns} onChange={(e) => set("takeFromOtherCampaigns", e.target.checked || undefined)} /> Trazer empresas que estão por trabalhar noutras campanhas (saem dessas; as reservadas a um comercial ficam)</label>
+            <div role="status" style={{ padding: "10px 12px", borderRadius: 10, background: count && count.total === 0 ? "#FFF4E5" : c.brandSoft, fontSize: 14, display: "flex", flexDirection: "column", gap: 4 }}>
+              {count ? <>
+                <span><b>{fmtInt(count.total)}</b> empresas vão entrar · {fmtInt(count.clients)} clientes NOS · {fmtInt(count.in_wallet)} da carteira dos comerciais escolhidos</span>
+                {count.matching > count.total && <span style={{ fontSize: 13 }}>Dos {fmtInt(count.matching)} que cumprem os filtros, ficam de fora:{" "}
+                  {[[count.other_campaign, "já estão noutra campanha ativa"], [count.no_phone, "sem telefone válido"], [count.cooldown, "em prazo de reutilização"], [count.other_wallet, "de outra carteira"], [count.blocked, "«Não contactar» ou encerradas"]]
+                    .filter(([n]) => (n as number) > 0).map(([n, l]) => `${fmtInt(n as number)} ${l}`).join(" · ")}
+                  {count.other_campaign > 0 && !f.takeFromOtherCampaigns && <b> — marque «Trazer empresas que estão noutras campanhas» para as incluir.</b>}
+                </span>}
+              </> : "A contar…"}
             </div>
           </fieldset>
         )}
