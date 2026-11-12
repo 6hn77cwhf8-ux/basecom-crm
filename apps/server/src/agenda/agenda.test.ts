@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
 import { calls, companies, companyContacts, companyNotes, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
-import { callFromTask, closeTask, createTask, listAgenda, rescheduleTask } from "./service.js";
+import { callFromTask, closeTask, createTask, listAgenda, myDay, rescheduleTask } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -51,6 +51,9 @@ describe.skipIf(!url)("Agenda", () => {
     expect((await db.query.calls.findFirst({ where: eq(calls.id, c.callId) }))!.source).toBe("agenda");
     await expect(closeTask(db, toPublic(ana), t!.id, "cancelled")).rejects.toThrow(/porque/);
     await closeTask(db, toPublic(ana), t!.id, "done");
+    const d = await myDay(db, toPublic(ana));
+    expect(d).toMatchObject({ calls: 0, sales: 0, late: 0 });
+    expect(d.breakLimit).toBeGreaterThan(0);
     expect((await listAgenda(db, toPublic(ana))).length).toBe(0);
   });
 });

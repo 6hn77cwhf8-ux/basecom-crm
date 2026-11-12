@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { c, font } from "./ui";
-import { api, ROLE_LABEL, type Role, type SearchHit, type User } from "./api";
+import { api, ROLE_LABEL, type Role, type MyDay, type SearchHit, type User } from "./api";
 import logo from "./assets/logo-horizontal.webp";
 import simbolo from "./assets/simbolo.webp";
 
@@ -37,7 +37,7 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
 
   return (
     <div style={{ display: "flex", height: "100vh", background: c.surface, color: c.ink, fontFamily: font }}>
-      <nav aria-label="Navegação principal" style={{ flex: `0 0 ${open ? 256 : 64}px`, background: c.card, borderRight: `1px solid ${c.line}`, padding: "16px 12px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+      <nav aria-label="Navegação principal" style={{ flex: "0 0 auto", width: open ? 256 : 64, background: c.card, borderRight: `1px solid ${c.line}`, padding: "16px 12px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
         <div style={{ display: "flex", flexDirection: open ? "row" : "column", alignItems: "center", justifyContent: open ? "space-between" : "center", gap: open ? 0 : 10, padding: open ? "4px 0 16px 10px" : "4px 0 12px" }}>
           {!open && <img src={simbolo} alt="BASECOM" style={{ width: 26, height: "auto" }} />}
           {open ? <img src={logo} alt="BASECOM" style={{ width: 132, height: "auto" }} /> : null}
@@ -68,6 +68,8 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
           {open && <button onClick={onLogout} style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>Sair</button>}
         </div>
       </nav>
+      {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
+      {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpenCompany={onOpenCompany} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
     </div>
   );
@@ -114,5 +116,51 @@ function SearchBox({ onOpen }: { onOpen: (id: string) => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+const mins = (s: number) => `${Math.floor(s / 60)}`;
+const hhmm = (iso: string) => {
+  const d = new Date(iso);
+  const t = d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? t : `${d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" })} ${t}`;
+};
+
+/** «O meu dia»: os números de hoje e as próximas tarefas. Atualiza a cada 30 segundos. */
+function MyDayPanel({ onAgenda, onOpenCompany }: { onAgenda: () => void; onOpenCompany: (id: string) => void }) {
+  const [d, setD] = useState<MyDay | null>(null);
+  useEffect(() => {
+    const load = () => api.myDay().then(setD).catch(() => undefined);
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const row = (k: string, v: ReactNode, warn = false) => (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${c.line}`, fontSize: 13 }}>
+      <span style={{ color: c.muted }}>{k}</span><b style={{ color: warn ? "#A1000F" : c.ink, fontVariantNumeric: "tabular-nums" }}>{v}</b>
+    </div>
+  );
+  const lab = { fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase" as const, color: c.muted };
+  return (
+    <aside aria-label="O meu dia" style={{ flex: "0 0 192px", background: c.card, borderRight: `1px solid ${c.line}`, padding: "20px 14px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 4, overflow: "auto" }}>
+      <span style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>O meu dia</span>
+      {!d ? <span style={{ fontSize: 13, color: c.muted }}>A carregar…</span> : <>
+        {row("Chamadas", d.calls)}
+        {row("Contactos efetivos", d.effective)}
+        {row("Propostas", d.proposals)}
+        {row("Vendas", d.sales)}
+        {row("A trabalhar", `${Math.floor(d.worked / 3600)} h ${String(Math.floor((d.worked % 3600) / 60)).padStart(2, "0")}`)}
+        {row("Intervalo", `${mins(d.breakUsed)} / ${mins(d.breakLimit)} min`, d.breakUsed > d.breakLimit)}
+        <span style={{ ...lab, marginTop: 14 }}>Agenda</span>
+        {d.late > 0 && <button onClick={onAgenda} style={{ border: 0, background: "#FFE5E7", color: "#A1000F", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>{d.late} atrasada{d.late === 1 ? "" : "s"} →</button>}
+        {d.next.length === 0 && <span style={{ fontSize: 13, color: c.muted }}>Sem tarefas.</span>}
+        {d.next.map((t) => (
+          <button key={t.id} onClick={() => onOpenCompany(t.companyId)} style={{ border: 0, background: "transparent", padding: "5px 0", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 12, color: c.ink, borderBottom: `1px solid ${c.line}` }}>
+            <b style={{ color: new Date(t.dueAt) < new Date() ? "#A1000F" : c.ink }}>{hhmm(t.dueAt)}</b> {t.type}<br /><span style={{ color: c.muted }}>{t.company}</span>
+          </button>
+        ))}
+        <button onClick={onAgenda} style={{ border: 0, background: "transparent", padding: "8px 0", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 12, color: c.muted, textDecoration: "underline" }}>Abrir a Agenda</button>
+      </>}
+    </aside>
   );
 }

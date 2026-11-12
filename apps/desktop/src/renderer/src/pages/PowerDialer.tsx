@@ -143,10 +143,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       {phase === "empty" && <Empty text="Não há mais empresas prontas nesta campanha agora. As novas tentativas agendadas voltam a aparecer à hora marcada." action={<button style={btn} onClick={() => load(false)}>Verificar de novo</button>} />}
 
       {cur && cat && (phase === "ready" || phase === "calling" || phase === "loading" || phase === "review") && (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 12, flex: 1, minHeight: 0 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-            {/* Metade de cima: script; metade de baixo: feedback anterior. */}
-            <section style={{ ...card, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14, flex: "1 1 0", minHeight: 0, overflow: "auto" }}>
+        /* Quatro quadros (desenho do Leonardo): script | cliente — feedback anterior | telefone. */
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12, flex: 1, minHeight: 0 }}>
+          <div style={{ display: "contents" }}>
+            <section style={{ ...card, gridColumn: 1, gridRow: 1, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflow: "auto" }}>
               <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
@@ -194,7 +194,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               )}
               </div>
             </section>
-            <section style={{ ...card, padding: "12px 16px", flex: "1 1 0", minHeight: 0, overflow: "auto" }}>
+            <section style={{ ...card, gridColumn: 1, gridRow: 2, padding: "12px 16px", minHeight: 0, overflow: "auto" }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Feedback anterior · mais recente primeiro</span>
               {cur.history.length === 0 && <p style={{ fontSize: 13, color: c.muted }}>Sem histórico.</p>}
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 6 }}><tbody>
@@ -209,8 +209,8 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
             </section>
           </div>
 
-          <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <section style={{ ...card, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+          <aside style={{ display: "contents" }}>
+            <section style={{ ...card, gridColumn: 2, gridRow: 1, padding: 16, display: "flex", flexDirection: "column", gap: 8, minHeight: 0, overflow: "auto" }}>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                 <b style={{ fontSize: 16, flex: 1 }}>{cur.company.name}</b>
                 {copyBtn("name", cur.company.name)}
@@ -225,7 +225,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               {cur.decisors.length > 0 && <span style={{ fontSize: 13 }}>Decisores: {cur.decisors.join(" · ")}</span>}
               <button style={{ ...small, alignSelf: "flex-start" }} onClick={() => onOpenCompany(cur.company.id)}>Abrir ficha completa →</button>
             </section>
-            <section style={{ ...card, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            <section style={{ ...card, gridColumn: 2, gridRow: 2, padding: 16, display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", minHeight: 0, overflow: "auto" }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Telefone · ligação manual até à app Android</span>
               {phase === "review"
                 ? <button style={{ ...btnDark, height: 48, fontSize: 16, background: c.brand, borderColor: c.brand }} onClick={() => setPhase("result")}>Voltar ao resultado →</button>

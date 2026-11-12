@@ -4,6 +4,7 @@ import { auditLog, campaignEntries, campaigns, companies, companyContacts, compa
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { startCall } from "../dialer/service.js";
+import { daySummary } from "../time/service.js";
 
 /**
  * Agenda (Fase 3, passo 5): tarefas de cada comercial — callbacks, seguimentos, próximas ações das oportunidades.
@@ -78,3 +79,20 @@ export async function agendaPeople(db: Db) {
 }
 
 const fmt = (d: Date) => d.toLocaleString("pt-PT", { timeZone: "Europe/Lisbon", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/**
+ * «O meu dia» (aparece quando o menu lateral recolhe): chamadas de hoje, contactos efetivos, propostas e vendas,
+ * intervalo usado e as próximas tarefas da Agenda. Só os números do próprio.
+ */
+export async function myDay(db: Db, user: PublicUser) {
+  const r = await db.execute(sql`select count(*)::int as calls,
+      count(*) filter (where effect not in ('no_answer', 'busy', 'voicemail', 'wrong_number'))::int as effective,
+      count(*) filter (where effect in ('interested', 'proposal_sent', 'negotiating'))::int as proposals,
+      count(*) filter (where effect = 'sale')::int as sales
+    from calls where user_id = ${user.id}::uuid and saved_at is not null
+      and (saved_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date`);
+  const t = await daySummary(db, user.id);
+  const next = (await listAgenda(db, user)).slice(0, 4).map((x) => ({ id: x.id, dueAt: x.dueAt, type: x.type, company: x.company, companyId: x.companyId }));
+  const late = (await listAgenda(db, user)).filter((x) => new Date(x.dueAt) < new Date()).length;
+  return { ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, late, next };
+}

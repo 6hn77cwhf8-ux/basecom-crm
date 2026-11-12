@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { agendaPeople, callFromTask, closeTask, createTask, listAgenda, rescheduleTask } from "../agenda/service.js";
+import { agendaPeople, myDay, callFromTask, closeTask, createTask, listAgenda, rescheduleTask } from "../agenda/service.js";
 
 /** Agenda: cada um sobre as suas tarefas; o Administrador consulta e cria para qualquer pessoa. */
 export async function agendaRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -13,6 +13,7 @@ export async function agendaRoutes(app: FastifyInstance, opts: { db: Db }) {
   const instant = z.string().datetime({ offset: true });
 
   app.get("/agenda", any, async (req) => ({ tasks: await listAgenda(db, req.user!, z.object({ userId: z.string().uuid().optional() }).parse(req.query)) }));
+  app.get("/me/day", any, async (req) => myDay(db, req.user!));
   app.get("/agenda/people", admin, async () => ({ people: await agendaPeople(db) }));
   app.post("/agenda/tasks", any, async (req) => {
     const b = z.object({ companyId: z.string().uuid(), type: z.string().min(1).max(60), dueAt: instant, description: z.string().max(1000).optional(), assignedTo: z.string().uuid().optional() }).parse(req.body);
