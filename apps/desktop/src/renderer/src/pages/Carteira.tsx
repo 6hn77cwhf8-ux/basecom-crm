@@ -4,6 +4,7 @@ import { api, type Catalogs, type ResultInput, type User, type WalletRow } from 
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, input, PageHeader, td, th } from "../ui";
 import { NewTask } from "./Agenda";
 import { ResultPanel, type Group } from "./ResultPanel";
+import { useCallEnd } from "./Phone";
 
 /**
  * C2C / Carteira (maqueta 9): a carteira do comercial com «Ligar» em cada empresa.
@@ -34,6 +35,8 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
     try { const x = await api.callFromWallet(r.id); setCalling({ r, callId: x.callId, phone: x.phone.value, ended: null, group: "callback" }); }
     catch (e) { setError((e as Error).message); }
   }
+  useCallEnd(calling?.callId ?? null, !!calling && calling.ended === null, (end) => setCalling((x) => (x ? { ...x, ended: end } : x)));
+
   async function save(res: ResultInput) {
     if (!calling) return;
     setBusy(true); setError("");

@@ -49,6 +49,8 @@ export type AgendaTask = { id: string; type: string; dueAt: string; description:
 export type MyDay = { oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
 export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
 export type WalletRow = { id: string; name: string; nif: string; walletKind: string; l2bMonthly: string | null; loyaltyEnd: string | null; owner: string; lines: number; decisor: string | null; phone: string | null; lastContact: string | null; openTasks: number; nextAction: { type: string; dueAt: string } | null };
+export type PhoneDevice = { id: string; model: string | null; pairedAt: string; lastSeenAt: string | null; online: boolean };
+export type Incoming = { id: string; number: string; ringingAt: string; endedAt: string | null; companyId: string | null; company: string | null; owner: string | null; openTasks: number };
 export type WorkState = "working" | "training" | "break" | "switch";
 export type DaySummary = {
   day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;
@@ -150,7 +152,7 @@ export const api = {
   dialerNext: (campaignId: string) => call<{ next: DialerEntry | null }>("/dialer/next", { method: "POST", body: JSON.stringify({ campaignId }) }).then((r) => r.next),
   dialerSkip: (entryId: string, reason: string) => call(`/dialer/entries/${entryId}/skip`, { method: "POST", body: JSON.stringify({ reason }) }),
   dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
-  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean }) => call<{ id: string; startedAt: string }>("/calls", { method: "POST", body: JSON.stringify(b) }),
+  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean }) => call<{ id: string; startedAt: string; viaPhone: boolean }>("/calls", { method: "POST", body: JSON.stringify(b) }),
   endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
   agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
@@ -160,6 +162,11 @@ export const api = {
   createTeam: (b: { name: string; leadId: string | null; memberIds: string[] }) => call("/teams", { method: "POST", body: JSON.stringify(b) }),
   updateTeam: (id: string, b: { name: string; leadId: string | null; memberIds: string[] }) => call(`/teams/${id}`, { method: "PUT", body: JSON.stringify(b) }),
   deleteTeam: (id: string) => call(`/teams/${id}`, { method: "DELETE" }),
+  pairCode: () => call<{ code: string; expiresAt: string }>("/devices/pair-code", { method: "POST", body: "{}" }),
+  myDevice: () => call<{ device: PhoneDevice | null }>("/devices/me").then((r) => r.device),
+  unpairDevice: () => call("/devices/me", { method: "DELETE" }),
+  callStatus: (id: string) => call<{ endedAt: string | null; durationSeconds: number | null; answered: boolean | null; via: string }>(`/calls/${id}/status`),
+  incoming: () => call<{ incoming: Incoming | null }>("/phone/incoming").then((r) => r.incoming),
   myDay: () => call<MyDay>("/me/day"),
   opportunities: (q: { ownerId?: string; closed?: boolean } = {}) => call<{ opportunities: Opportunity[] }>(`/opportunities${qs({ ownerId: q.ownerId, closed: q.closed ? "1" : undefined })}`).then((r) => r.opportunities),
   companyOpportunities: (id: string) => call<{ opportunities: { id: string; stage: string; stageLabel: string; services: string | null; createdAt: string; closedAt: string | null; lastActivityAt: string }[] }>(`/companies/${id}/opportunities`).then((r) => r.opportunities),

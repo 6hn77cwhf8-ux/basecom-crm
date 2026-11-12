@@ -4,6 +4,7 @@ import { api, type Campaign, type Catalogs, type DialerEntry, type ResultInput, 
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
+import { PhoneDialog, useCallEnd, usePhone } from "./Phone";
 
 /** «review»: chamada terminada, a rever o script antes de voltar ao resultado (o tempo e o que já escreveu mantêm-se). */
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "review" | "countdown" | "empty";
@@ -45,6 +46,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [, tick] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const consultedRef = useRef(false);
+  // Telemóvel (app BASECOM): marca sozinho e informa o fim da chamada.
+  const phone = usePhone();
+  const [viaPhone, setViaPhone] = useState(false);
+  const [phoneDialog, setPhoneDialog] = useState(false);
 
   const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
   useEffect(() => {
@@ -75,13 +80,18 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     if (!n?.phone) return;
     const preview = n.campaign.dialMode === "preview";
     const r = await api.startCall({ companyId: n.company.id, contactId: n.phone.id, entryId: n.entry.id, source: preview ? "current" : "new", consultedNos: preview ? consultedRef.current : undefined });
-    setCallId(r.id); setStartedAt(Date.now()); setPhase("calling");
+    setCallId(r.id); setStartedAt(Date.now()); setViaPhone(r.viaPhone); setPhase("calling");
   }
   async function hangUp(g: Group = "noanswer") {
     if (!callId) return;
     await api.endCall(callId).catch(() => undefined);
     setEndedAt(Date.now()); setGroup(g); setResultKey((k) => k + 1); setPhase("result");
   }
+  // Fim informado pelo telemóvel: abre o resultado sozinho (não atendida → sugere «Não atende»). O tempo dos 15 s conta daí.
+  useCallEnd(callId, phase === "calling", (end, answered) => {
+    setEndedAt(end); setGroup(answered === false ? "noanswer" : "refuse"); setResultKey((k) => k + 1); setPhase("result");
+  });
+
   async function save(r: ResultInput) {
     if (!callId) return;
     setBusy(true); setError("");
@@ -251,7 +261,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               <button style={{ ...small, alignSelf: "flex-start" }} onClick={() => onOpenCompany(cur.company.id)}>Abrir ficha completa →</button>
             </section>
             <section style={{ ...card, flex: "0 0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Telefone · ligação manual até à app Android</span>
+              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Telefone</span>
               {phase === "review"
                 ? <button style={{ ...btnDark, height: 48, fontSize: 16, background: c.brand, borderColor: c.brand }} onClick={() => setPhase("result")}>Voltar ao resultado →</button>
                 : phase !== "calling"
@@ -269,7 +279,9 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
                   )}
                   <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button></>
                 : <button style={{ ...btnDark, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>}
-              <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»).</span>
+              {phone.device?.online
+                ? <span style={{ fontSize: 12, color: "#1E6F33" }}>{phase === "calling" && viaPhone ? "O telemóvel está a marcar. Quando a chamada acabar, o resultado abre sozinho." : "Telemóvel ligado: «Iniciar chamada» marca no telemóvel."} <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.muted, textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Telemóvel</button></span>
+                : <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»). <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.brand, textDecoration: "underline", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{phone.device ? "Telemóvel sem sinal" : "Emparelhar telemóvel"}</button></span>}
             </section>
           </aside>
         </div>
@@ -301,6 +313,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
           ))}
         </footer>
       )}
+      {phoneDialog && <PhoneDialog onClose={() => { setPhoneDialog(false); phone.reload(); }} />}
     </div>
   );
 }

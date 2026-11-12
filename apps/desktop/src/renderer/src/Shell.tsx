@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { c, font } from "./ui";
+import { IncomingBanner, PhoneDialog } from "./pages/Phone";
 import { api, ROLE_LABEL, type Role, type MyDay, type SearchHit, type User } from "./api";
 import logo from "./assets/logo-horizontal.webp";
 import simbolo from "./assets/simbolo.webp";
@@ -31,6 +32,7 @@ function readOpen() { try { return localStorage.getItem("bc_nav") !== "0"; } cat
 
 export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, children }: { user: User; page: PageId; onNavigate: (p: PageId) => void; onLogout: () => void; onOpenCompany: (id: string) => void; children: ReactNode }) {
   const [open, setOpen] = useState(readOpen);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem("bc_nav", v ? "1" : "0"); } catch { /* sem armazenamento */ } };
   const items = NAV.filter((n) => !n.roles || n.roles.includes(user.role));
   const initials = user.name.split(" ").map((p) => p[0]).slice(0, 2).join("");
@@ -66,11 +68,14 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
               <span style={{ fontSize: 12, color: c.muted }}>{ROLE_LABEL[user.role]} · v{__APP_VERSION__}</span>
             </span>
           )}
+          <button onClick={() => setPhoneOpen(true)} title="Telemóvel (app BASECOM)" style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", padding: 4 }}><Icon d="M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2" /></button>
           {open && <button onClick={onLogout} style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>Sair</button>}
         </div>
       </nav>
       {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
       {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpps={() => onNavigate("oportunidades")} onOpenCompany={onOpenCompany} />}
+      <IncomingBanner onOpenCompany={onOpenCompany} />
+      {phoneOpen && <PhoneDialog onClose={() => setPhoneOpen(false)} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
     </div>
   );

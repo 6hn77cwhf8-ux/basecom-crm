@@ -4,6 +4,7 @@ import { api, type AgendaTask, type Catalogs, type ResultInput, type SearchHit, 
 import { btn, btnDark, c, card, Chip, ErrorText, Field, input, PageHeader } from "../ui";
 import { Modal } from "./Wallet";
 import { ResultPanel, type Group } from "./ResultPanel";
+import { useCallEnd } from "./Phone";
 
 const ORIGIN: Record<string, string> = { call: "da chamada", manual: "manual" };
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -60,6 +61,8 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
     await api.endCall(calling.callId).catch(() => undefined);
     setCalling({ ...calling, ended: Date.now() });
   }
+  useCallEnd(calling?.callId ?? null, !!calling && calling.ended === null, (end) => setCalling((x) => (x ? { ...x, ended: end } : x)));
+
   async function save(r: ResultInput) {
     if (!calling) return;
     setBusy(true); setError("");
