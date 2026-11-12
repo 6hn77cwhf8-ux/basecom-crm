@@ -226,7 +226,11 @@ export const campaigns = pgTable("campaigns", {
   mode: text("mode").notNull(),
   /** active | paused | ended — só o Chefe de Equipa ou o Administrador pausam ou param. */
   status: text("status").notNull().default("active"),
+  /** Passo 1 · abertura (pede o responsável e confirma o decisor). */
   script: text("script").notNull().default(""),
+  /** Passo 2 · apresentação a empresas sem serviços NOS (NN) e a clientes NOS. Vazio = texto por omissão. */
+  scriptPitchNew: text("script_pitch_new"),
+  scriptPitchCurrent: text("script_pitch_current"),
   filters: jsonb("filters").notNull(),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

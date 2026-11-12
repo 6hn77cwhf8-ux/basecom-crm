@@ -19,7 +19,7 @@ export type CompanyKpis = { total: number; noOwner: number; withOwner: number; n
 export type CompanyFilters = Partial<{ q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; offset: number; limit: number }>;
 export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[]; operators?: string[]; products?: string[]; technologies?: string[]; portalStatuses?: string[]; sizes?: string[]; municipalitiesByDistrict?: Record<string, string[]>; nboCampaigns?: { v: string; n: number }[] };
 export type CampaignFilters = Partial<{ accountType: "client" | "prospect"; districts: string[]; municipalities: string[]; sectors: string[]; operators: string[]; sizes: string[]; products: string[]; technologies: string[]; portalStatus: string[]; loyaltyEndFrom: string; loyaltyEndTo: string; onlyWithoutOwner: boolean; nboCampaigns: string[] }>;
-export type Campaign = { id: string; name: string; mode: "new" | "current"; status: "active" | "paused" | "ended"; script: string; filters: CampaignFilters; createdAt: string; members: { id: string; name: string }[]; total: number; pending: number; ready: number; done: number; exhausted: number };
+export type Campaign = { id: string; name: string; mode: "new" | "current"; status: "active" | "paused" | "ended"; script: string; scriptPitchNew: string | null; scriptPitchCurrent: string | null; filters: CampaignFilters; createdAt: string; members: { id: string; name: string }[]; total: number; pending: number; ready: number; done: number; exhausted: number };
 export type Contact = { id: string; kind: "phone" | "email" | "person"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string };
 export type Note = { id: string; kind: string; text: string; at: string; user: string | null; batchId: string | null };
 export type CompanyDetail = {
@@ -39,6 +39,7 @@ export type DialerEntry = {
   phone: { id: string; value: string; type: string | null } | null;
   otherPhones: { id: string; value: string; type: string | null }[];
   script: string; decisors: string[];
+  scripts: { opening: string; pitch: string }; vars: Record<string, string>; people: { salutation: string | null; name: string }[];
   history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
 };
 export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC" };
@@ -131,8 +132,8 @@ export const api = {
 
   campaigns: () => call<{ campaigns: Campaign[] }>("/campaigns").then((r) => r.campaigns),
   previewCampaign: (filters: CampaignFilters, memberIds: string[]) => call<{ total: number; clients: number; in_wallet: number }>("/campaigns/preview", { method: "POST", body: JSON.stringify({ filters, memberIds }) }),
-  createCampaign: (b: { name: string; mode: "new" | "current"; script: string; filters: CampaignFilters; memberIds: string[] }) => call<{ id: string; added: number }>("/campaigns", { method: "POST", body: JSON.stringify(b) }),
-  updateCampaign: (id: string, b: Partial<{ name: string; script: string; status: Campaign["status"]; memberIds: string[] }>) => call(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+  createCampaign: (b: { name: string; mode: "new" | "current"; script: string; scriptPitchNew?: string | null; scriptPitchCurrent?: string | null; filters: CampaignFilters; memberIds: string[] }) => call<{ id: string; added: number }>("/campaigns", { method: "POST", body: JSON.stringify(b) }),
+  updateCampaign: (id: string, b: Partial<{ name: string; script: string; scriptPitchNew: string | null; scriptPitchCurrent: string | null; status: Campaign["status"]; memberIds: string[] }>) => call(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   refreshCampaign: (id: string) => call<{ added: number }>(`/campaigns/${id}/refresh`, { method: "POST", body: "{}" }),
 
   catalogs: () => call<Catalogs>("/catalogs"),

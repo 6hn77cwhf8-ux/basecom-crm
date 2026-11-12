@@ -71,6 +71,13 @@
       "when": 1794486661237,
       "tag": "0009_teste1",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794488285848,
+      "tag": "0010_scripts_dois_passos",
+      "breakpoints": true
     }
   ]
 }

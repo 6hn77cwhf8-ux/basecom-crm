@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { DEFAULT_SCRIPTS } from "@basecom/shared";
 import { api, type Campaign, type CampaignFilters, type FilterOptions } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtInt, input } from "../ui";
 import { Modal } from "./Wallet";
 
 const MODE = { new: "Novos clientes · Power Dialer", current: "Clientes atuais · Preview Dialer" } as const;
 const STATUS = { active: ["A decorrer", "ok"], paused: ["Em pausa", "warn"], ended: ["Terminada", "neutral"] } as const;
-export const SCRIPT_FIELDS = ["{comercial}", "{empresa}", "{decisor1}", "{decisor2}"];
-const DEFAULT_SCRIPT = "Olá, o meu nome é {comercial}. Eu gostaria de falar com a pessoa responsável da empresa {empresa}, seria possível?";
+export const FIELDS_HELP = "{comercial} · {empresa} · {decisor} (o confirmado, com o tratamento: «a Senhora Dona Ana…») · {decisor1} · {decisor2} · {campanha} (nome desta campanha) · {nbo} (campanha NBO da empresa)";
 
 /** Configurações → Campanhas (só Administrador nesta fase). */
 export function Campaigns() {
@@ -56,6 +56,7 @@ export function Campaigns() {
 }
 
 const small = { ...btn, height: 30, fontSize: 12 };
+const ta = { ...input, height: 88, padding: 10, resize: "vertical" as const, lineHeight: "20px" };
 
 /**
  * Campanha de cada comercial no Power Dialer (Novos clientes): decide o Administrador; o comercial não escolhe.
@@ -104,7 +105,11 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
   const editing = !!campaign;
   const [name, setName] = useState(campaign?.name ?? "");
   const [mode, setMode] = useState<"new" | "current">(campaign?.mode ?? "new");
-  const [script, setScript] = useState(campaign?.script ?? DEFAULT_SCRIPT);
+  const [script, setScript] = useState(campaign?.script || DEFAULT_SCRIPTS.opening);
+  const [pitchNew, setPitchNew] = useState(campaign?.scriptPitchNew || DEFAULT_SCRIPTS.pitchNew);
+  const [pitchCurrent, setPitchCurrent] = useState(campaign?.scriptPitchCurrent || DEFAULT_SCRIPTS.pitchCurrent);
+  // Texto igual ao de omissão fica vazio na base de dados: assim acompanha futuras melhorias do texto por omissão.
+  const own = (v: string, d: string) => (v.trim() === d ? null : v);
   const [members, setMembers] = useState<string[]>(campaign?.members.map((m) => m.id) ?? []);
   const [f, setF] = useState<CampaignFilters>(campaign?.filters ?? { accountType: "prospect" });
   const [users, setUsers] = useState<{ id: string; name: string; role: string }[]>([]);
@@ -127,8 +132,8 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
   async function submit(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError("");
     try {
-      if (campaign) { await api.updateCampaign(campaign.id, { name, script, memberIds: members }); onSaved(`Campanha «${name}» guardada.`); }
-      else { const r = await api.createCampaign({ name, mode, script, filters: f, memberIds: members }); onSaved(`Campanha «${name}» criada com ${fmtInt(r.added)} empresas.`); }
+      if (campaign) { await api.updateCampaign(campaign.id, { name, script, scriptPitchNew: own(pitchNew, DEFAULT_SCRIPTS.pitchNew), scriptPitchCurrent: own(pitchCurrent, DEFAULT_SCRIPTS.pitchCurrent), memberIds: members }); onSaved(`Campanha «${name}» guardada.`); }
+      else { const r = await api.createCampaign({ name, mode, script, scriptPitchNew: own(pitchNew, DEFAULT_SCRIPTS.pitchNew), scriptPitchCurrent: own(pitchCurrent, DEFAULT_SCRIPTS.pitchCurrent), filters: f, memberIds: members }); onSaved(`Campanha «${name}» criada com ${fmtInt(r.added)} empresas.`); }
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   const set = <K extends keyof CampaignFilters>(k: K, v: CampaignFilters[K]) => setF((o) => ({ ...o, [k]: v }));
@@ -176,10 +181,16 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
             </div>
           </fieldset>
         )}
-        <Field label="Script">
-          <textarea style={{ ...input, height: 130, padding: 10, resize: "vertical", lineHeight: "20px" }} value={script} onChange={(e) => setScript(e.target.value)} />
+        <Field label="Script · 1. Abertura (pede o responsável; o comercial confirma ou muda o decisor)">
+          <textarea style={ta} value={script} onChange={(e) => setScript(e.target.value)} />
         </Field>
-        <span style={{ fontSize: 12, color: c.muted, marginTop: -6 }}>Campos automáticos: {SCRIPT_FIELDS.join(" · ")}</span>
+        <Field label="Script · 2. Apresentação a empresas sem serviços NOS (NN)">
+          <textarea style={ta} value={pitchNew} onChange={(e) => setPitchNew(e.target.value)} />
+        </Field>
+        <Field label="Script · 2. Apresentação a clientes NOS">
+          <textarea style={ta} value={pitchCurrent} onChange={(e) => setPitchCurrent(e.target.value)} />
+        </Field>
+        <span style={{ fontSize: 12, color: c.muted, marginTop: -6 }}>Campos automáticos: {FIELDS_HELP}</span>
         <ErrorText>{error}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" style={btn} onClick={onClose}>Cancelar</button>

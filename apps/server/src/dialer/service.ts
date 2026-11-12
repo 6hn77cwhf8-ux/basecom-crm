@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { lisbonDay, nextContactFor, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { DEFAULT_SCRIPTS, lisbonDay, nboHead, nextContactFor, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -56,6 +56,10 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   const history = await companyFeed(db, co.id, 12);
   const decisor1 = people[0] ? `${people[0].salutation ? people[0].salutation + " " : ""}${people[0].personName}` : "";
   const decisor2 = people.find((p) => p.personName !== people[0]?.personName);
+  const vars = {
+    comercial: user.name, empresa: co.name, campanha: k.name, nbo: nboHead(co.nboCampaign),
+    decisor1, decisor2: decisor2 ? `${decisor2.salutation ? decisor2.salutation + " " : ""}${decisor2.personName}` : "",
+  };
   return {
     entry: { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id },
     campaign: { id: k.id, name: k.name, mode: k.mode },
@@ -63,7 +67,14 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
       needsKind: co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed },
     phone: phones[0] ? { id: phones[0].id, value: phones[0].value, type: phones[0].phoneType } : null,
     otherPhones: phones.slice(1).map((p) => ({ id: p.id, value: p.value, type: p.phoneType })),
-    script: renderScript(k.script, { comercial: user.name, empresa: co.name, decisor1, decisor2: decisor2 ? `${decisor2.salutation ? decisor2.salutation + " " : ""}${decisor2.personName}` : "" }),
+    script: renderScript(k.script || DEFAULT_SCRIPTS.opening, { ...vars, decisor: spokenName(people[0]?.salutation, people[0]?.personName) }),
+    // Dois passos: o ecrã mostra a abertura, confirma (ou muda) o decisor e passa à apresentação.
+    scripts: {
+      opening: k.script || DEFAULT_SCRIPTS.opening,
+      pitch: co.accountType === "client" ? k.scriptPitchCurrent || DEFAULT_SCRIPTS.pitchCurrent : k.scriptPitchNew || DEFAULT_SCRIPTS.pitchNew,
+    },
+    vars,
+    people: [...new Map(people.map((p) => [p.personName!.toLowerCase(), { salutation: p.salutation, name: p.personName! }])).values()],
     decisors: [decisor1, decisor2?.personName].filter(Boolean),
     history,
   };
@@ -104,9 +115,6 @@ export async function dialerAssignments(db: Db) {
   return r.rows as { id: string; name: string; role: string; campaignId: string | null }[];
 }
 
-export function renderScript(script: string, v: Record<string, string>) {
-  return script.replace(/\{(comercial|empresa|decisor1|decisor2)\}/g, (_, k: string) => v[k] || `[${k === "comercial" ? "comercial" : k === "empresa" ? "empresa" : k === "decisor1" ? "decisor 1" : "decisor 2"}]`);
-}
 
 /** Feedback anterior, mais recente primeiro: chamadas no CRM e histórico importado. */
 export async function companyFeed(db: Db, companyId: string, limit = 20) {
@@ -208,6 +216,8 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       await tx.update(companies).set({ walletKind: input.walletKind, walletKindConfirmed: true, updatedAt: now }).where(eq(companies.id, co.id));
       await tx.insert(companyNotes).values({ companyId: co.id, kind: "wallet", text: `Identificada como ${input.walletKind}.`, userId: user.id });
     }
+    // Decisor indicado na chamada («Mudar de decisor» na abertura ou «Decisor ausente»).
+    if (input.decisorName?.trim()) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Decisor: ${input.decisorName.trim()}` });
     const note = [outcome.label, reason?.label, input.comment?.trim()].filter(Boolean).join(" · ");
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "call", text: note, userId: user.id });
     if (input.competitor && (input.competitor.operator || input.competitor.text)) {
@@ -245,7 +255,6 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       case "no_answer": await retry(a.noAnswerRetryMinutes); break;
       case "busy": await retry(a.busyRetryMinutes); break;
       case "decisor_absent":
-        if (input.decisorName?.trim()) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Decisor: ${input.decisorName.trim()}` });
         await retry(a.noAnswerRetryMinutes, false); break;
       case "voicemail": {
         // Ao 4.º voicemail sem contacto efetivo, o número fica esgotado (continua com os outros números).

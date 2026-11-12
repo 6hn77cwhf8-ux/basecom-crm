@@ -57,6 +57,10 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     const b = (await nextEntry(db, toPublic(bia), campaignId))!;
     expect(a.company.id).not.toBe(b.company.id);
     expect(a.script).toBe(`Olá, sou ana ${tag}. Falo com Srª Maria Silva da ${a.company.name}?`);
+    // Dois passos: abertura e apresentação (NN, por omissão), com o tratamento falado do decisor.
+    expect(a.scripts.pitch).toContain("NOS Empresas");
+    expect(a.people[0]).toEqual({ salutation: "Srª", name: "Maria Silva" });
+    expect(a.vars).toMatchObject({ campanha: `PD ${tag}`, empresa: a.company.name });
     // A mesma pessoa volta a receber a que tem reservada.
     expect((await nextEntry(db, toPublic(ana), campaignId))!.company.id).toBe(a.company.id);
   });

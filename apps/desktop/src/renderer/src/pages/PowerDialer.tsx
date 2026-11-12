@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatPhone } from "@basecom/shared";
+import { formatPhone, renderScript, spokenName } from "@basecom/shared";
 import { api, type Campaign, type Catalogs, type DialerEntry, type ResultInput, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, fmtDate } from "../ui";
+import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, input } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
 
@@ -21,6 +21,12 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [campaignId, setCampaignId] = useState<string>(() => { if (!isAdmin) return ""; try { return localStorage.getItem("bc_campaign") ?? ""; } catch { return ""; } });
   const [resultKey, setResultKey] = useState(0);
   const [copied, setCopied] = useState("");
+  // Script em dois passos: abertura → (sim / mudar de decisor) → apresentação.
+  const [step, setStep] = useState<"opening" | "pitch">("opening");
+  const [decisor, setDecisor] = useState<{ salutation: string | null; name: string } | null>(null);
+  const [changing, setChanging] = useState(false);
+  const [newSal, setNewSal] = useState("");
+  const [newName, setNewName] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [cur, setCur] = useState<DialerEntry | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
@@ -48,7 +54,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     setPhase("loading"); setError(""); setCallId(null);
     try {
       const n = await api.dialerNext(campaignId);
-      setCur(n);
+      setCur(n); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
       if (!n) { setPhase("empty"); return; }
       if (autoCall && n.phone) await start(n); else setPhase("ready");
     } catch (e) { setError((e as Error).message); setPhase("idle"); }
@@ -69,7 +75,9 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     if (!callId) return;
     setBusy(true); setError("");
     try {
-      const res = await api.saveResult(callId, r);
+      // Decisor mudado na abertura: fica registado no histórico da empresa.
+      const changed = decisor && (decisor.name !== cur?.people[0]?.name);
+      const res = await api.saveResult(callId, changed && !r.decisorName ? { ...r, decisorName: `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.name}` } : r);
       setCount((x) => x + 1); setLastSummary(`${res.outcome}${res.summary.length ? " · " + res.summary.filter((s) => !s.startsWith("Nova tentativa")).join(" · ") : ""}`);
       setPhase("countdown"); setEndedAt(Date.now()); loadCampaigns();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
@@ -136,17 +144,49 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
           <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
             <section style={{ ...card, padding: "18px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script da chamada</span>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
                 {phase === "calling" && <Chip tone="brand">Em chamada · {mmss(callSecs)}</Chip>}
                 {phase === "review" && <Chip tone="warn">Chamada terminada · resultado por registar</Chip>}
               </div>
-              {cur.decisors[0] && (
-                <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "4px 0 2px" }}>
-                  <span style={{ fontSize: 13, color: c.muted }}>Responsável</span>
-                  <span style={{ fontSize: 30, fontWeight: 800, lineHeight: "36px", color: c.brand }}>{cur.decisors[0]}</span>
+{(() => {
+                const d = decisor ?? cur.people[0] ?? null;
+                const spoken = d ? spokenName(d.salutation, d.name) : "";
+                const text = renderScript(step === "opening" ? cur.scripts.opening : cur.scripts.pitch, { ...cur.vars, decisor: spoken });
+                return <p style={{ margin: 0, fontSize: 22, lineHeight: "32px", whiteSpace: "pre-wrap" }}><Highlight text={text} marks={[cur.company.name, spoken]} /></p>;
+              })()}
+              {step === "opening" && !changing && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={{ ...btnDark, height: 40 }} onClick={() => { setDecisor(decisor ?? cur.people[0] ?? null); setStep("pitch"); }}>✓ Sim, é o responsável</button>
+                  <button style={{ ...btn, height: 40 }} onClick={() => setChanging(true)}>Mudar de decisor</button>
                 </div>
               )}
-              <p style={{ margin: 0, fontSize: 22, lineHeight: "32px", whiteSpace: "pre-wrap" }}><Highlight text={cur.script} marks={[cur.company.name, ...cur.decisors]} /></p>
+              {step === "opening" && changing && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
+                  {cur.people.filter((p) => p.name !== (decisor ?? cur.people[0])?.name).length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: c.muted }}>Escolher:</span>
+                      {cur.people.filter((p) => p.name !== (decisor ?? cur.people[0])?.name).map((p) => (
+                        <button key={p.name} style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => { setDecisor(p); setChanging(false); setStep("pitch"); }}>{p.salutation ? p.salutation + " " : ""}{p.name}</button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 13, color: c.muted }}>Ou escrever:</span>
+                    <select aria-label="Tratamento" style={{ ...input, height: 36, width: 90 }} value={newSal} onChange={(e) => setNewSal(e.target.value)}>
+                      <option value="">—</option><option>Sr.</option><option>Srª</option><option>Dr.</option><option>Drª</option><option>Eng.</option><option>Engª</option>
+                    </select>
+                    <input aria-label="Nome do responsável" style={{ ...input, height: 36, flex: "1 1 220px" }} placeholder="Nome do responsável" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                    <button style={{ ...btnDark, height: 36 }} disabled={newName.trim().length < 2} onClick={() => { setDecisor({ salutation: newSal || null, name: newName.trim() }); setChanging(false); setStep("pitch"); }}>Confirmar</button>
+                    <button style={{ ...btn, height: 36 }} onClick={() => setChanging(false)}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+              {step === "pitch" && (
+                <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 13, color: c.muted }}>
+                  <span>A falar com <b style={{ color: c.ink }}>{decisor ? `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.name}` : "o responsável"}</b></span>
+                  <button style={{ border: 0, background: "none", padding: 0, cursor: "pointer", fontSize: 13, color: c.muted, textDecoration: "underline" }} onClick={() => setStep("opening")}>← Voltar à abertura</button>
+                </div>
+              )}
             </section>
             <section style={{ ...card, padding: "10px 14px", maxHeight: 220, minHeight: 0, overflow: "auto" }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Feedback anterior · mais recente primeiro</span>
@@ -166,7 +206,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
           <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <section style={{ ...card, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <b style={{ fontSize: 16, flex: 1, color: c.brand }}>{cur.company.name}</b>
+                <b style={{ fontSize: 16, flex: 1 }}>{cur.company.name}</b>
                 {copyBtn("name", cur.company.name)}
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
@@ -224,13 +264,13 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
 
 const small = { ...btn, height: 28, fontSize: 12, padding: "0 10px" };
 
-/** Script com o nome da empresa e do responsável em destaque (cor da marca). */
+/** Script com o nome da empresa e do responsável a negrito. */
 function Highlight({ text, marks }: { text: string; marks: string[] }) {
   const m = [...new Set(marks.filter((x) => x && x.length > 2))].sort((a, b) => b.length - a.length);
   if (!m.length) return <>{text}</>;
   const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const parts = text.split(new RegExp(`(${m.map(esc).join("|")})`, "g"));
-  return <>{parts.map((p, i) => (m.includes(p) ? <b key={i} style={{ color: c.brand }}>{p}</b> : <span key={i}>{p}</span>))}</>;
+  return <>{parts.map((p, i) => (m.includes(p) ? <b key={i} style={{ fontWeight: 800 }}>{p}</b> : <span key={i}>{p}</span>))}</>;
 }
 function Empty({ text, action }: { text: string; action?: React.ReactNode }) {
   return <section style={{ ...card, padding: 40, textAlign: "center", color: c.muted, display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>{text}{action}</section>;

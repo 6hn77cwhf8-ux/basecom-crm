@@ -76,10 +76,10 @@ async function checkMembers(db: Db, ids: string[]) {
   if (rows.length !== ids.length) throw new AuthError(400, "Há comerciais inativos ou inexistentes na campanha.");
 }
 
-export async function createCampaign(db: Db, by: PublicUser, input: { name: string; mode: "new" | "current"; script: string; filters: CampaignFilters; memberIds: string[] }) {
+export async function createCampaign(db: Db, by: PublicUser, input: { name: string; mode: "new" | "current"; script: string; scriptPitchNew?: string | null; scriptPitchCurrent?: string | null; filters: CampaignFilters; memberIds: string[] }) {
   await checkMembers(db, input.memberIds);
   return db.transaction(async (tx) => {
-    const [c] = await tx.insert(campaigns).values({ name: input.name.trim(), mode: input.mode, script: input.script, filters: input.filters, createdBy: by.id }).returning();
+    const [c] = await tx.insert(campaigns).values({ name: input.name.trim(), mode: input.mode, script: input.script, scriptPitchNew: input.scriptPitchNew || null, scriptPitchCurrent: input.scriptPitchCurrent || null, filters: input.filters, createdBy: by.id }).returning();
     await tx.insert(campaignMembers).values(input.memberIds.map((userId) => ({ campaignId: c!.id, userId })));
     const added = await fillEntries(tx as unknown as Db, c!.id, input.filters, input.memberIds);
     await tx.insert(auditLog).values({ userId: by.id, action: "campanha_criada", entity: "campaign", entityId: c!.id, details: `${c!.name}: ${added} empresas` });
@@ -87,19 +87,20 @@ export async function createCampaign(db: Db, by: PublicUser, input: { name: stri
   });
 }
 
-export async function updateCampaign(db: Db, by: PublicUser, id: string, patch: { name?: string; script?: string; status?: "active" | "paused" | "ended"; memberIds?: string[] }) {
+export async function updateCampaign(db: Db, by: PublicUser, id: string, patch: { name?: string; script?: string; scriptPitchNew?: string | null; scriptPitchCurrent?: string | null; status?: "active" | "paused" | "ended"; memberIds?: string[] }) {
   const c = await db.query.campaigns.findFirst({ where: eq(campaigns.id, id) });
   if (!c) throw new AuthError(404, "Campanha não encontrada.");
   if (patch.memberIds) await checkMembers(db, patch.memberIds);
   await db.transaction(async (tx) => {
-    await tx.update(campaigns).set({ ...(patch.name ? { name: patch.name.trim() } : {}), ...(patch.script !== undefined ? { script: patch.script } : {}), ...(patch.status ? { status: patch.status } : {}), updatedAt: new Date() }).where(eq(campaigns.id, id));
+    await tx.update(campaigns).set({ ...(patch.name ? { name: patch.name.trim() } : {}), ...(patch.script !== undefined ? { script: patch.script } : {}),
+      ...(patch.scriptPitchNew !== undefined ? { scriptPitchNew: patch.scriptPitchNew || null } : {}), ...(patch.scriptPitchCurrent !== undefined ? { scriptPitchCurrent: patch.scriptPitchCurrent || null } : {}), ...(patch.status ? { status: patch.status } : {}), updatedAt: new Date() }).where(eq(campaigns.id, id));
     if (patch.memberIds) {
       await tx.delete(campaignMembers).where(eq(campaignMembers.campaignId, id));
       await tx.insert(campaignMembers).values(patch.memberIds.map((userId) => ({ campaignId: id, userId })));
     }
     // Terminar a campanha liberta as empresas pendentes para outras campanhas.
     if (patch.status === "ended") await tx.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.campaignId, id), eq(campaignEntries.status, "pending")));
-    await tx.insert(auditLog).values({ userId: by.id, action: "campanha_alterada", entity: "campaign", entityId: id, details: JSON.stringify({ ...patch, script: patch.script !== undefined ? "(alterado)" : undefined }) });
+    await tx.insert(auditLog).values({ userId: by.id, action: "campanha_alterada", entity: "campaign", entityId: id, details: JSON.stringify({ ...patch, script: patch.script !== undefined ? "(alterado)" : undefined, scriptPitchNew: patch.scriptPitchNew !== undefined ? "(alterado)" : undefined, scriptPitchCurrent: patch.scriptPitchCurrent !== undefined ? "(alterado)" : undefined }) });
   });
 }
 
@@ -116,7 +117,7 @@ export async function refreshCampaign(db: Db, by: PublicUser, id: string) {
 /** Campanhas visíveis: o Administrador vê todas; os outros, as atribuídas. */
 export async function listCampaigns(db: Db, by: PublicUser) {
   const mine = by.role === "admin" ? sql`true` : sql`exists (select 1 from campaign_members m where m.campaign_id = k.id and m.user_id = ${by.id}::uuid)`;
-  const r = await db.execute(sql`select k.id, k.name, k.mode, k.status, k.script, k.filters, k.created_at as "createdAt",
+  const r = await db.execute(sql`select k.id, k.name, k.mode, k.status, k.script, k.script_pitch_new as "scriptPitchNew", k.script_pitch_current as "scriptPitchCurrent", k.filters, k.created_at as "createdAt",
       coalesce((select json_agg(json_build_object('id', u.id, 'name', u.name) order by u.name) from campaign_members m join users u on u.id = m.user_id where m.campaign_id = k.id), '[]') as members,
       (select count(*)::int from campaign_entries e where e.campaign_id = k.id) as total,
       (select count(*)::int from campaign_entries e where e.campaign_id = k.id and e.status = 'pending') as pending,
