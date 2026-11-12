@@ -45,3 +45,12 @@ button:disabled {
   opacity: 0.55;
   cursor: default !important;
 }
+
+/*
+ * O conteúdo de cada ecrã cresce para baixo e a página desce (scroll).
+ * Sem isto, cartões com «overflow: hidden» encolhiam para caber na janela e cortavam botões
+ * (ex.: o botão «Ver pré-visualização» no mapeamento de 47 colunas).
+ */
+main > * {
+  flex-shrink: 0;
+}
