@@ -29,6 +29,7 @@ export function Campaigns() {
       </div>
       {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: "#E8F5EC", color: "#1E6F33", fontSize: 14, fontWeight: 600 }}>{notice}</p>}
       <ErrorText>{error}</ErrorText>
+      {list && list.length > 0 && <Assignments campaigns={list} onError={setError} />}
       {list?.length === 0 && <p style={{ ...card, margin: 0, padding: 24, textAlign: "center", color: c.muted }}>Ainda não há campanhas.</p>}
       {list?.map((k) => (
         <article key={k.id} style={{ ...card, padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, opacity: k.status === "ended" ? 0.6 : 1 }}>
@@ -55,6 +56,35 @@ export function Campaigns() {
 }
 
 const small = { ...btn, height: 30, fontSize: 12 };
+
+/**
+ * Campanha de cada comercial no Power Dialer (Novos clientes): decide o Administrador; o comercial não escolhe.
+ * Escolher aqui também o junta aos comerciais da campanha.
+ */
+function Assignments({ campaigns, onError }: { campaigns: Campaign[]; onError: (m: string) => void }) {
+  const [rows, setRows] = useState<{ id: string; name: string; role: string; campaignId: string | null }[]>([]);
+  const [saved, setSaved] = useState("");
+  const load = () => api.dialerAssignments().then(setRows).catch((e) => onError(e.message));
+  useEffect(() => { load(); }, []);
+  const options = campaigns.filter((k) => k.mode === "new" && k.status !== "ended");
+  const current = (r: (typeof rows)[number]) => r.campaignId ?? (() => { const mine = options.filter((k) => k.status === "active" && k.members.some((m) => m.id === r.id)); return mine.length === 1 ? mine[0]!.id : ""; })();
+  return (
+    <div style={{ ...card, padding: "14px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
+      <b style={{ fontSize: 15 }}>Campanha de cada comercial · Novos clientes</b>
+      <span style={{ fontSize: 13, color: c.muted }}>O comercial entra diretamente nesta campanha no Power Dialer, sem escolher.</span>
+      {rows.map((r) => (
+        <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }}>
+          <span style={{ width: 220 }}>{r.name}</span>
+          <select style={{ ...input, height: 34, width: 320 }} value={current(r)} onChange={(e) => api.setDialerCampaign(r.id, e.target.value || null).then(() => { setSaved(r.id); setTimeout(() => setSaved(""), 1500); load(); }).catch((err) => onError(err.message))}>
+            <option value="">Sem campanha</option>
+            {options.map((k) => <option key={k.id} value={k.id}>{k.name}{k.status === "paused" ? " (em pausa)" : ""}</option>)}
+          </select>
+          {saved === r.id && <span style={{ fontSize: 13, color: c.ok, fontWeight: 600 }}>Guardado ✓</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Progress({ k }: { k: Campaign }) {
   const pct = (n: number) => (k.total ? `${(n / k.total) * 100}%` : "0%");
@@ -102,6 +132,8 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   const set = <K extends keyof CampaignFilters>(k: K, v: CampaignFilters[K]) => setF((o) => ({ ...o, [k]: v }));
+  // Concelhos: só os dos distritos escolhidos (todos, quando não há distrito escolhido).
+  const munis = f.districts?.length && opts?.municipalitiesByDistrict ? [...new Set(f.districts.flatMap((d) => opts.municipalitiesByDistrict![d] ?? []))].sort((a, b) => a.localeCompare(b, "pt")) : opts?.municipalities;
 
   return (
     <Modal title={editing ? `Editar «${campaign.name}»` : "Nova campanha"} onClose={onClose} width={720}>
@@ -125,8 +157,14 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
               <Field label="Fim de fidelização desde"><input style={input} type="date" value={f.loyaltyEndFrom ?? ""} onChange={(e) => set("loyaltyEndFrom", e.target.value || undefined)} /></Field>
               <Field label="até"><input style={input} type="date" value={f.loyaltyEndTo ?? ""} onChange={(e) => set("loyaltyEndTo", e.target.value || undefined)} /></Field>
             </div>
-            <Multi label="Distrito" all={opts?.districts} value={f.districts} onChange={(v) => set("districts", v)} />
-            <Multi label="Concelho" all={opts?.municipalities} value={f.municipalities} onChange={(v) => set("municipalities", v)} search />
+            <Multi label="Distrito" all={opts?.districts} value={f.districts} onChange={(v) => setF((o) => {
+              // Ao mudar os distritos, os concelhos que já não pertencem a nenhum deles saem da escolha.
+              const allowed = v?.length && opts?.municipalitiesByDistrict ? new Set(v.flatMap((d) => opts.municipalitiesByDistrict![d] ?? [])) : null;
+              const m = allowed ? o.municipalities?.filter((x) => allowed.has(x)) : o.municipalities;
+              return { ...o, districts: v, municipalities: m?.length ? m : undefined };
+            })} />
+            <Multi label={f.districts?.length ? `Concelho · de ${f.districts.join(", ")}` : "Concelho"} all={munis} value={f.municipalities} onChange={(v) => set("municipalities", v)} search={!f.districts?.length} />
+            {!!opts?.nboCampaigns?.length && <Multi label="Campanha NBO da NOS" all={opts.nboCampaigns.map((x) => x.v)} labels={Object.fromEntries(opts.nboCampaigns.map((x) => [x.v, `${x.v.replace(/\s*\|\s*/g, " · ")} (${fmtInt(x.n)})`]))} value={f.nboCampaigns} onChange={(v) => set("nboCampaigns", v)} />}
             <Multi label="Setor" all={opts?.sectors} value={f.sectors} onChange={(v) => set("sectors", v)} />
             <Multi label="Operadora atual" all={opts?.operators} value={f.operators} onChange={(v) => set("operators", v)} />
             <Multi label="Estado no portal NOS" all={opts?.portalStatuses} value={f.portalStatus} onChange={(v) => set("portalStatus", v)} />
@@ -157,7 +195,7 @@ function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: (
 }
 
 /** Escolha múltipla; vazio = todos. */
-function Multi({ label, all, value, onChange, search }: { label: string; all?: string[]; value?: string[]; onChange: (v: string[] | undefined) => void; search?: boolean }) {
+function Multi({ label, all, value, onChange, search, labels }: { label: string; all?: string[]; value?: string[]; onChange: (v: string[] | undefined) => void; search?: boolean; labels?: Record<string, string> }) {
   const [q, setQ] = useState("");
   if (!all?.length) return null;
   const v = value ?? [];
@@ -168,7 +206,7 @@ function Multi({ label, all, value, onChange, search }: { label: string; all?: s
       <span style={{ fontSize: 13, fontWeight: 600 }}>{label} <span style={{ color: c.muted, fontWeight: 400 }}>{v.length ? `· ${v.length} escolhido(s)` : "· todos"}</span></span>
       {search && <input style={{ ...input, height: 30 }} placeholder="Procurar…" value={q} onChange={(e) => setQ(e.target.value)} />}
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        {[...v.filter((x) => !shown.includes(x)), ...shown].map((x) => <Toggle key={x} on={v.includes(x)} label={x} onClick={() => flip(x)} />)}
+        {[...v.filter((x) => !shown.includes(x)), ...shown].map((x) => <Toggle key={x} on={v.includes(x)} label={labels?.[x] ?? x} onClick={() => flip(x)} />)}
       </div>
     </div>
   );

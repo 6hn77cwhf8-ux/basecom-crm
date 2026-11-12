@@ -8,7 +8,6 @@ export const GROUPS = [
 ] as const;
 export type Group = (typeof GROUPS)[number]["id"];
 const OPERATORS = ["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra"];
-const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 /** Data local «AAAA-MM-DDTHH:MM» → instante ISO. */
 const toIso = (local: string) => (local ? new Date(local).toISOString() : undefined);
@@ -17,8 +16,8 @@ const toIso = (local: string) => (local ? new Date(local).toISOString() : undefi
  * Ecrã do resultado (maquetas «Resultado»): botões do grupo, opções, motivo, comentários e feedback de outra operadora.
  * Mostra o tempo que falta para registar (15 s por omissão); ultrapassar não bloqueia, mas fica registado.
  */
-export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup, onBack, onSave }: {
-  cat: Catalogs; group: Group; company: { name: string; nif: string; phone?: string; decisor?: string };
+export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, onGroup, onBack, onSave }: {
+  hidden?: boolean; needsKind?: boolean; cat: Catalogs; group: Group; company: { name: string; nif: string; phone?: string; decisor?: string };
   endedAt: number; busy: boolean; error: string; onGroup: (g: Group) => void; onBack: () => void; onSave: (r: ResultInput) => void;
 }) {
   const options = useMemo(() => cat.catalogs.outcomes.filter((o) => o.active && o.group === group), [cat, group]);
@@ -31,7 +30,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
   const [nextAction, setNextAction] = useState("");
   const [services, setServices] = useState("");
   const [decisorName, setDecisorName] = useState("");
-  const [comp, setComp] = useState<{ operator?: string; renewalDate?: string; text?: string }>({});
+  const [comp, setComp] = useState<{ operator?: string; text?: string }>({});
+  const [kind, setKind] = useState<"NC" | "FC" | null>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { setOutcome(options.length === 1 ? options[0]! : null); setReason(null); }, [group]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -39,19 +39,18 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
   const secs = Math.floor((now - endedAt) / 1000);
 
   const eff = outcome?.effect;
+  /** Recusa por outro operador: operadora obrigatória e nova abordagem na data que o cliente sugerir (não automática). */
+  const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
   const needsAt = eff === "call_later" || eff === "interested" || eff === "proposal_sent" || eff === "negotiating" || reason?.effect === "other";
-  const ready = !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
+  const ready = (!needsKind || !!kind) && (!byOperator || (!!comp.operator && !!date && !!at)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
     && (eff !== "call_later" || !!at) && (!["interested", "proposal_sent", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
 
   const nextContact = useMemo(() => {
     if (!reason) return null;
-    const fmt = (d: Date) => `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-    const add = (d: Date, m: number) => { const x = new Date(d); x.setMonth(x.getMonth() + m); return x; };
-    if (reason.effect === "cooldown") return `Pode voltar a uma campanha daqui a ${reason.days} dias`;
+        if (reason.effect === "cooldown") return `Pode voltar a uma campanha daqui a ${reason.days} dias`;
     if (reason.effect === "followup_task") return `Tarefa de seguimento daqui a ${reason.days} dias`;
     if (reason.effect === "company_closed") return "Empresa marcada como encerrada e retirada de todas as campanhas";
-    if (reason.effect === "loyalty_end") return date ? `${fmt(add(new Date(date), -(reason.monthsBefore ?? 6)))} · ${reason.monthsBefore} meses antes do fim da fidelização` : "Indique o fim da fidelização";
-    if (reason.effect === "new_contract") return `${fmt(add(date ? new Date(date) : new Date(), (reason.contractMonths ?? 24) - (reason.monthsBefore ?? 6)))} · ${reason.monthsBefore} meses antes do fim dos ${reason.contractMonths} meses`;
+    if (reason.effect === "loyalty_end" || reason.effect === "new_contract") return null;
     return "Defina a data da nova abordagem (opcional)";
   }, [reason, date]);
 
@@ -60,10 +59,11 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
     onSave({
       outcomeId: outcome.id, reasonId: reason?.id, comment: comment.trim() || undefined, date: date || undefined, at: toIso(at),
       forMe: eff === "call_later" ? forMe : undefined, nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
-      decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined,
+      decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: needsKind && kind ? kind : undefined,
     });
   }
   useEffect(() => {
+    if (hidden) return;
     const k = (e: KeyboardEvent) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName !== "TEXTAREA")) { e.preventDefault(); save(); } };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -71,7 +71,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
 
   const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? "#FFF" : c.ink, borderColor: on ? c.ink : c.line });
   return (
-    <section style={{ ...card, padding: 20, display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0, overflow: "auto" }}>
+    <section style={{ ...card, padding: 20, display: hidden ? "none" : "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0, overflow: "auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Chamada terminada</span>
@@ -79,7 +79,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
           <span style={{ fontSize: 13, color: c.muted }}>NIF {company.nif}{company.phone ? ` · ${company.phone}` : ""}{company.decisor ? ` · ${company.decisor}` : ""}</span>
         </div>
         <div role="timer" style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 12, color: c.muted }}>Tempo para registar o resultado</div>
+          <div style={{ fontSize: 12, color: c.muted }}>Tempo para registar (desde que desligou)</div>
           <div style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: secs > limit ? "#D70015" : c.ink }}>{secs} / {limit} s</div>
         </div>
       </header>
@@ -99,8 +99,14 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{cat.catalogs.reasons.filter((r) => r.active).map((r) => <button key={r.id} style={pill(reason?.id === r.id)} onClick={() => setReason(r)}>{r.label}</button>)}</div>
         </Field>
       )}
-      {(reason?.effect === "loyalty_end" || reason?.effect === "new_contract") && (
-        <Field label={reason.effect === "loyalty_end" ? "Fim da fidelização" : "Data da renovação ou do novo contrato"}><input style={{ ...input, width: 200 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+      {byOperator && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
+          <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: o })}>{o}</button>)}</div></Field>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+            <Field label="Voltar a contactar em — data que o cliente sugere (obrigatório)"><input style={{ ...input, width: 230 }} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
+          </div>
+        </div>
       )}
       {nextContact && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}><b>Próximo contacto (automático):</b> {nextContact}</div>}
 
@@ -119,14 +125,22 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, onGroup
         <textarea style={{ ...input, height: 64, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} />
       </Field>
 
-      <details>
+      {needsKind && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 12px", background: c.warnSoft, borderRadius: 10 }}>
+          <b style={{ fontSize: 13 }}>Cliente NOS sem NC/FC: identifique (obrigatório)</b>
+          {(["NC", "FC"] as const).map((k) => <button key={k} style={pill(kind === k)} onClick={() => setKind(k)}>{k}</button>)}
+        </div>
+      )}
+
+      {!byOperator && <details>
         <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Feedback de outra operadora</summary>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
           <Field label="Operadora atual"><div style={{ display: "flex", gap: 4 }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: comp.operator === o ? undefined : o })}>{o}</button>)}</div></Field>
-          <Field label="Data da renovação"><input style={{ ...input, width: 170 }} type="date" value={comp.renewalDate ?? ""} onChange={(e) => setComp({ ...comp, renewalDate: e.target.value || undefined })} /></Field>
+          <Field label="Fim de fidelização"><input style={{ ...input, width: 170 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         </div>
         <Field label="O que diz da operadora atual"><input style={{ ...input, marginTop: 6 }} value={comp.text ?? ""} onChange={(e) => setComp({ ...comp, text: e.target.value || undefined })} placeholder="Ex.: paga 120 €/mês por 4 linhas e internet" /></Field>
-      </details>
+      </details>}
+      {byOperator && <Field label="O que diz da operadora atual"><input style={input} value={comp.text ?? ""} onChange={(e) => setComp({ ...comp, text: e.target.value || undefined })} placeholder="Ex.: paga 120 €/mês por 4 linhas e internet" /></Field>}
 
       <ErrorText>{error}</ErrorText>
       <footer style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>

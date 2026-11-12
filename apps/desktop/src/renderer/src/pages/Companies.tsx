@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CompanyFilters, type CompanyKpis, type CompanyRow, type FilterOptions, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, fmtInt, input, Kpi, PageHeader, td, th } from "../ui";
+import { btn, btnDark, c, card, Chip, ErrorText, fmtEur, fmtInt, input, Kpi, PageHeader, td, th } from "../ui";
 import { ScheduledDialog, TransferDialog } from "./Wallet";
 
 const PAGE = 50;
@@ -67,6 +67,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
         <Kpi label="Em carteira" value={fmtInt(kpis?.withOwner)} hint={kpis ? `NC ${fmtInt(kpis.nc)} · FC ${fmtInt(kpis.fc)}` : undefined} onClick={() => set("owner", "any")} active={f.owner === "any"} />
         <Kpi label="Não contactar" value={fmtInt(kpis?.dnc)} hint="RGPD" onClick={() => set("status", "dnc")} active={f.status === "dnc"} />
         <Kpi label="A rever" value={fmtInt(kpis?.review)} hint="duplicados e NIF a verificar" onClick={() => set("status", "review")} active={f.status === "review"} />
+        {!!kpis?.mismatch && <Kpi label="Dados não cruzam" value={fmtInt(kpis.mismatch)} hint="folha ≠ estado no portal NOS" onClick={() => set("status", "mismatch")} active={f.status === "mismatch"} />}
       </div>
 
       <section style={{ ...card, overflow: "hidden", display: "flex", flexDirection: "column" }}>
@@ -84,13 +85,13 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
             <option value="">Carteira: todas</option><option value="NC">NC</option><option value="FC">FC</option>
           </select>
           <select style={sel} aria-label="Estado" value={f.status ?? ""} onChange={(e) => set("status", e.target.value)}>
-            <option value="">Estado: todos</option><option value="dnc">Não contactar</option><option value="review">A rever</option><option value="nif">NIF a verificar</option>
+            <option value="">Estado: todos</option><option value="dnc">Não contactar</option><option value="review">A rever</option><option value="nif">NIF a verificar</option><option value="mismatch">Dados não cruzam (folha ≠ portal)</option><option value="unidentified">Clientes com NC/FC por identificar</option>
           </select>
-          <select style={{ ...sel, maxWidth: 170 }} aria-label="Distrito" value={f.district ?? ""} onChange={(e) => set("district", e.target.value)}>
+          <select style={{ ...sel, maxWidth: 170 }} aria-label="Distrito" value={f.district ?? ""} onChange={(e) => { setF((o) => ({ ...o, district: e.target.value || undefined, municipality: undefined })); setPage(0); }}>
             <option value="">Distrito: todos</option>{opts.districts.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select style={{ ...sel, maxWidth: 170 }} aria-label="Concelho" value={f.municipality ?? ""} onChange={(e) => set("municipality", e.target.value)}>
-            <option value="">Concelho: todos</option>{opts.municipalities.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="">Concelho: todos</option>{(f.district && opts.municipalitiesByDistrict?.[f.district] ? opts.municipalitiesByDistrict[f.district]! : opts.municipalities).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select style={{ ...sel, maxWidth: 200 }} aria-label="Setor" value={f.sector ?? ""} onChange={(e) => set("sector", e.target.value)}>
             <option value="">Setor: todos</option>{opts.sectors.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -104,7 +105,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
             <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>
               {isAdmin && <th style={{ ...th, width: 28 }}><input type="checkbox" aria-label="Selecionar todas desta página" checked={allPicked}
                 onChange={() => setPicked((p) => { const n = new Set(p); pageIds.forEach((id) => (allPicked ? n.delete(id) : n.add(id))); return n; })} /></th>}
-              {["NIF", "Empresa", "Tipo", "Distrito", "Concelho", "Setor", "Responsável", "Carteira", "Estado"].map((h) => <th key={h} style={th}>{h}</th>)}
+              {["NIF", "Empresa", "Tipo", "Distrito", "Concelho", "Setor", "L2B", "Responsável", "Carteira", "Estado"].map((h) => <th key={h} style={h === "L2B" ? { ...th, textAlign: "right" } : th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {data?.rows.map((r) => (
@@ -116,13 +117,14 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
                   <td style={td}>{r.district ?? "—"}</td>
                   <td style={td}>{r.municipality ?? "—"}</td>
                   <td style={{ ...td, color: r.sector ? c.ink : c.muted }}>{r.sector ?? "—"}</td>
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", color: r.l2bMonthly ? c.ink : c.muted }}>{r.l2bMonthly ? fmtEur(r.l2bMonthly) : "—"}</td>
                   <td style={td}>{r.owner ?? <span style={{ color: c.muted }}>Sem carteira</span>}</td>
-                  <td style={td}>{r.ownerId ? <Chip tone={r.walletKind === "FC" ? "warn" : "neutral"}>{r.walletKind}</Chip> : "—"}</td>
+                  <td style={td}>{r.ownerId || r.walletKindConfirmed ? <Chip tone={r.walletKind === "FC" ? "warn" : "neutral"}>{r.walletKind}</Chip> : "—"}</td>
                   <td style={td}><StatusChips r={r} /></td>
                 </tr>
               ))}
               {data && data.rows.length === 0 && (
-                <tr><td colSpan={isAdmin ? 10 : 9} style={{ ...td, textAlign: "center", color: c.muted, padding: 32 }}>
+                <tr><td colSpan={isAdmin ? 11 : 10} style={{ ...td, textAlign: "center", color: c.muted, padding: 32 }}>
                   {kpis?.total === 0 ? "Ainda não há empresas. O Administrador importa a base em «Importar ficheiro»." : "Nenhum resultado com estes filtros."}
                   {active > 0 && <> <button style={{ ...btn, height: 30, marginLeft: 8 }} onClick={clear}>Limpar filtros</button></>}
                 </td></tr>
@@ -143,13 +145,22 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   );
 }
 
-export function StatusChips({ r }: { r: Pick<CompanyRow, "doNotContact" | "needsReview" | "nifValid" | "accountType"> }) {
+/**
+ * Estado da empresa. O tipo de conta (Cliente / NN) já está noutra coluna, por isso aqui só aparecem os avisos:
+ * Não contactar, NIF, duplicado, dados que não cruzam (folha ≠ portal NOS) e NC/FC por identificar.
+ */
+export function StatusChips({ r }: { r: Pick<CompanyRow, "doNotContact" | "needsReview" | "nifValid" | "accountType" | "portalStatus" | "ownerId" | "walletKindConfirmed"> }) {
+  const mismatch = (r.accountType === "client" && r.portalStatus === "PROSPECT") || (r.accountType === "prospect" && r.portalStatus === "CLIENTE");
+  const unidentified = r.accountType === "client" && !r.ownerId && !r.walletKindConfirmed;
+  const any = r.doNotContact || !r.nifValid || r.needsReview || mismatch || unidentified;
   return (
     <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
       {r.doNotContact && <Chip tone="bad">Não contactar</Chip>}
       {!r.nifValid && <Chip tone="warn">NIF a verificar</Chip>}
       {r.needsReview && <Chip tone="warn">Duplicado a rever</Chip>}
-      {!r.doNotContact && r.nifValid && !r.needsReview && <Chip tone={r.accountType === "client" ? "ok" : "neutral"}>{r.accountType === "client" ? "Cliente NOS" : "Prospeto"}</Chip>}
+      {mismatch && <span title={`Folha: ${r.accountType === "client" ? "Cliente" : "Prospeto"} · Portal NOS: ${r.portalStatus}`}><Chip tone="warn">Não cruza com o portal</Chip></span>}
+      {unidentified && <Chip tone="brand">NC/FC por identificar</Chip>}
+      {!any && <span style={{ color: c.muted }}>—</span>}
     </span>
   );
 }

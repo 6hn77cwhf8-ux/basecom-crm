@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, like, or } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { auditLog, sessions, users } from "../db/schema.js";
 import { AuthError, hashPassword } from "../auth/service.js";
@@ -72,8 +72,20 @@ async function revokeAllSessions(db: Db, userId: string) {
   await db.update(sessions).set({ revokedAt: new Date() }).where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
 }
 
-export async function listAudit(db: Db, limit = 200) {
-  const rows = await db.query.auditLog.findMany({ orderBy: [desc(auditLog.at)], limit });
+/** Grupos do histórico de auditoria, para filtrar (as importações ficam sempre à mão). */
+export const AUDIT_GROUPS = {
+  imports: ["importacao%"],
+  wallet: ["carteira%", "nao_contactar%", "consulta_outra_carteira"],
+  contacts: ["contacto%"],
+  campaigns: ["campanha%"],
+  access: ["login%", "conta_bloqueada", "codigo_2fa%", "2fa%", "palavra_passe%", "sessao%", "logout%"],
+  admin: ["utilizador%", "configuracao%", "estado_alterado"],
+} as const;
+export type AuditGroup = keyof typeof AUDIT_GROUPS;
+
+export async function listAudit(db: Db, limit = 200, group?: AuditGroup) {
+  const where = group ? or(...AUDIT_GROUPS[group].map((p) => like(auditLog.action, p))) : undefined;
+  const rows = await db.query.auditLog.findMany({ where, orderBy: [desc(auditLog.at)], limit });
   const names = new Map((await db.query.users.findMany({ columns: { id: true, name: true } })).map((u) => [u.id, u.name]));
   return rows.map((r) => ({ ...r, userName: r.userId ? names.get(r.userId) ?? "—" : "—", targetName: r.entity === "user" && r.entityId ? names.get(r.entityId) ?? null : null }));
 }

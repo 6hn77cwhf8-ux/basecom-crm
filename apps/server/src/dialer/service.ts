@@ -86,14 +86,16 @@ export async function myDialerCampaign(db: Db, user: PublicUser) {
 export async function setDialerCampaign(db: Db, by: PublicUser, userId: string, campaignId: string | null) {
   const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!u) throw new AuthError(404, "Utilizador não encontrado.");
+  let label = "nenhuma";
   if (campaignId) {
     const k = await db.query.campaigns.findFirst({ where: eq(campaigns.id, campaignId) });
+    label = k?.name ?? label;
     if (!k || k.mode !== "new" || k.status === "ended") throw new AuthError(400, "Escolha uma campanha de Novos clientes ativa ou em pausa.");
     const m = await db.query.campaignMembers.findFirst({ where: and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, userId)) });
     if (!m) await db.insert(campaignMembers).values({ campaignId, userId });
   }
   await db.update(users).set({ dialerCampaignId: campaignId }).where(eq(users.id, userId));
-  await db.insert(auditLog).values({ userId: by.id, action: "campanha_do_comercial", entity: "user", entityId: userId, details: campaignId ?? "nenhuma" });
+  await db.insert(auditLog).values({ userId: by.id, action: "campanha_do_comercial", entity: "user", entityId: userId, details: label });
 }
 
 /** Lista para o Administrador: cada comercial e a campanha onde trabalha. */

@@ -77,35 +77,63 @@ function Limits({ kind }: { kind: keyof S }) {
 }
 
 const ACTIONS: Record<string, string> = {
+  importacao_carregada: "Importação: ficheiro carregado", importacao_gravada: "Importação gravada", importacao_anulada: "Importação anulada", importacao_cancelada: "Importação cancelada",
+  carteira_nc_fc_alterada: "NC/FC alterado", carteira_nc_fc_identificada: "NC/FC identificado", contacto_estado_alterado: "Contacto: estado alterado", contacto_acrescentado: "Contacto acrescentado",
+  campanha_criada: "Campanha criada", campanha_alterada: "Campanha alterada", campanha_do_comercial: "Campanha do comercial", consulta_outra_carteira: "Consultou empresa de outra carteira",
+  nao_contactar_marcado: "Marcou «Não contactar»", nao_contactar_retirado: "Retirou «Não contactar»",
   login: "Entrou", login_falhado: "Entrada falhada", conta_bloqueada: "Conta bloqueada", codigo_2fa_errado: "Código 2FA errado",
   "2fa_ativada": "Ativou a 2FA", palavra_passe_alterada: "Alterou a palavra-passe", utilizador_criado: "Criou utilizador",
   utilizador_alterado: "Alterou utilizador", palavra_passe_reposta: "Repôs palavra-passe", "2fa_reposta": "Repôs 2FA",
   sessao_terminada: "Terminou sessão", configuracao_alterada: "Alterou configuração",
 };
 
+const GROUPS: [string, string][] = [["", "Tudo"], ["imports", "Importações"], ["wallet", "Carteiras"], ["contacts", "Contactos"], ["campaigns", "Campanhas"], ["access", "Entradas e segurança"], ["admin", "Utilizadores e configurações"]];
+
 function Audit() {
   const [rows, setRows] = useState<AuditEntry[]>([]);
+  const [imports, setImports] = useState<AuditEntry[]>([]);
+  const [group, setGroup] = useState("");
   const [error, setError] = useState("");
-  const load = () => api.audit().then(setRows).catch((e) => setError(e.message));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    api.audit(group || undefined).then(setRows).catch((e) => setError(e.message));
+    api.audit("imports", 6).then(setImports).catch(() => undefined);
+  };
+  useEffect(() => { load(); }, [group]);
+  const isImport = (a: string) => a.startsWith("importacao");
   return (
-    <section style={{ ...card, overflow: "hidden" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${c.line}` }}>
-        <b>Histórico de auditoria</b><button style={{ ...btn, height: 30, fontSize: 12 }} onClick={load}>Atualizar</button>
-      </div>
-      <ErrorText>{error}</ErrorText>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ background: "#FAFAFA", color: c.muted, textAlign: "left" }}>{["Quando", "Quem", "O quê", "Sobre", "Detalhe"].map((h) => <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r) => (
-          <tr key={r.id} style={{ borderTop: `1px solid ${c.line}` }}>
-            <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>{fmtDateTime(r.at)}</td>
-            <td style={{ padding: "8px 12px" }}>{r.userName}</td>
-            <td style={{ padding: "8px 12px" }}>{ACTIONS[r.action] ?? r.action}</td>
-            <td style={{ padding: "8px 12px" }}>{r.targetName ?? "—"}</td>
-            <td style={{ padding: "8px 12px", color: c.muted, maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.details ?? ""}</td>
-          </tr>
-        ))}</tbody>
-      </table>
-    </section>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Importações sempre em destaque, por mais registos que haja. */}
+      <section style={{ ...card, padding: "14px 16px", borderColor: c.brand }}>
+        <b style={{ fontSize: 14 }}>Últimas importações</b>
+        {imports.length === 0 && <p style={{ margin: "6px 0 0", fontSize: 13, color: c.muted }}>Ainda não há importações.</p>}
+        {imports.map((r) => (
+          <div key={r.id} style={{ display: "grid", gridTemplateColumns: "130px 160px 200px 1fr", gap: 12, padding: "7px 0", borderBottom: `1px solid ${c.line}`, fontSize: 13 }}>
+            <span style={{ whiteSpace: "nowrap" }}>{fmtDateTime(r.at)}</span><span>{r.userName}</span><b>{ACTIONS[r.action] ?? r.action}</b><span style={{ color: c.muted }}>{r.details ?? ""}</span>
+          </div>
+        ))}
+      </section>
+      <section style={{ ...card, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${c.line}`, gap: 12, flexWrap: "wrap" }}>
+          <b>Histórico de auditoria</b>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1 }}>
+            {GROUPS.map(([id, label]) => <button key={id} onClick={() => setGroup(id)} style={{ ...btn, height: 28, fontSize: 12, padding: "0 10px", background: group === id ? c.ink : c.card, color: group === id ? "#FFF" : c.ink, borderColor: group === id ? c.ink : c.line }}>{label}</button>)}
+          </div>
+          <button style={{ ...btn, height: 30, fontSize: 12 }} onClick={load}>Atualizar</button>
+        </div>
+        <ErrorText>{error}</ErrorText>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead><tr style={{ background: "#FAFAFA", color: c.muted, textAlign: "left" }}>{["Quando", "Quem", "O quê", "Sobre", "Detalhe"].map((h) => <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.id} style={{ borderTop: `1px solid ${c.line}`, background: isImport(r.action) ? c.brandSoft : undefined, fontWeight: isImport(r.action) ? 600 : 400 }}>
+              <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>{fmtDateTime(r.at)}</td>
+              <td style={{ padding: "8px 12px" }}>{r.userName}</td>
+              <td style={{ padding: "8px 12px" }}>{ACTIONS[r.action] ?? r.action}</td>
+              <td style={{ padding: "8px 12px" }}>{r.targetName ?? "—"}</td>
+              <td title={r.details ?? ""} style={{ padding: "8px 12px", color: c.muted, maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.details ?? ""}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </section>
+    </div>
   );
 }
