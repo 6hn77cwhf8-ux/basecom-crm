@@ -47,6 +47,7 @@ export type Task = { id: string; type: string; dueAt: string; description: strin
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
 export type MyDay = { oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
 export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
+export type WalletRow = { id: string; name: string; nif: string; walletKind: string; l2bMonthly: string | null; loyaltyEnd: string | null; owner: string; lines: number; decisor: string | null; phone: string | null; lastContact: string | null; openTasks: number; nextAction: { type: string; dueAt: string } | null };
 export type WorkState = "working" | "training" | "break" | "switch";
 export type DaySummary = {
   day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;
@@ -157,6 +158,8 @@ export const api = {
   opportunityActivity: (id: string, text: string) => call(`/opportunities/${id}/activity`, { method: "POST", body: JSON.stringify({ text }) }),
   winOpportunity: (id: string) => call(`/opportunities/${id}/win`, { method: "POST", body: "{}" }),
   loseOpportunity: (id: string, reasonId: string, comment?: string) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment }) }),
+  wallet: (q: { ownerId?: string; tasks?: string; q?: string }) => call<{ companies: WalletRow[] }>(`/wallet${qs(q)}`).then((r) => r.companies),
+  callFromWallet: (id: string) => call<{ callId: string; phone: { id: string; value: string; type: string | null } }>(`/wallet/${id}/call`, { method: "POST", body: "{}" }),
   agendaPeople: () => call<{ people: { id: string; name: string }[] }>("/agenda/people").then((r) => r.people),
   createTask: (b: { companyId: string; type: string; dueAt: string; description?: string; assignedTo?: string }) => call("/agenda/tasks", { method: "POST", body: JSON.stringify(b) }),
   rescheduleTask: (id: string, dueAt: string, reason: string) => call(`/agenda/tasks/${id}/reschedule`, { method: "POST", body: JSON.stringify({ dueAt, reason }) }),

@@ -181,7 +181,7 @@ function CancelTask({ t, onClose, onDone }: { t: AgendaTask; onClose: () => void
   );
 }
 
-function NewTask({ types, me, people, onClose, onDone }: { types: string[]; me: User; people: { id: string; name: string }[]; onClose: () => void; onDone: () => void }) {
+export function NewTask({ types, me, people, onClose, onDone }: { types: string[]; me: User; people: { id: string; name: string }[]; onClose: () => void; onDone: () => void }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [company, setCompany] = useState<SearchHit | null>(null);

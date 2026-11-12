@@ -12,9 +12,10 @@ import { ImportWizard } from "./pages/ImportWizard";
 import { PowerDialer } from "./pages/PowerDialer";
 import { Agenda } from "./pages/Agenda";
 import { Opportunities } from "./pages/Opportunities";
+import { Carteira } from "./pages/Carteira";
 
 const PHASE: Partial<Record<PageId, string>> = {
-  painel: "Arranque B", atuais: "Fase 3", carteira: "Fase 3",
+  painel: "Arranque B", atuais: "Fase 3",
   pendencias: "Arranque B", tickets: "Arranque B", vendas: "Arranque B", objetivos: "Arranque B", relatorios: "Arranque B",
 };
 
@@ -50,6 +51,7 @@ export function App() {
         : <Companies me={user} onOpen={setCompanyId} onImport={() => setImporting(true)} />)
         : page === "novos" ? <PowerDialer me={user} onOpenCompany={setCompanyId} />
         : page === "agenda" ? <Agenda me={user} onOpenCompany={setCompanyId} />
+        : page === "carteira" ? <Carteira me={user} onOpenCompany={setCompanyId} />
         : page === "oportunidades" ? <Opportunities me={user} onOpenCompany={setCompanyId} />
         : page === "equipa" ? <Team me={user} /> : page === "config" ? <Settings /> : <Placeholder title={label} phase={PHASE[page] ?? "Fase seguinte"} />}
       {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
