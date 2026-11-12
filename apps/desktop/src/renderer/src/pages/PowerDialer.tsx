@@ -27,6 +27,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [changing, setChanging] = useState(false);
   const [newSal, setNewSal] = useState("");
   const [newName, setNewName] = useState("");
+  // Preview: «Consultei a NOS» obrigatório antes de ligar; «Saltar com motivo».
+  const [consulted, setConsulted] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [skipReason, setSkipReason] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [cur, setCur] = useState<DialerEntry | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
@@ -40,6 +44,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const consultedRef = useRef(false);
 
   const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
   useEffect(() => {
@@ -54,7 +59,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     setPhase("loading"); setError(""); setCallId(null);
     try {
       const n = await api.dialerNext(campaignId);
-      setCur(n); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
+      setCur(n); setConsulted(false); consultedRef.current = false; setSkipping(false); setSkipReason(""); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
       if (!n) { setPhase("empty"); return; }
       if (autoCall && n.phone) await start(n); else setPhase("ready");
     } catch (e) { setError((e as Error).message); setPhase("idle"); }
@@ -63,7 +68,8 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
 
   async function start(n = cur) {
     if (!n?.phone) return;
-    const r = await api.startCall({ companyId: n.company.id, contactId: n.phone.id, entryId: n.entry.id, source: "new" });
+    const preview = n.campaign.dialMode === "preview";
+    const r = await api.startCall({ companyId: n.company.id, contactId: n.phone.id, entryId: n.entry.id, source: preview ? "current" : "new", consultedNos: preview ? consultedRef.current : undefined });
     setCallId(r.id); setStartedAt(Date.now()); setPhase("calling");
   }
   async function hangUp(g: Group = "noanswer") {
@@ -244,7 +250,19 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               {phase === "review"
                 ? <button style={{ ...btnDark, height: 48, fontSize: 16, background: c.brand, borderColor: c.brand }} onClick={() => setPhase("result")}>Voltar ao resultado →</button>
                 : phase !== "calling"
-                ? <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button>
+                ? <>
+                  {cur.campaign.dialMode === "preview" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 600 }}><input type="checkbox" checked={consulted} onChange={(e) => { setConsulted(e.target.checked); consultedRef.current = e.target.checked; }} /> Consultei a NOS</label>
+                      {!skipping ? <button style={{ ...btn, height: 34, fontSize: 13 }} onClick={() => setSkipping(true)}>Saltar com motivo</button> : (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input style={{ ...input, height: 34, flex: 1 }} autoFocus placeholder="Motivo" value={skipReason} onChange={(e) => setSkipReason(e.target.value)} />
+                          <button style={{ ...btnDark, height: 34, fontSize: 13 }} disabled={skipReason.trim().length < 5} onClick={() => api.dialerSkip(cur.entry.id, skipReason).then(() => load(false)).catch((e) => setError(e.message))}>Saltar</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button></>
                 : <button style={{ ...btnDark, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>}
               <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»).</span>
             </section>

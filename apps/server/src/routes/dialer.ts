@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { completeTask, dialerAssignments, myDialerCampaign, setDialerCampaign, endCall, entryView, myTasks, nextEntry, releaseEntry, saveResult, startCall } from "../dialer/service.js";
+import { skipEntry, completeTask, dialerAssignments, myDialerCampaign, setDialerCampaign, endCall, entryView, myTasks, nextEntry, releaseEntry, saveResult, startCall } from "../dialer/service.js";
 
 /** Power Dialer, chamadas e Agenda: todos os perfis (cada um sobre o seu trabalho). */
 export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -21,9 +21,10 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
   });
   app.post("/dialer/next", any, async (req) => ({ next: await nextEntry(db, req.user!, z.object({ campaignId: z.string().uuid() }).parse(req.body).campaignId) }));
   app.get("/dialer/entries/:id", any, async (req) => entryView(db, req.user!, id.parse(req.params).id));
+  app.post("/dialer/entries/:id/skip", any, async (req) => { await skipEntry(db, req.user!, id.parse(req.params).id, z.object({ reason: z.string().max(500) }).parse(req.body).reason); return { ok: true }; });
   app.post("/dialer/entries/:id/release", any, async (req) => { await releaseEntry(db, req.user!, id.parse(req.params).id); return { ok: true }; });
   app.post("/calls", any, async (req) => {
-    const b = z.object({ companyId: z.string().uuid(), contactId: z.string().uuid().nullable().optional(), entryId: z.string().uuid().nullable().optional(), source: z.enum(["new", "current", "wallet", "ficha", "agenda"]) }).parse(req.body);
+    const b = z.object({ companyId: z.string().uuid(), contactId: z.string().uuid().nullable().optional(), entryId: z.string().uuid().nullable().optional(), source: z.enum(["new", "current", "wallet", "ficha", "agenda"]), consultedNos: z.boolean().optional() }).parse(req.body);
     return startCall(db, req.user!, b);
   });
   app.post("/calls/:id/end", any, async (req) => endCall(db, req.user!, id.parse(req.params).id));

@@ -129,11 +129,22 @@ export async function companyFeed(db: Db, companyId: string, limit = 20) {
   return r.rows as { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
 }
 
+/** Preview: saltar a empresa com motivo (fica no histórico); volta no dia útil seguinte. */
+export async function skipEntry(db: Db, user: PublicUser, entryId: string, reason: string) {
+  if (reason.trim().length < 5) throw new AuthError(400, "Indique o motivo para saltar.");
+  const e = await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, entryId) });
+  if (!e || e.lockedBy !== user.id) throw new AuthError(404, "Empresa não reservada para si.");
+  const k = (await db.query.campaigns.findFirst({ where: eq(campaigns.id, e.campaignId) }))!;
+  const next = nextWorkingDayStart(new Date());
+  await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: next }).where(eq(campaignEntries.id, entryId));
+  await db.insert(companyNotes).values({ companyId: e.companyId, kind: "note", userId: user.id, text: `Saltada na campanha «${k.name}»: ${reason.trim()}` });
+}
+
 export async function releaseEntry(db: Db, user: PublicUser, entryId: string) {
   await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null }).where(and(eq(campaignEntries.id, entryId), eq(campaignEntries.lockedBy, user.id)));
 }
 
-export async function startCall(db: Db, user: PublicUser, input: { companyId: string; contactId?: string | null; entryId?: string | null; source: string }) {
+export async function startCall(db: Db, user: PublicUser, input: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean }) {
   // Fora de «A trabalhar» não se marcam chamadas de campanha; depois de mudar de campanha, a chamada volta a pôr a trabalhar.
   if (input.entryId) {
     const st = await currentState(db, user.id);
@@ -151,9 +162,12 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
     const e = await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, input.entryId) });
     if (!e || e.companyId !== input.companyId) throw new AuthError(400, "Entrada de campanha inválida.");
     campaignId = e.campaignId;
+    // Preview (clientes atuais): antes de ligar, o comercial confirma que consultou a NOS.
+    const k = await db.query.campaigns.findFirst({ where: eq(campaigns.id, e.campaignId) });
+    if (k?.dialMode === "preview" && !input.consultedNos) throw new AuthError(400, "Confirme «Consultei a NOS» antes de ligar.");
     await db.update(campaignEntries).set({ lockedBy: user.id, lockedUntil: minutes(LOCK_MINUTES * 3) }).where(eq(campaignEntries.id, e.id));
   }
-  const [c] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source }).returning({ id: calls.id, startedAt: calls.startedAt });
+  const [c] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source, details: input.consultedNos ? { consultedNos: true } : null }).returning({ id: calls.id, startedAt: calls.startedAt });
   return c!;
 }
 
@@ -211,7 +225,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     const t = tx as unknown as Db;
     await tx.update(calls).set({
       endedAt, outcomeId: outcome.id, effect: outcome.effect, reasonId: reason?.id ?? null, comment: input.comment?.trim() || null,
-      details: { date: input.date, at: input.at, forMe: input.forMe, nextAction: input.nextAction, services: input.services, decisorName: input.decisorName, competitor: input.competitor },
+      details: { ...((call.details as Record<string, unknown> | null) ?? {}), date: input.date, at: input.at, forMe: input.forMe, nextAction: input.nextAction, services: input.services, decisorName: input.decisorName, competitor: input.competitor },
       savedAt: now, resultSeconds,
     }).where(eq(calls.id, callId));
 

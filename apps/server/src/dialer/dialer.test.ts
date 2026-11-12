@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
+import { calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { createCampaign } from "../campaigns/service.js";
-import { endCall, myDialerCampaign, nextEntry, saveResult, setDialerCampaign, startCall, type ResultInput } from "./service.js";
+import { endCall, skipEntry, myDialerCampaign, nextEntry, saveResult, setDialerCampaign, startCall, type ResultInput } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -175,5 +175,22 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await db.update(campaignEntries).set({ nextAt: null, assignedTo: null, lockedBy: null, lockedUntil: null }).where(eq(campaignEntries.companyId, n.company.id));
     const again = (await nextEntry(db, toPublic(ana), campaignId))!;
     if (again.company.id === n.company.id) expect(again.people[0]).toEqual({ salutation: "Sr.", name: "Rui Sá" });
+  });
+
+  it("Preview: exige «Consultei a NOS» para ligar e permite saltar com motivo", async () => {
+    await db.update(campaigns).set({ dialMode: "preview" }).where(eq(campaigns.id, campaignId));
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const n = (await nextEntry(db, toPublic(bia), campaignId))!;
+    await expect(startCall(db, toPublic(bia), { companyId: n.company.id, contactId: n.phone?.id, entryId: n.entry.id, source: "current" })).rejects.toThrow(/Consultei a NOS/);
+    const c = await startCall(db, toPublic(bia), { companyId: n.company.id, contactId: n.phone?.id, entryId: n.entry.id, source: "current", consultedNos: true });
+    await endCall(db, toPublic(bia), c.id);
+    await saveResult(db, toPublic(bia), c.id, { outcomeId: "no_answer", walletKind: "NC" });
+    expect(((await db.query.calls.findFirst({ where: eq(calls.id, c.id) }))!.details as Record<string, unknown>).consultedNos).toBe(true);
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const m = (await nextEntry(db, toPublic(bia), campaignId))!;
+    await expect(skipEntry(db, toPublic(bia), m.entry.id, "")).rejects.toThrow(/motivo/);
+    await skipEntry(db, toPublic(bia), m.entry.id, "Cliente em processo de reclamação");
+    expect((await entryOf(m.company.id)).nextAt!.getTime()).toBeGreaterThan(Date.now());
+    await db.update(campaigns).set({ dialMode: "power" }).where(eq(campaigns.id, campaignId));
   });
 });
