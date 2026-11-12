@@ -64,7 +64,7 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   return {
     entry: { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id },
     campaign: { id: k.id, name: k.name, mode: k.mode, dialMode: k.dialMode },
-    company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly,
+    company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly, district: co.district, loyaltyMonths: co.loyaltyMonths, walletKindConfirmed: co.walletKindConfirmed,
       needsKind: co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed },
     phone: phones[0] ? { id: phones[0].id, value: phones[0].value, type: phones[0].phoneType } : null,
     otherPhones: phones.slice(1).map((p) => ({ id: p.id, value: p.value, type: p.phoneType })),

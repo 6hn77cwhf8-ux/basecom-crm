@@ -35,7 +35,7 @@ export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; att
 export type DialerEntry = {
   entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };
   campaign: { id: string; name: string; mode: "new" | "current"; dialMode: "power" | "preview" };
-  company: { id: string; name: string; nif: string; accountType: "client" | "prospect"; walletKind: "NC" | "FC"; owner: string | null; municipality: string | null; operator: string | null; loyaltyEnd: string | null; l2bMonthly: string | null; needsKind: boolean };
+  company: { id: string; name: string; nif: string; accountType: "client" | "prospect"; walletKind: "NC" | "FC"; owner: string | null; municipality: string | null; operator: string | null; loyaltyEnd: string | null; l2bMonthly: string | null; needsKind: boolean; district: string | null; loyaltyMonths: number | null; walletKindConfirmed: boolean };
   phone: { id: string; value: string; type: string | null } | null;
   otherPhones: { id: string; value: string; type: string | null }[];
   script: string; decisors: string[];
@@ -45,7 +45,7 @@ export type DialerEntry = {
 export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string } };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
-export type MyDay = { calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
+export type MyDay = { calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
 export type WorkState = "working" | "training" | "break" | "switch";
 export type DaySummary = {
   day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;

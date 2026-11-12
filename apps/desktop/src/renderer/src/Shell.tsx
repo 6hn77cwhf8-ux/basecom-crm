@@ -145,11 +145,12 @@ function MyDayPanel({ onAgenda, onOpenCompany }: { onAgenda: () => void; onOpenC
     <aside aria-label="O meu dia" style={{ flex: "0 0 192px", background: c.card, borderRight: `1px solid ${c.line}`, padding: "20px 14px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 4, overflow: "auto" }}>
       <span style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>O meu dia</span>
       {!d ? <span style={{ fontSize: 13, color: c.muted }}>A carregar…</span> : <>
-        {row("Chamadas", d.calls)}
-        {row("Contactos efetivos", d.effective)}
+        {row("N.º de chamadas", d.calls)}
+        {row("Atendidas", d.effective)}
+        {row("Recebidas", d.received ?? <span title="Chega com a app Android" style={{ color: c.muted, fontWeight: 400 }}>—</span>)}
         {row("Propostas", d.proposals)}
         {row("Vendas", d.sales)}
-        {row("A trabalhar", `${Math.floor(d.worked / 3600)} h ${String(Math.floor((d.worked % 3600) / 60)).padStart(2, "0")}`)}
+        {row("Tempo de login", `${Math.floor(d.loggedIn / 3600)} h ${String(Math.floor((d.loggedIn % 3600) / 60)).padStart(2, "0")}`)}
         {row("Intervalo", `${mins(d.breakUsed)} / ${mins(d.breakLimit)} min`, d.breakUsed > d.breakLimit)}
         <span style={{ ...lab, marginTop: 14 }}>Agenda</span>
         {d.late > 0 && <button onClick={onAgenda} style={{ border: 0, background: "#FFE5E7", color: "#A1000F", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>{d.late} atrasada{d.late === 1 ? "" : "s"} →</button>}

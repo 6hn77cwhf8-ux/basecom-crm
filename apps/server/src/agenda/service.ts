@@ -94,5 +94,7 @@ export async function myDay(db: Db, user: PublicUser) {
   const t = await daySummary(db, user.id);
   const next = (await listAgenda(db, user)).slice(0, 4).map((x) => ({ id: x.id, dueAt: x.dueAt, type: x.type, company: x.company, companyId: x.companyId }));
   const late = (await listAgenda(db, user)).filter((x) => new Date(x.dueAt) < new Date()).length;
-  return { ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, late, next };
+  return { ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
+    // Chamadas recebidas: chegam com a app Android (Fase 4), que as devolve ao CRM.
+    received: null as number | null, late, next };
 }

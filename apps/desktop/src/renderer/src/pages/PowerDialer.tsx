@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPhone, renderScript, spokenName } from "@basecom/shared";
 import { api, type Campaign, type Catalogs, type DialerEntry, type ResultInput, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, input } from "../ui";
+import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
 
@@ -220,8 +220,16 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               </div>
               <div style={{ fontSize: 26, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{cur.phone ? formatPhone(cur.phone.value) : "Sem telefone"}</div>
               <span style={{ fontSize: 12, color: c.muted }}>
-                {cur.phone?.type === "mobile" ? "Móvel" : "Fixo"} · tentativa {cur.entry.attempts + 1} de {cat.catalogs.attempts.maxAttemptsTotal} · {cur.company.accountType === "client" ? "Cliente" : "NN"} · {cur.company.walletKind}{cur.company.owner ? ` · carteira de ${cur.company.owner}` : ""}
+                {cur.phone?.type === "mobile" ? "Móvel" : "Fixo"} · tentativa {cur.entry.attempts + 1} de {cat.catalogs.attempts.maxAttemptsTotal}
               </span>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 13, padding: "6px 0", borderTop: `1px solid ${c.line}`, borderBottom: `1px solid ${c.line}` }}>
+                <span style={{ color: c.muted }}>Tipo</span>
+                <b>{cur.company.accountType === "prospect" ? "NN" : cur.company.owner || cur.company.walletKindConfirmed ? cur.company.walletKind : <span style={{ color: c.brand }}>Cliente · NC/FC por identificar</span>}</b>
+                <span style={{ color: c.muted }}>L2B</span><b>{cur.company.l2bMonthly ? `${fmtEur(cur.company.l2bMonthly)}/mês` : "—"}</b>
+                <span style={{ color: c.muted }}>Meses de permanência</span><b>{cur.company.loyaltyMonths ?? "—"}</b>
+                <span style={{ color: c.muted }}>Concelho · Distrito</span><b>{[cur.company.municipality, cur.company.district].filter(Boolean).join(" · ") || "—"}</b>
+                {cur.company.owner && <><span style={{ color: c.muted }}>Carteira</span><b>{cur.company.owner}</b></>}
+              </div>
               {cur.decisors.length > 0 && <span style={{ fontSize: 13 }}>Decisores: {cur.decisors.join(" · ")}</span>}
               <button style={{ ...small, alignSelf: "flex-start" }} onClick={() => onOpenCompany(cur.company.id)}>Abrir ficha completa →</button>
             </section>
