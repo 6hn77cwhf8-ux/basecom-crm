@@ -30,7 +30,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [, tick] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.mode === "new" && k.status === "active" && k.members.some((m) => m.id === me.id)))).catch((e) => setError(e.message));
+  const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.mode === "new" && k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
   useEffect(() => { api.catalogs().then(setCat).catch((e) => setError(e.message)); loadCampaigns(); }, [me.id]);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
   const campaign = list.find((k) => k.id === campaignId);

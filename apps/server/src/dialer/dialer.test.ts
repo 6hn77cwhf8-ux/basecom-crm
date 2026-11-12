@@ -121,4 +121,12 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     expect((await db.query.companies.findFirst({ where: eq(companies.id, n.company.id) }))!.doNotContact).toBe(true);
     expect((await entryOf(n.company.id)).status).toBe("removed");
   });
+  it("o Administrador trabalha qualquer campanha (matriz de permissões); um comercial de fora não", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const [outsider] = await db.insert(users).values({ name: `fora ${tag}`, email: `fora-d${tag}@basecom.pt`, role: "sales", passwordHash: "x", mustChangePassword: false }).returning();
+    await expect(nextEntry(db, toPublic(outsider!), campaignId)).rejects.toThrow(/Não está atribuído/);
+    const n = await nextEntry(db, toPublic(admin), campaignId);
+    expect(n).not.toBeNull();
+    await db.delete(users).where(eq(users.id, outsider!.id));
+  });
 });

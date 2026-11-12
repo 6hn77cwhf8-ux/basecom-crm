@@ -19,8 +19,11 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
   const k = await db.query.campaigns.findFirst({ where: eq(campaigns.id, campaignId) });
   if (!k) throw new AuthError(404, "Campanha não encontrada.");
   if (k.status !== "active") throw new AuthError(409, k.status === "paused" ? "A campanha está em pausa." : "A campanha terminou.");
-  const member = await db.query.campaignMembers.findFirst({ where: and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, user.id)) });
-  if (!member) throw new AuthError(403, "Não está atribuído a esta campanha.");
+  // Matriz de permissões: «Trabalhar campanhas» — Comercial e Chefe de Equipa as atribuídas; Administrador todas.
+  if (user.role !== "admin") {
+    const member = await db.query.campaignMembers.findFirst({ where: and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, user.id)) });
+    if (!member) throw new AuthError(403, "Não está atribuído a esta campanha.");
+  }
 
   // Primeiro as agendadas que já chegaram (as minhas antes das do conjunto comum), depois as novas.
   const r = await db.execute(sql`update campaign_entries set locked_by = ${user.id}::uuid, locked_until = ${minutes(LOCK_MINUTES)}
