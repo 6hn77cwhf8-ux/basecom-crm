@@ -10,7 +10,8 @@ import { ResultPanel, type Group } from "./ResultPanel";
  * Ligar abre o script e, no fim, o resultado, sem sair da Carteira. O aviso de chamada a entrar chega com a app Android.
  */
 export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: string) => void }) {
-  const isAdmin = me.role === "admin";
+  // Administrador: todos; Chefe de Equipa: a sua equipa (o servidor limita).
+  const isAdmin = me.role !== "sales";
   const [rows, setRows] = useState<WalletRow[] | null>(null);
   const [owner, setOwner] = useState("");
   const [tasks, setTasks] = useState("");

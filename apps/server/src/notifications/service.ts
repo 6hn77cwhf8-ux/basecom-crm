@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { notifications, users } from "../db/schema.js";
 import type { PublicUser } from "../auth/service.js";
+import { leadsOf } from "../teams/service.js";
 
 type Kind = "result_late" | "break_over" | "training_over" | "switch_over";
 
@@ -13,6 +14,13 @@ export async function notify(db: Db, roles: ("admin" | "team_lead")[], n: { kind
   const to = await db.select({ id: users.id }).from(users).where(and(eq(users.active, true), inArray(users.role, roles)));
   const rows = to.filter((u) => u.id !== n.aboutUserId).map((u) => ({ userId: u.id, kind: n.kind, text: n.text, aboutUserId: n.aboutUserId ?? null, companyId: n.companyId ?? null, dedupeKey: n.dedupeKey ?? null }));
   if (rows.length) await db.insert(notifications).values(rows).onConflictDoNothing();
+}
+
+/** Aviso ao Chefe de Equipa da pessoa; se não estiver numa equipa com chefe, ao Administrador. */
+export async function notifyLeadOrAdmin(db: Db, aboutUserId: string, n: { kind: Kind; text: string; companyId?: string; dedupeKey?: string }) {
+  const leads = await leadsOf(db, aboutUserId);
+  if (!leads.length) return notify(db, ["admin"], { ...n, aboutUserId });
+  await db.insert(notifications).values(leads.map((userId) => ({ userId, kind: n.kind, text: n.text, aboutUserId, companyId: n.companyId ?? null, dedupeKey: n.dedupeKey ?? null }))).onConflictDoNothing();
 }
 
 export async function myNotifications(db: Db, user: PublicUser) {

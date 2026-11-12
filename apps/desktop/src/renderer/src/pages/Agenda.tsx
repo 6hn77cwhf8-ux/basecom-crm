@@ -16,7 +16,8 @@ const localInput = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 6
  * «Ligar» faz a chamada a partir da tarefa; ao guardar o resultado, a tarefa fica concluída.
  */
 export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: string) => void }) {
-  const isAdmin = me.role === "admin";
+  // Administrador: todos; Chefe de Equipa: a sua equipa (o servidor limita).
+  const isAdmin = me.role !== "sales";
   const [rows, setRows] = useState<AgendaTask[] | null>(null);
   const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
   const [who, setWho] = useState(isAdmin ? "" : me.id);

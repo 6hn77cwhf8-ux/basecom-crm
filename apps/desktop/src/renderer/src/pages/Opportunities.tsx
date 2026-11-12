@@ -11,7 +11,8 @@ const OPEN = OPPORTUNITY_STAGES.filter((s) => s.open);
  * Regra dos sete dias: alerta ao 5.º dia, atrasada ao 7.º (prazos configuráveis); nunca fecha sozinha.
  */
 export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: (id: string) => void }) {
-  const isAdmin = me.role === "admin";
+  // Administrador: todos; Chefe de Equipa: a sua equipa (o servidor limita).
+  const isAdmin = me.role !== "sales";
   const [rows, setRows] = useState<Opportunity[] | null>(null);
   const [closed, setClosed] = useState(false);
   const [owner, setOwner] = useState("");

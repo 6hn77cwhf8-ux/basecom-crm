@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, companies, companyNotes, opportunities, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
+import { canSee, visibleUserIds } from "../teams/service.js";
 
 /**
  * Oportunidades (catálogo, secção 3): etapas, regra dos sete dias (alerta ao 5.º, atrasada ao 7.º, nunca fecha sozinha),
@@ -15,14 +16,16 @@ const LABEL = Object.fromEntries(OPPORTUNITY_STAGES.map((s) => [s.id, s.label]))
 const OPEN = OPPORTUNITY_STAGES.filter((s) => s.open).map((s) => s.id) as string[];
 
 export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerId?: string; closed?: boolean } = {}) {
-  const owner = user.role === "admin" ? opts.ownerId : user.id;
+  const visible = await visibleUserIds(db, user);
+  if (opts.ownerId && visible && !visible.includes(opts.ownerId)) throw new AuthError(403, "Só vê as oportunidades da sua equipa.");
+  const owners = opts.ownerId ? [opts.ownerId] : visible;
   const rules = (await getSetting(db, "catalogs")).opportunities as OpportunityRules;
   const r = await db.execute(sql`select o.id, o.stage, o.services, o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
       o.lost_reason_id as "lostReasonId", o.company_id as "companyId", c.name as company, c.nif, c.l2b_monthly as "l2bMonthly", u.name as owner, o.owner_id as "ownerId",
       (select min(t.due_at) from tasks t where t.opportunity_id = o.id and t.status = 'open') as "nextTaskAt"
     from opportunities o join companies c on c.id = o.company_id join users u on u.id = o.owner_id
     where ${opts.closed ? sql`o.stage in ('won', 'lost') and o.closed_at > now() - interval '90 days'` : sql`o.stage not in ('won', 'lost')`}
-      ${owner ? sql`and o.owner_id = ${owner}::uuid` : sql``}
+      ${owners ? sql`and o.owner_id in (${sql.join(owners.map((w) => sql`${w}::uuid`), sql`, `)})` : sql``}
     order by o.last_activity_at asc limit 1000`);
   const now = new Date();
   return (r.rows as Record<string, unknown>[]).map((o) => ({
@@ -34,7 +37,7 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
 
 async function load(db: Db, user: PublicUser, id: string) {
   const o = await db.query.opportunities.findFirst({ where: eq(opportunities.id, id) });
-  if (!o || (o.ownerId !== user.id && user.role !== "admin")) throw new AuthError(404, "Oportunidade não encontrada.");
+  if (!o || (o.ownerId !== user.id && !(user.role !== "sales" && (await canSee(db, user, o.ownerId))))) throw new AuthError(404, "Oportunidade não encontrada.");
   if (!OPEN.includes(o.stage)) throw new AuthError(409, "Esta oportunidade já está fechada.");
   return o;
 }

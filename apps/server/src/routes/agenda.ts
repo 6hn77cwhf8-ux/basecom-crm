@@ -14,7 +14,7 @@ export async function agendaRoutes(app: FastifyInstance, opts: { db: Db }) {
 
   app.get("/agenda", any, async (req) => ({ tasks: await listAgenda(db, req.user!, z.object({ userId: z.string().uuid().optional() }).parse(req.query)) }));
   app.get("/me/day", any, async (req) => myDay(db, req.user!));
-  app.get("/agenda/people", admin, async () => ({ people: await agendaPeople(db) }));
+  app.get("/agenda/people", any, async (req) => ({ people: req.user!.role === "sales" ? [] : await agendaPeople(db, req.user!) }));
   app.post("/agenda/tasks", any, async (req) => {
     const b = z.object({ companyId: z.string().uuid(), type: z.string().min(1).max(60), dueAt: instant, description: z.string().max(1000).optional(), assignedTo: z.string().uuid().optional() }).parse(req.body);
     return createTask(db, req.user!, b);

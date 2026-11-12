@@ -6,6 +6,7 @@ import { getSetting } from "../settings.js";
 import { startCall } from "../dialer/service.js";
 import { daySummary } from "../time/service.js";
 import { listOpportunities } from "../opportunities/service.js";
+import { canSee, visibleUserIds, visiblePeople } from "../teams/service.js";
 
 /**
  * Agenda (Fase 3, passo 5): tarefas de cada comercial — callbacks, seguimentos, próximas ações das oportunidades.
@@ -14,19 +15,22 @@ import { listOpportunities } from "../opportunities/service.js";
  */
 
 export async function listAgenda(db: Db, user: PublicUser, opts: { userId?: string } = {}) {
-  const who = user.role === "admin" ? opts.userId : user.id;
+  // Comercial: a sua; Chefe de Equipa: a da equipa (ou de uma pessoa dela); Administrador: todas.
+  const visible = await visibleUserIds(db, user);
+  if (opts.userId && visible && !visible.includes(opts.userId)) throw new AuthError(403, "Só vê a agenda da sua equipa.");
+  const whoList = opts.userId ? [opts.userId] : visible;
   const r = await db.execute(sql`select t.id, t.type, t.due_at as "dueAt", t.description, t.origin, t.status, t.opportunity_id as "opportunityId",
       t.company_id as "companyId", c.name as company, c.nif, c.municipality, u.name as "assignedName", t.assigned_to as "assignedTo",
       (select cc.value from company_contacts cc where cc.company_id = c.id and cc.kind = 'phone' and cc.status = 'valid' order by cc.is_primary desc, cc.created_at limit 1) as phone
     from tasks t join companies c on c.id = t.company_id join users u on u.id = t.assigned_to
-    where t.status = 'open' ${who ? sql`and t.assigned_to = ${who}::uuid` : sql``}
+    where t.status = 'open' ${whoList ? sql`and t.assigned_to in (${sql.join(whoList.map((w) => sql`${w}::uuid`), sql`, `)})` : sql``}
     order by t.due_at limit 1000`);
   return r.rows as { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null }[];
 }
 
 async function loadTask(db: Db, user: PublicUser, id: string) {
   const t = await db.query.tasks.findFirst({ where: eq(tasks.id, id) });
-  if (!t || (t.assignedTo !== user.id && user.role !== "admin")) throw new AuthError(404, "Tarefa não encontrada.");
+  if (!t || (t.assignedTo !== user.id && !(user.role !== "sales" && (await canSee(db, user, t.assignedTo))))) throw new AuthError(404, "Tarefa não encontrada.");
   if (t.status !== "open") throw new AuthError(409, "Esta tarefa já foi fechada.");
   return t;
 }
@@ -34,7 +38,7 @@ async function loadTask(db: Db, user: PublicUser, id: string) {
 export async function createTask(db: Db, user: PublicUser, input: { companyId: string; type: string; dueAt: string; description?: string; assignedTo?: string }) {
   const cat = await getSetting(db, "catalogs");
   if (!(cat.taskTypes as string[]).includes(input.type)) throw new AuthError(400, "Tipo de tarefa desconhecido.");
-  const assignedTo = input.assignedTo && user.role === "admin" ? input.assignedTo : user.id;
+  const assignedTo = input.assignedTo && user.role !== "sales" && (await canSee(db, user, input.assignedTo)) ? input.assignedTo : user.id;
   const co = await db.query.companies.findFirst({ where: eq(companies.id, input.companyId) });
   if (!co) throw new AuthError(404, "Empresa não encontrada.");
   const [t] = await db.insert(tasks).values({ companyId: co.id, type: input.type, assignedTo, dueAt: new Date(input.dueAt), description: input.description?.trim() || null, origin: "manual", createdBy: user.id }).returning();
@@ -74,9 +78,9 @@ export async function callFromTask(db: Db, user: PublicUser, id: string) {
   return { callId: c.id, phone: phone ? { id: phone.id, value: phone.value, type: phone.phoneType } : null };
 }
 
-/** Pessoas cujas agendas o Administrador pode consultar. */
-export async function agendaPeople(db: Db) {
-  return db.select({ id: users.id, name: users.name }).from(users).where(and(eq(users.active, true), inArray(users.role, ["sales", "team_lead", "admin"]))).orderBy(users.name);
+/** Pessoas cujas agendas, carteiras e oportunidades o ator pode consultar (equipa ou toda a estrutura). */
+export async function agendaPeople(db: Db, actor: PublicUser) {
+  return (await visiblePeople(db, actor)).map((p) => ({ id: p.id, name: p.name }));
 }
 
 const fmt = (d: Date) => d.toLocaleString("pt-PT", { timeZone: "Europe/Lisbon", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -93,9 +97,10 @@ export async function myDay(db: Db, user: PublicUser) {
     from calls where user_id = ${user.id}::uuid and saved_at is not null
       and (saved_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date`);
   const t = await daySummary(db, user.id);
-  const next = (await listAgenda(db, user)).slice(0, 4).map((x) => ({ id: x.id, dueAt: x.dueAt, type: x.type, company: x.company, companyId: x.companyId }));
-  const late = (await listAgenda(db, user)).filter((x) => new Date(x.dueAt) < new Date()).length;
-  const opps = await listOpportunities(db, user, { ownerId: user.id });
+  const mine = await listAgenda(db, { ...user, role: "sales" });
+  const next = mine.slice(0, 4).map((x) => ({ id: x.id, dueAt: x.dueAt, type: x.type, company: x.company, companyId: x.companyId }));
+  const late = mine.filter((x) => new Date(x.dueAt) < new Date()).length;
+  const opps = await listOpportunities(db, { ...user, role: "sales" }, { ownerId: user.id });
   const oppsLate = opps.filter((o) => o.alert?.level === "late").length;
   const oppsWarn = opps.filter((o) => o.alert?.level === "warn").length;
   return { oppsLate, oppsWarn, ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,

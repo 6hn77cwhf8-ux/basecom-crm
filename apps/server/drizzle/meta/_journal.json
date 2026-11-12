@@ -99,6 +99,13 @@
       "when": 1794503387502,
       "tag": "0013_avisos",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794510119607,
+      "tag": "0014_equipas",
+      "breakpoints": true
     }
   ]
 }

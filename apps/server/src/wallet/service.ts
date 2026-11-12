@@ -3,13 +3,16 @@ import type { Db } from "../db/client.js";
 import { companies, companyContacts } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { startCall } from "../dialer/service.js";
+import { visibleUserIds } from "../teams/service.js";
 
 /**
  * C2C / Carteira (maqueta 9): as empresas da carteira de cada comercial, com decisor, telefone, linhas (RGU),
  * próxima ação, último contacto e tarefas abertas. O comercial vê a sua; o Administrador escolhe de quem (ou todas).
  */
 export async function walletList(db: Db, user: PublicUser, opts: { ownerId?: string; tasks?: "with" | "without" | "late"; q?: string } = {}) {
-  const owner = user.role === "admin" ? opts.ownerId : user.id;
+  const visible = await visibleUserIds(db, user);
+  if (opts.ownerId && visible && !visible.includes(opts.ownerId)) throw new AuthError(403, "Só vê as carteiras da sua equipa.");
+  const owners = opts.ownerId ? [opts.ownerId] : visible;
   const q = opts.q?.trim();
   const digits = q?.replace(/\D/g, "") ?? "";
   const r = await db.execute(sql`select c.id, c.name, c.nif, c.wallet_kind as "walletKind", c.l2b_monthly as "l2bMonthly", c.loyalty_end as "loyaltyEnd", u.name as owner,
@@ -21,7 +24,7 @@ export async function walletList(db: Db, user: PublicUser, opts: { ownerId?: str
       (select count(*)::int from tasks t where t.company_id = c.id and t.status = 'open') as "openTasks",
       (select json_build_object('type', t.type, 'dueAt', t.due_at) from tasks t where t.company_id = c.id and t.status = 'open' order by t.due_at limit 1) as "nextAction"
     from companies c join users u on u.id = c.owner_id
-    where c.owner_id is not null ${owner ? sql`and c.owner_id = ${owner}::uuid` : sql``}
+    where c.owner_id is not null ${owners ? sql`and c.owner_id in (${sql.join(owners.map((w) => sql`${w}::uuid`), sql`, `)})` : sql``}
       ${opts.tasks === "with" ? sql`and exists (select 1 from tasks t where t.company_id = c.id and t.status = 'open')` : sql``}
       ${opts.tasks === "without" ? sql`and not exists (select 1 from tasks t where t.company_id = c.id and t.status = 'open')` : sql``}
       ${opts.tasks === "late" ? sql`and exists (select 1 from tasks t where t.company_id = c.id and t.status = 'open' and t.due_at < now())` : sql``}

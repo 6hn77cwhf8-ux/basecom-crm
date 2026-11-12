@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { AuthError } from "../auth/service.js";
 import { daySummary, heartbeat, setState, teamToday } from "../time/service.js";
+import { canSee } from "../teams/service.js";
 
 /** Estados (A trabalhar, Formação, Intervalo, Mudança de campanha) e ponto. */
 export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -17,7 +18,7 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
   });
   app.get("/time/today", any, async (req) => {
     const { userId } = z.object({ userId: z.string().uuid().optional() }).parse(req.query);
-    if (userId && userId !== req.user!.id && req.user!.role !== "admin") throw new AuthError(403, "Só vê os seus próprios tempos.");
+    if (userId && !(await canSee(db, req.user!, userId))) throw new AuthError(403, "Só vê os tempos da sua equipa.");
     return daySummary(db, userId ?? req.user!.id);
   });
   app.get("/time/team", any, async (req) => ({ people: await teamToday(db, req.user!) }));

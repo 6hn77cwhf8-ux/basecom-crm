@@ -69,7 +69,7 @@ export function Team({ me }: { me: User }) {
         </table>
       </section>
       <p style={{ margin: 0, fontSize: 12, color: c.muted }}>Desativar não apaga o histórico; termina as sessões abertas. Cada alteração fica na auditoria.</p>
-      {isAdmin && <Ponto />}
+      {me.role !== "sales" && <Ponto />}
     </>
   );
 }

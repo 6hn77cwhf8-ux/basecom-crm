@@ -1,10 +1,11 @@
-import { and, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { and, inArray, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { lisbonDay } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, timeEntries, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { notify } from "../notifications/service.js";
+import { canSee, visibleUserIds } from "../teams/service.js";
 
 /**
  * Estados do comercial e registo de ponto (catálogo, secção 14).
@@ -29,6 +30,7 @@ export async function setState(db: Db, actor: PublicUser, userId: string, state:
   if (actor.id !== userId) {
     if (actor.role === "sales") throw new AuthError(403, "Só o Chefe de Equipa ou o Administrador podem mudar o estado de outra pessoa.");
     if (state !== "training") throw new AuthError(400, "Pode apenas colocar outra pessoa em formação.");
+    if (!(await canSee(db, actor, userId))) throw new AuthError(403, "Esta pessoa não é da sua equipa.");
   }
   await closeStale(db);
   const now = new Date();
@@ -93,7 +95,9 @@ export async function daySummary(db: Db, userId: string, now = new Date()) {
 
 /** Quem vê o quê: o comercial vê os seus; o Administrador vê toda a estrutura (o Chefe de Equipa, a sua equipa, quando houver equipas). */
 export async function teamToday(db: Db, actor: PublicUser) {
-  if (actor.role !== "admin") throw new AuthError(403, "Só o Administrador vê os tempos de toda a estrutura.");
-  const people = await db.select({ id: users.id, name: users.name, role: users.role }).from(users).where(and(eq(users.active, true), sql`${users.role} <> 'admin'`)).orderBy(users.name);
+  if (actor.role === "sales") throw new AuthError(403, "Só o Chefe de Equipa (a sua equipa) e o Administrador veem os tempos de outras pessoas.");
+  const v = await visibleUserIds(db, actor);
+  const people = await db.select({ id: users.id, name: users.name, role: users.role }).from(users)
+    .where(and(eq(users.active, true), sql`${users.role} <> 'admin'`, v === null ? sql`true` : inArray(users.id, v.filter((x) => x !== actor.id)))).orderBy(users.name);
   return Promise.all(people.map(async (p) => ({ ...p, ...(await daySummary(db, p.id)) })));
 }

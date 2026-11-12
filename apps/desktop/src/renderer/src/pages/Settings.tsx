@@ -3,12 +3,14 @@ import { api, type AuditEntry, type Settings as S } from "../api";
 import { btn, btnDark, c, card, ErrorText, fmtDateTime, input, PageHeader } from "../ui";
 import { Campaigns } from "./Campaigns";
 import { CatalogSettings } from "./CatalogSettings";
+import { TeamsSettings } from "./TeamsSettings";
 
-type Section = "timeLimits" | "catalogs" | "campaigns" | "auth" | "audit";
+type Section = "timeLimits" | "catalogs" | "campaigns" | "teams" | "auth" | "audit";
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "timeLimits", label: "Limites de tempo" },
   { id: "catalogs", label: "Catálogos (resultados, motivos, prazos)" },
   { id: "campaigns", label: "Campanhas e scripts" },
+  { id: "teams", label: "Equipas" },
   { id: "auth", label: "Segurança e entrada" },
   { id: "audit", label: "Histórico de auditoria" },
 ];
@@ -38,9 +40,9 @@ export function Settings() {
           {SECTIONS.map((s) => (
             <button key={s.id} onClick={() => setSection(s.id)} style={{ fontFamily: "inherit", textAlign: "left", border: 0, padding: "8px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", color: c.ink, background: section === s.id ? c.brandSoft : "transparent", fontWeight: section === s.id ? 600 : 400, boxShadow: section === s.id ? `inset 3px 0 0 ${c.brand}` : "none" }}>{s.label}</button>
           ))}
-          <span style={{ fontSize: 12, color: c.muted, padding: "8px 12px" }}>As restantes secções (equipas, ciclos…) chegam com as fases seguintes.</span>
+          <span style={{ fontSize: 12, color: c.muted, padding: "8px 12px" }}>As restantes secções (ciclos, comissões…) chegam com o Arranque B.</span>
         </nav>
-        {section === "audit" ? <Audit /> : section === "catalogs" ? <CatalogSettings /> : section === "campaigns" ? <Campaigns /> : <Limits key={section} kind={section} />}
+        {section === "audit" ? <Audit /> : section === "catalogs" ? <CatalogSettings /> : section === "teams" ? <TeamsSettings /> : section === "campaigns" ? <Campaigns /> : <Limits key={section} kind={section} />}
       </div>
     </>
   );
