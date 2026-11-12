@@ -145,7 +145,8 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       {cur && cat && (phase === "ready" || phase === "calling" || phase === "loading" || phase === "review") && (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 12, flex: 1, minHeight: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-            <section style={{ ...card, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Metade de cima: script; metade de baixo: feedback anterior. */}
+            <section style={{ ...card, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14, flex: "1 1 0", minHeight: 0, overflow: "auto" }}>
               <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
@@ -193,7 +194,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               )}
               </div>
             </section>
-            <section style={{ ...card, padding: "12px 16px", flex: 1, minHeight: 180, overflow: "auto" }}>
+            <section style={{ ...card, padding: "12px 16px", flex: "1 1 0", minHeight: 0, overflow: "auto" }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Feedback anterior · mais recente primeiro</span>
               {cur.history.length === 0 && <p style={{ fontSize: 13, color: c.muted }}>Sem histórico.</p>}
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 6 }}><tbody>
