@@ -6,6 +6,7 @@ import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { currentState, setState } from "../time/service.js";
 import { notifyLeadOrAdmin } from "../notifications/service.js";
+import { queueDial } from "../phone/service.js";
 
 /**
  * Power Dialer (catálogo, secções 2 e 14): fila por comercial, chamadas e consequências automáticas.
@@ -168,8 +169,10 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
     if (k?.dialMode === "preview" && !input.consultedNos) throw new AuthError(400, "Confirme «Consultei a NOS» antes de ligar.");
     await db.update(campaignEntries).set({ lockedBy: user.id, lockedUntil: minutes(LOCK_MINUTES * 3) }).where(eq(campaignEntries.id, e.id));
   }
-  const [c] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source, details: input.consultedNos ? { consultedNos: true } : null }).returning({ id: calls.id, startedAt: calls.startedAt });
-  return c!;
+  const [c0] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source, details: input.consultedNos ? { consultedNos: true } : null }).returning({ id: calls.id, startedAt: calls.startedAt });
+  // Com o telemóvel emparelhado e ligado, o próprio telemóvel marca o número (app BASECOM, Fase 4).
+  const viaPhone = phone ? await queueDial(db, user.id, c0!.id, phone) : false;
+  return { ...c0!, viaPhone };
 }
 
 export async function endCall(db: Db, user: PublicUser, callId: string) {

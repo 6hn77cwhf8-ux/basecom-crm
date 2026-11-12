@@ -16,6 +16,7 @@ import { opportunityRoutes } from "./routes/opportunities.js";
 import { walletRoutes } from "./routes/wallet.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { teamRoutes } from "./routes/teams.js";
+import { phoneRoutes } from "./routes/phone.js";
 import { timeRoutes } from "./routes/time.js";
 
 export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean }) {
@@ -49,6 +50,7 @@ export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean
   app.register(walletRoutes, { db: deps.db });
   app.register(notificationRoutes, { db: deps.db });
   app.register(teamRoutes, { db: deps.db });
+  app.register(phoneRoutes, { db: deps.db });
   app.register(timeRoutes, { db: deps.db });
   return app;
 }

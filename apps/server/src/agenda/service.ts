@@ -5,6 +5,7 @@ import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { startCall } from "../dialer/service.js";
 import { daySummary } from "../time/service.js";
+import { receivedToday } from "../phone/service.js";
 import { listOpportunities } from "../opportunities/service.js";
 import { canSee, visibleUserIds, visiblePeople } from "../teams/service.js";
 
@@ -105,5 +106,5 @@ export async function myDay(db: Db, user: PublicUser) {
   const oppsWarn = opps.filter((o) => o.alert?.level === "warn").length;
   return { oppsLate, oppsWarn, ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
     // Chamadas recebidas: chegam com a app Android (Fase 4), que as devolve ao CRM.
-    received: null as number | null, late, next };
+    received: await receivedToday(db, user.id), late, next };
 }

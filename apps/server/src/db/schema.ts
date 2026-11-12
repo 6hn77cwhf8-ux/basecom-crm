@@ -284,6 +284,11 @@ export const calls = pgTable("calls", {
   savedAt: timestamp("saved_at", { withTimezone: true }),
   /** Segundos entre o fim da chamada e o registo do resultado (limite: 15 s, configurável). */
   resultSeconds: integer("result_seconds"),
+  /** Vindos da app Android (Fase 4): duração real da conversa e se foi atendida (duração > 0 no registo do telemóvel). */
+  durationSeconds: integer("duration_seconds"),
+  answered: boolean("answered"),
+  /** app = início/fim informados pelo telemóvel · manual = botões do CRM */
+  via: text("via").notNull().default("manual"),
 }, (t) => [index("calls_company_idx").on(t.companyId), index("calls_user_idx").on(t.userId, t.startedAt), index("calls_entry_idx").on(t.entryId)]);
 
 /** Oportunidades (catálogo 3): Interesse → Levantamento → Proposta → Negociação → Documentos → Ganha/Perdida. */
@@ -365,3 +370,49 @@ export const teamMembers = pgTable("team_members", {
   teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
 }, (t) => [uniqueIndex("team_members_user_idx").on(t.userId)]);
+
+/**
+ * Telemóveis emparelhados (Fase 4, app BASECOM no Android): um por comercial.
+ * O token fica guardado só como hash; o telemóvel envia-o em cada pedido.
+ */
+export const devices = pgTable("devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  model: text("model"),
+  tokenHash: text("token_hash").notNull().unique(),
+  pairedAt: timestamp("paired_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [index("devices_user_idx").on(t.userId)]);
+
+/** Código de 6 algarismos para emparelhar o telemóvel (válido 10 minutos, uma vez). */
+export const pairingCodes = pgTable("pairing_codes", {
+  code: text("code").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+});
+
+/** Pedidos do CRM ao telemóvel: «liga para este número». */
+export const phoneCommands = pgTable("phone_commands", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  deviceId: uuid("device_id").notNull().references(() => devices.id, { onDelete: "cascade" }),
+  callId: uuid("call_id").references(() => calls.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  /** pending | sent | done | expired */
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+}, (t) => [index("phone_commands_device_idx").on(t.deviceId, t.status)]);
+
+/** Chamadas recebidas no telemóvel do comercial (aviso «Chamada a entrar» e contagem «Recebidas»). */
+export const incomingCalls = pgTable("incoming_calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  ringingAt: timestamp("ringing_at", { withTimezone: true }).notNull().defaultNow(),
+  answered: boolean("answered"),
+  durationSeconds: integer("duration_seconds"),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+}, (t) => [index("incoming_calls_user_idx").on(t.userId, t.ringingAt)]);
