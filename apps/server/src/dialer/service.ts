@@ -5,6 +5,7 @@ import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { currentState, setState } from "../time/service.js";
+import { notify } from "../notifications/service.js";
 
 /**
  * Power Dialer (catálogo, secções 2 e 14): fila por comercial, chamadas e consequências automáticas.
@@ -357,6 +358,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     }
     if (resultSeconds > (await getSetting(t, "timeLimits")).resultSeconds) summary.push(`Resultado registado em ${resultSeconds} s`);
   });
+  // Excesso no registo do resultado: avisa o Chefe de Equipa (e o Administrador, enquanto não há equipas).
+  const limit = (await getSetting(db, "timeLimits")).resultSeconds;
+  if (resultSeconds > limit) await notify(db, ["team_lead", "admin"], { kind: "result_late", aboutUserId: user.id, companyId: co.id, text: `${user.name} registou o resultado de ${co.name} em ${resultSeconds} s (limite ${limit} s).` });
   return { outcome: outcome.label, resultSeconds, summary };
 }
 

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, pgEnum, boolean, integer, jsonb, numeric, date, serial, index, customType } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, pgEnum, boolean, integer, jsonb, numeric, date, serial, index, uniqueIndex, customType } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 
@@ -335,3 +335,21 @@ export const timeEntries = pgTable("time_entries", {
   /** Quem pôs neste estado, se não foi o próprio (formação marcada pelo Chefe de Equipa ou Administrador). */
   setBy: uuid("set_by").references(() => users.id),
 }, (t) => [index("time_entries_user_idx").on(t.userId, t.startedAt)]);
+
+/**
+ * Avisos (catálogo, secção 14): resultado registado fora do prazo → Chefe de Equipa (e Administrador, enquanto não há equipas);
+ * intervalo acima do limite → Administrador. Cada pessoa vê os seus.
+ */
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** result_late | break_over | training_over | switch_over */
+  kind: text("kind").notNull(),
+  text: text("text").notNull(),
+  aboutUserId: uuid("about_user_id").references(() => users.id, { onDelete: "set null" }),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  /** Para não repetir o mesmo aviso no mesmo dia (ex.: «break_over:2026-11-12:<pessoa>»). */
+  dedupeKey: text("dedupe_key"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+}, (t) => [index("notifications_user_idx").on(t.userId, t.readAt), uniqueIndex("notifications_dedupe_idx").on(t.userId, t.dedupeKey)]);

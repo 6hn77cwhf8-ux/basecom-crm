@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
+import { notifications, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { createCampaign } from "../campaigns/service.js";
 import { endCall, skipEntry, myDialerCampaign, nextEntry, saveResult, setDialerCampaign, startCall, type ResultInput } from "./service.js";
@@ -192,5 +192,16 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await skipEntry(db, toPublic(bia), m.entry.id, "Cliente em processo de reclamação");
     expect((await entryOf(m.company.id)).nextAt!.getTime()).toBeGreaterThan(Date.now());
     await db.update(campaigns).set({ dialMode: "power" }).where(eq(campaigns.id, campaignId));
+  });
+
+  it("Resultado registado depois dos 15 s: aviso ao Chefe de Equipa / Administrador", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const n = (await nextEntry(db, toPublic(ana), campaignId))!;
+    const c = await startCall(db, toPublic(ana), { companyId: n.company.id, contactId: n.phone?.id, entryId: n.entry.id, source: "new" });
+    await db.update(calls).set({ endedAt: new Date(Date.now() - 40_000) }).where(eq(calls.id, c.id));
+    await saveResult(db, toPublic(ana), c.id, { outcomeId: "no_answer", walletKind: "NC" });
+    const got = await db.select().from(notifications).where(and(eq(notifications.userId, admin.id), eq(notifications.kind, "result_late")));
+    expect(got.length).toBe(1);
+    expect(got[0]!.text).toContain(`ana ${tag}`);
   });
 });

@@ -92,6 +92,13 @@
       "when": 1794498820750,
       "tag": "0012_modo_marcacao",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794503387502,
+      "tag": "0013_avisos",
+      "breakpoints": true
     }
   ]
 }

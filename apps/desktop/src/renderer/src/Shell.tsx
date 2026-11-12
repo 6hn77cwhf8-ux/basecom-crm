@@ -45,6 +45,7 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
             <Icon d={open ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"} />
           </button>
         </div>
+        <Bell open={open} onOpenCompany={onOpenCompany} />
         {open && <SearchBox onOpen={onOpenCompany} />}
         {items.map((n) => {
           const on = n.id === page;
@@ -168,5 +169,39 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
         <button onClick={onAgenda} style={{ border: 0, background: "transparent", padding: "8px 0", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 12, color: c.muted, textDecoration: "underline" }}>Abrir a Agenda</button>
       </>}
     </aside>
+  );
+}
+
+/** Avisos (resultado fora do prazo, intervalo acima do limite…): sino com o número por ler. Atualiza a cada minuto. */
+function Bell({ open, onOpenCompany }: { open: boolean; onOpenCompany: (id: string) => void }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.notifications>> | null>(null);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const load = () => api.notifications().then(setData).catch(() => undefined);
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!data || (data.items.length === 0)) return null;
+  const toggle = () => { setShow(!show); if (!show && data.unread) api.readNotifications().then(() => setData({ ...data, unread: 0 })).catch(() => undefined); };
+  return (
+    <div style={{ position: "relative", marginBottom: 8 }}>
+      <button onClick={toggle} title="Avisos" style={{ display: "flex", alignItems: "center", gap: 10, height: 34, width: "100%", padding: "0 12px", borderRadius: 10, border: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 14, background: data.unread ? "#FFE5E7" : "transparent", color: data.unread ? "#A1000F" : c.ink, fontWeight: data.unread ? 700 : 400 }}>
+        <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" />
+        {open && <span style={{ flex: 1, textAlign: "left" }}>Avisos</span>}
+        {data.unread > 0 && <span style={{ fontSize: 11, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, background: "#D70015", color: "#FFF", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{data.unread}</span>}
+      </button>
+      {show && (
+        <div style={{ position: "fixed", left: open ? 264 : 72, top: 60, width: 380, maxHeight: 480, overflow: "auto", background: c.card, border: `1px solid ${c.line}`, borderRadius: 14, boxShadow: "0 12px 40px rgba(0,0,0,.14)", zIndex: 40, padding: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 10px" }}><b>Avisos</b><button onClick={() => setShow(false)} style={{ border: 0, background: "none", cursor: "pointer", color: c.muted }}>Fechar</button></div>
+          {data.items.map((n) => (
+            <div key={n.id} onClick={() => { if (n.companyId) { onOpenCompany(n.companyId); setShow(false); } }} style={{ padding: "8px", borderTop: `1px solid ${c.line}`, fontSize: 13, cursor: n.companyId ? "pointer" : "default", background: n.read ? "transparent" : c.brandSoft, borderRadius: 8 }}>
+              <div>{n.text}</div>
+              <div style={{ fontSize: 11, color: c.muted, marginTop: 2 }}>{new Date(n.createdAt).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" })}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

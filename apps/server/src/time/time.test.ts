@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { companies, timeEntries, users } from "../db/schema.js";
+import { companies, notifications, timeEntries, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { startCall } from "../dialer/service.js";
 import { closeStale, daySummary, heartbeat, setState } from "./service.js";
@@ -66,5 +66,14 @@ describe.skipIf(!url)("estados e registo de ponto", () => {
     const s = await daySummary(db, bia.id);
     expect(s.state).toBeNull();
     expect(s.saida).not.toBeNull();
+  });
+
+  it("intervalo acima do limite: o Administrador é avisado uma única vez no dia", async () => {
+    await setState(db, toPublic(bia), bia.id, "break");
+    await db.update(timeEntries).set({ startedAt: new Date(Date.now() - 30 * 60_000), lastSeenAt: new Date() }).where(and(eq(timeEntries.userId, bia.id), sql`${timeEntries.endedAt} is null`));
+    await heartbeat(db, toPublic(bia));
+    await heartbeat(db, toPublic(bia));
+    const got = await db.select().from(notifications).where(and(eq(notifications.userId, admin.id), eq(notifications.kind, "break_over")));
+    expect(got.length).toBe(1);
   });
 });

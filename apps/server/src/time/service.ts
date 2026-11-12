@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { auditLog, timeEntries, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
+import { notify } from "../notifications/service.js";
 
 /**
  * Estados do comercial e registo de ponto (catálogo, secção 14).
@@ -44,7 +45,15 @@ export async function setState(db: Db, actor: PublicUser, userId: string, state:
 export async function heartbeat(db: Db, user: PublicUser) {
   await closeStale(db);
   const cur = await openEntry(db, user.id);
-  if (cur) { await db.update(timeEntries).set({ lastSeenAt: new Date() }).where(eq(timeEntries.id, cur.id)); return cur.state as State; }
+  if (cur) {
+    await db.update(timeEntries).set({ lastSeenAt: new Date() }).where(eq(timeEntries.id, cur.id));
+    // Intervalo acima do limite do dia: avisa o Administrador uma vez por dia.
+    if (cur.state === "break") {
+      const d = await daySummary(db, user.id);
+      if (d.over.break) await notify(db, ["admin"], { kind: "break_over", aboutUserId: user.id, dedupeKey: `break_over:${d.day}:${user.id}`, text: `${user.name} passou o limite de intervalo de hoje (${Math.round(d.used.break / 60)} de ${d.limits.breakSeconds / 60} min).` });
+    }
+    return cur.state as State;
+  }
   await setState(db, user, user.id, "working");
   return "working" as State;
 }

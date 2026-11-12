@@ -151,6 +151,8 @@ export const api = {
   endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
   agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
+  notifications: () => call<{ unread: number; items: { id: string; kind: string; text: string; companyId: string | null; createdAt: string; read: boolean }[] }>("/notifications"),
+  readNotifications: () => call("/notifications/read", { method: "POST", body: "{}" }),
   myDay: () => call<MyDay>("/me/day"),
   opportunities: (q: { ownerId?: string; closed?: boolean } = {}) => call<{ opportunities: Opportunity[] }>(`/opportunities${qs({ ownerId: q.ownerId, closed: q.closed ? "1" : undefined })}`).then((r) => r.opportunities),
   companyOpportunities: (id: string) => call<{ opportunities: { id: string; stage: string; stageLabel: string; services: string | null; createdAt: string; closedAt: string | null; lastActivityAt: string }[] }>(`/companies/${id}/opportunities`).then((r) => r.opportunities),
