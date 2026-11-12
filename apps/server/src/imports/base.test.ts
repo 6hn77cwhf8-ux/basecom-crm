@@ -138,6 +138,10 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     const ws = wb.addWorksheet("NC"); ws.addRow(H);
     const nn = nif(`7${tag.slice(-6)}1`);
     ws.addRow([nn, "Ómega Lda", "Cliente", seller, 1490, 22, "4P", "FTTH", 3, 0, 1, "", "910865708", "224917506; 912345678", "Srª", "Maria Silva", "geral@omega.pt", "Sr.", "Rui Costa", "", "Maia", "Porto", "Serviços", 150000, "CLIENTE", "2021-10", "SOMA | Upsell — Adicione IF a 1000Mbps"]);
+    // Não cruzam: vale o portal NOS (NN com portal CLIENTE → Cliente; Cliente sem comercial com portal PROSPECT → Prospeto).
+    const p1 = nif(`7${tag.slice(-6)}2`), p2 = nif(`7${tag.slice(-6)}3`);
+    ws.addRow([p1, "Portal Cliente Lda", "Prospect", "", "", "", "", "", "", "", "", "", "910865709", "", "", "", "", "", "", "", "Maia", "Porto", "", "", "CLIENTE", "", ""]);
+    ws.addRow([p2, "Portal Prospeto Lda", "Cliente", "", "", "", "", "", "", "", "", "", "910865710", "", "", "", "", "", "", "", "Maia", "Porto", "", "", "PROSPECT", "", ""]);
     wb.addWorksheet("Sem contacto").addRow(H);
     const up = await uploadBase(db, adminId, "formato47.xlsx", Buffer.from(await wb.xlsx.writeBuffer()));
     batches.push(up.id);
@@ -148,6 +152,8 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     const co = (await db.select().from(companies).where(eq(companies.nif, nn)))[0]!;
     expect(co).toMatchObject({ district: "Porto", sector: "Serviços", product: "4P", technology: "FTTH", loyaltyMonths: 22, portalStatus: "CLIENTE", nosExitMonth: "2021-10", nboCampaign: "SOMA | Upsell — Adicione IF a 1000Mbps", annualRevenue: "150000.00", ownerId: sellerId });
     expect(co.rgu).toEqual({ VM: 3, DM: 0, TV: 1 });
+    expect((await db.select().from(companies).where(eq(companies.nif, p1)))[0]!.accountType).toBe("client");
+    expect((await db.select().from(companies).where(eq(companies.nif, p2)))[0]!.accountType).toBe("prospect");
     const cs = await db.select().from(companyContacts).where(eq(companyContacts.companyId, co.id));
     expect(cs.map((x) => x.value).sort()).toEqual(["224917506", "910865708", "912345678", "Rui Costa", "geral@omega.pt"].sort());
     expect(cs.find((x) => x.value === "910865708")).toMatchObject({ isPrimary: true, salutation: "Srª", personName: "Maria Silva" });

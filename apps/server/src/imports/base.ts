@@ -229,11 +229,18 @@ class Ctx {
     if (!nif) return { error: "Sem NIF: sem NIF não há empresa", result: "rejected" };
     if (!name) return { error: "Sem nome da empresa", result: "rejected" };
     const tipo = s(get("accountType")).toLowerCase();
-    const accountType = tipo.startsWith("cliente") ? "client" : tipo.startsWith("prospe") ? "prospect" : null;
+    let accountType: "client" | "prospect" | null = tipo.startsWith("cliente") ? "client" : tipo.startsWith("prospe") ? "prospect" : null;
     if (!accountType) return { error: `Tipo de conta desconhecido: «${s(get("accountType"))}»`, result: "review" };
 
-    // Carteira: todas as NN entram sem carteira; nos clientes decide a coluna Comercial Responsável.
+    // Quando a folha e o «Estado no Portal» não cruzam, vale o portal NOS (informação mais recente — decisão do Administrador, Teste 1).
+    // Exceção: um cliente com comercial responsável conhecido não perde a carteira por isto; fica como cliente.
     const ownerRaw = s(get("owner"));
+    const portal = s(get("portalStatus")).toUpperCase();
+    let portalNote: string | null = null;
+    if (portal === "CLIENTE" && accountType === "prospect") { accountType = "client"; portalNote = "Tipo de conta da folha (Prospeto) corrigido para Cliente pelo estado no portal NOS."; }
+    else if (portal === "PROSPECT" && accountType === "client" && !this.salesByName.has(ownerRaw.toLowerCase())) { accountType = "prospect"; portalNote = "Tipo de conta da folha (Cliente) corrigido para Prospeto pelo estado no portal NOS."; }
+
+    // Carteira: todas as NN entram sem carteira; nos clientes decide a coluna Comercial Responsável.
     let ownerId: string | null = null;
     let ownerLabel = "sem carteira";
     if (accountType === "client" && ownerRaw && ownerRaw.toLowerCase() !== this.cfg.noOwnerName.toLowerCase()) {
@@ -244,6 +251,7 @@ class Ctx {
     }
 
     const notes: Staged["notes"] = [];
+    if (portalNote) notes.push({ kind: "note", text: portalNote });
     const reason = s(get("reason"));
     if (reason) notes.push({ kind: "note", text: `Motivo indicado na base antiga: ${reason}` });
     const op = normalizeOperator(s(get("operator")), this.cfg.operators);
