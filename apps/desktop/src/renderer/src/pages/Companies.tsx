@@ -126,12 +126,11 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
                   <td style={{ ...td, color: r.sector ? c.ink : c.muted }}>{r.sector ?? "—"}</td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", color: r.l2bMonthly ? c.ink : c.muted }}>{r.l2bMonthly ? fmtEur(r.l2bMonthly) : "—"}</td>
                   <td style={td}>{r.owner ?? <span style={{ color: c.muted }}>Sem carteira</span>}</td>
-                  <td style={td}>{r.ownerId || r.walletKindConfirmed ? <Chip tone={r.walletKind === "FC" ? "warn" : "neutral"}>{r.walletKind}</Chip> : "—"}</td>
                   <td style={td}><StatusChips r={r} /></td>
                 </tr>
               ))}
               {data && data.rows.length === 0 && (
-                <tr><td colSpan={isAdmin ? 11 : 10} style={{ ...td, textAlign: "center", color: c.muted, padding: 32 }}>
+                <tr><td colSpan={isAdmin ? 10 : 9} style={{ ...td, textAlign: "center", color: c.muted, padding: 32 }}>
                   {kpis?.total === 0 ? "Ainda não há empresas. O Administrador importa a base em «Importar ficheiro»." : "Nenhum resultado com estes filtros."}
                   {active > 0 && <> <button style={{ ...btn, height: 30, marginLeft: 8 }} onClick={clear}>Limpar filtros</button></>}
                 </td></tr>
@@ -157,9 +156,9 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
  * Não contactar, NIF, duplicado, dados que não cruzam (folha ≠ portal NOS) e NC/FC por identificar.
  */
 /** Colunas da lista e a chave de ordenação (como no Excel: clicar ordena, clicar outra vez inverte). */
-const COLS: [string, string | null][] = [["NIF", "nif"], ["Empresa", "name"], ["Tipo", "accountType"], ["Distrito", "district"], ["Concelho", "municipality"], ["Setor", "sector"], ["L2B", "l2b"], ["Responsável", "owner"], ["Carteira", "wallet"], ["Estado", null]];
+const COLS: [string, string | null][] = [["NIF", "nif"], ["Empresa", "name"], ["Tipo", "accountType"], ["Distrito", "district"], ["Concelho", "municipality"], ["Setor", "sector"], ["L2B", "l2b"], ["Responsável", "owner"], ["Estado", null]];
 
-export function StatusChips({ r }: { r: Pick<CompanyRow, "doNotContact" | "needsReview" | "nifValid" | "accountType" | "portalStatus" | "ownerId" | "walletKindConfirmed"> }) {
+export function StatusChips({ r }: { r: Pick<CompanyRow, "doNotContact" | "needsReview" | "nifValid" | "accountType" | "portalStatus" | "ownerId" | "walletKindConfirmed" | "walletKind"> }) {
   const mismatch = (r.accountType === "client" && r.portalStatus === "PROSPECT") || (r.accountType === "prospect" && r.portalStatus === "CLIENTE");
   const unidentified = r.accountType === "client" && !r.ownerId && !r.walletKindConfirmed;
   const any = r.doNotContact || !r.nifValid || r.needsReview || mismatch || unidentified;
@@ -169,8 +168,9 @@ export function StatusChips({ r }: { r: Pick<CompanyRow, "doNotContact" | "needs
       {!r.nifValid && <Chip tone="warn">NIF a verificar</Chip>}
       {r.needsReview && <Chip tone="warn">Duplicado a rever</Chip>}
       {mismatch && <span title={`Folha: ${r.accountType === "client" ? "Cliente" : "Prospeto"} · Portal NOS: ${r.portalStatus}`}><Chip tone="warn">Não cruza com o portal</Chip></span>}
-      {unidentified && <Chip tone="brand">NC/FC por identificar</Chip>}
-      {!any && <span style={{ color: c.muted }}>—</span>}
+      {unidentified && <span title="Cliente NOS sem NC/FC: o comercial identifica"><Chip tone="brand">NC/FC</Chip></span>}
+      {(r.ownerId || r.walletKindConfirmed) && <Chip tone={r.walletKind === "FC" ? "warn" : "neutral"}>{r.walletKind}</Chip>}
+      {!any && !r.ownerId && !r.walletKindConfirmed && <span style={{ color: c.muted }}>—</span>}
     </span>
   );
 }

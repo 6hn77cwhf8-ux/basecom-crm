@@ -81,7 +81,6 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <Chip>{co.accountType === "client" ? "Cliente" : "NN"}</Chip>
-                  {(co.ownerId || co.walletKindConfirmed) && <Chip tone={co.walletKind === "FC" ? "warn" : "neutral"}>{co.walletKind}</Chip>}
                   <StatusChips r={co} />
                 </span>
                 <h1 style={{ margin: 0, fontSize: 28, lineHeight: "34px", fontWeight: 800 }}>{co.name}</h1>

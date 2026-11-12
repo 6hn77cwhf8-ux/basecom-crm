@@ -4,7 +4,7 @@ import { api, type Campaign, type CampaignFilters, type FilterOptions } from "..
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtInt, input } from "../ui";
 import { Modal } from "./Wallet";
 
-const MODE = { new: "Novos clientes · Power Dialer", current: "Clientes atuais · Preview Dialer" } as const;
+const MODE = { new: "Novos clientes", current: "Clientes atuais" } as const;
 const STATUS = { active: ["A decorrer", "ok"], paused: ["Em pausa", "warn"], ended: ["Terminada", "neutral"] } as const;
 export const FIELDS_HELP = "{comercial} · {empresa} · {decisor} (o confirmado, com o tratamento: «a Senhora Dona Ana…») · {decisor1} · {decisor2} · {campanha} (nome desta campanha) · {nbo} (campanha NBO da empresa)";
 
@@ -36,7 +36,7 @@ export function Campaigns() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <b style={{ fontSize: 15 }}>{k.name}</b>
             <Chip tone={STATUS[k.status][1]}>{STATUS[k.status][0]}</Chip>
-            <span style={{ fontSize: 12, color: c.muted }}>{MODE[k.mode]}</span>
+            <span style={{ fontSize: 12, color: c.muted }}>{MODE[k.mode]} · {k.dialMode === "preview" ? "Preview" : "Power"}</span>
             <span style={{ flex: 1 }} />
             {k.status !== "ended" && <>
               <button style={small} onClick={() => setEditing(k)}>Editar</button>
@@ -67,12 +67,12 @@ function Assignments({ campaigns, onError }: { campaigns: Campaign[]; onError: (
   const [saved, setSaved] = useState("");
   const load = () => api.dialerAssignments().then(setRows).catch((e) => onError(e.message));
   useEffect(() => { load(); }, []);
-  const options = campaigns.filter((k) => k.mode === "new" && k.status !== "ended");
+  const options = campaigns.filter((k) => k.status !== "ended");
   const current = (r: (typeof rows)[number]) => r.campaignId ?? (() => { const mine = options.filter((k) => k.status === "active" && k.members.some((m) => m.id === r.id)); return mine.length === 1 ? mine[0]!.id : ""; })();
   return (
     <div style={{ ...card, padding: "14px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
-      <b style={{ fontSize: 15 }}>Campanha de cada comercial · Novos clientes</b>
-      <span style={{ fontSize: 13, color: c.muted }}>O comercial entra diretamente nesta campanha no Power Dialer, sem escolher.</span>
+      <b style={{ fontSize: 15 }}>Campanha de cada comercial</b>
+      <span style={{ fontSize: 13, color: c.muted }}>Ao abrir «Ligar», o comercial entra logo nesta campanha (pode mudar para outra das suas).</span>
       {rows.map((r) => (
         <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }}>
           <span style={{ width: 220 }}>{r.name}</span>
@@ -105,6 +105,7 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
   const editing = !!campaign;
   const [name, setName] = useState(campaign?.name ?? "");
   const [mode, setMode] = useState<"new" | "current">(campaign?.mode ?? "new");
+  const [dialMode, setDialMode] = useState<"power" | "preview">(campaign?.dialMode ?? "power");
   const [script, setScript] = useState(campaign?.script || DEFAULT_SCRIPTS.opening);
   const [pitchNew, setPitchNew] = useState(campaign?.scriptPitchNew || DEFAULT_SCRIPTS.pitchNew);
   const [pitchCurrent, setPitchCurrent] = useState(campaign?.scriptPitchCurrent || DEFAULT_SCRIPTS.pitchCurrent);
@@ -132,8 +133,8 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
   async function submit(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError("");
     try {
-      if (campaign) { await api.updateCampaign(campaign.id, { name, script, scriptPitchNew: own(pitchNew, DEFAULT_SCRIPTS.pitchNew), scriptPitchCurrent: own(pitchCurrent, DEFAULT_SCRIPTS.pitchCurrent), memberIds: members }); onSaved(`Campanha «${name}» guardada.`); }
-      else { const r = await api.createCampaign({ name, mode, script, scriptPitchNew: own(pitchNew, DEFAULT_SCRIPTS.pitchNew), scriptPitchCurrent: own(pitchCurrent, DEFAULT_SCRIPTS.pitchCurrent), filters: f, memberIds: members }); onSaved(`Campanha «${name}» criada com ${fmtInt(r.added)} empresas.`); }
+      if (campaign) { await api.updateCampaign(campaign.id, { name, script, scriptPitchNew: own(pitchNew, DEFAULT_SCRIPTS.pitchNew), scriptPitchCurrent: own(pitchCurrent, DEFAULT_SCRIPTS.pitchCurrent), ...(mode === "current" ? { dialMode } : {}), memberIds: members }); onSaved(`Campanha «${name}» guardada.`); }
+      else { const r = await api.createCampaign({ name, mode, script, scriptPitchNew: own(pitchNew, DEFAULT_SCRIPTS.pitchNew), scriptPitchCurrent: own(pitchCurrent, DEFAULT_SCRIPTS.pitchCurrent), dialMode: mode === "current" ? dialMode : "power", filters: f, memberIds: members }); onSaved(`Campanha «${name}» criada com ${fmtInt(r.added)} empresas.`); }
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
   const set = <K extends keyof CampaignFilters>(k: K, v: CampaignFilters[K]) => setF((o) => ({ ...o, [k]: v }));
@@ -148,6 +149,14 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
           <Field label="Tipo"><select style={input} value={mode} disabled={editing} onChange={(e) => setMode(e.target.value as "new" | "current")}>
             <option value="new">{MODE.new}</option><option value="current">{MODE.current}</option></select></Field>
         </div>
+        {mode === "current" && (
+          <Field label="Modo de marcação">
+            <select style={input} value={dialMode} onChange={(e) => setDialMode(e.target.value as "power" | "preview")}>
+              <option value="power">Power — a seguinte entra sozinha 10 s depois de guardar</option>
+              <option value="preview">Preview — mostra a empresa e espera que o comercial ligue</option>
+            </select>
+          </Field>
+        )}
         <Field label="Comerciais da campanha">
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {users.map((u) => <Toggle key={u.id} on={members.includes(u.id)} label={u.name} onClick={() => setMembers((m) => (m.includes(u.id) ? m.filter((x) => x !== u.id) : [...m, u.id]))} />)}

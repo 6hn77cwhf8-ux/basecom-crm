@@ -63,7 +63,7 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   };
   return {
     entry: { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id },
-    campaign: { id: k.id, name: k.name, mode: k.mode },
+    campaign: { id: k.id, name: k.name, mode: k.mode, dialMode: k.dialMode },
     company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly,
       needsKind: co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed },
     phone: phones[0] ? { id: phones[0].id, value: phones[0].value, type: phones[0].phoneType } : null,
@@ -88,7 +88,7 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
 export async function myDialerCampaign(db: Db, user: PublicUser) {
   const u = await db.query.users.findFirst({ where: eq(users.id, user.id) });
   const r = await db.execute(sql`select k.id from campaigns k join campaign_members m on m.campaign_id = k.id
-    where m.user_id = ${user.id}::uuid and k.status = 'active' and k.mode = 'new' order by k.created_at`);
+    where m.user_id = ${user.id}::uuid and k.status = 'active' order by k.created_at`);
   const ids = (r.rows as { id: string }[]).map((x) => x.id);
   if (u?.dialerCampaignId && ids.includes(u.dialerCampaignId)) return u.dialerCampaignId;
   return ids.length === 1 ? ids[0]! : null;
@@ -102,7 +102,7 @@ export async function setDialerCampaign(db: Db, by: PublicUser, userId: string, 
   if (campaignId) {
     const k = await db.query.campaigns.findFirst({ where: eq(campaigns.id, campaignId) });
     label = k?.name ?? label;
-    if (!k || k.mode !== "new" || k.status === "ended") throw new AuthError(400, "Escolha uma campanha de Novos clientes ativa ou em pausa.");
+    if (!k || k.status === "ended") throw new AuthError(400, "Escolha uma campanha ativa ou em pausa.");
     const m = await db.query.campaignMembers.findFirst({ where: and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, userId)) });
     if (!m) await db.insert(campaignMembers).values({ campaignId, userId });
   }

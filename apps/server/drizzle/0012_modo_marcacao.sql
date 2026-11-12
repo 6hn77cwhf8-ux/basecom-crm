@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "dial_mode" text DEFAULT 'power' NOT NULL;

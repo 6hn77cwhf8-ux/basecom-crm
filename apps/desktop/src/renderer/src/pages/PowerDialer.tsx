@@ -41,7 +41,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [, tick] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.mode === "new" && k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
+  const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
   useEffect(() => {
     api.catalogs().then(setCat).catch((e) => setError(e.message)); loadCampaigns();
     if (!isAdmin) api.myCampaign().then((id) => setCampaignId(id ?? "")).catch((e) => setError(e.message));
@@ -79,7 +79,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       const changed = decisor && (decisor.name !== cur?.people[0]?.name);
       const res = await api.saveResult(callId, changed ? { ...r, newDecisor: { salutation: decisor.salutation, name: decisor.name } } : r);
       setCount((x) => x + 1); setLastSummary(`${res.outcome}${res.summary.length ? " · " + res.summary.filter((s) => !s.startsWith("Nova tentativa")).join(" · ") : ""}`);
-      setPhase("countdown"); setEndedAt(Date.now()); loadCampaigns();
+      loadCampaigns();
+      // Preview: a seguinte aparece logo, mas só liga quando o comercial carregar em «Iniciar chamada».
+      if (campaign?.dialMode === "preview") { load(false); return; }
+      setPhase("countdown"); setEndedAt(Date.now());
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   // Encadeamento: 10 s depois de guardar, a empresa seguinte é marcada automaticamente.
@@ -123,27 +126,27 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%", minHeight: 0 }}>
       <header style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Novos clientes</h1>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Ligar</h1>
         {/* Entra logo na campanha que o Administrador definiu; o comercial pode mudar para outra das suas (conta como «Mudança de campanha»). */}
         <select aria-label="Campanha" value={campaignId} onChange={(e) => { if (cur && phase === "ready") api.dialerRelease(cur.entry.id).catch(() => undefined); if (campaignId) api.setWorkState("switch").catch(() => undefined); setCampaignId(e.target.value); }}
           disabled={phase === "calling" || phase === "result"} style={{ height: 36, borderRadius: 10, border: `1px solid ${c.line}`, padding: "0 10px", fontSize: 14, fontWeight: 600, background: c.card }}>
           {(isAdmin || !campaignId) && <option value="">Escolha a campanha…</option>}
           {list.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
         </select>
-        {campaign && <span style={{ fontSize: 13, color: c.muted }}>Power Dialer · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}
+        {campaign && <span style={{ fontSize: 13, color: c.muted }}>{campaign.dialMode === "preview" ? "Preview" : "Power Dialer"} · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}
         <span style={{ flex: 1 }} />
         <WorkStates disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => setWorking(d.state === "working" || d.state === "switch")} />
       </header>
       <ErrorText>{error}</ErrorText>
 
-      {!campaignId && <Empty text={isAdmin ? (list.length ? "Escolha a campanha para começar." : "Ainda não há campanhas de Novos clientes ativas.") : (list.length ? "Escolha a campanha para começar." : "Ainda não tem campanhas. O Administrador atribui em Configurações → Campanhas e scripts.")} />}
+      {!campaignId && <Empty text={isAdmin ? (list.length ? "Escolha a campanha para começar." : "Ainda não há campanhas ativas.") : (list.length ? "Escolha a campanha para começar." : "Ainda não tem campanhas. O Administrador atribui em Configurações → Campanhas e scripts.")} />}
       {phase === "empty" && <Empty text="Não há mais empresas prontas nesta campanha agora. As novas tentativas agendadas voltam a aparecer à hora marcada." action={<button style={btn} onClick={() => load(false)}>Verificar de novo</button>} />}
 
       {cur && cat && (phase === "ready" || phase === "calling" || phase === "loading" || phase === "review") && (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 12, flex: 1, minHeight: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-            <section style={{ ...card, padding: "28px 40px", display: "flex", flexDirection: "column", gap: 16, flex: 1, minHeight: 300, justifyContent: "center", alignItems: "center" }}>
-              <div style={{ width: "100%", maxWidth: 820, display: "flex", flexDirection: "column", gap: 16 }}>
+            <section style={{ ...card, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
                 {phase === "calling" && <Chip tone="brand">Em chamada · {mmss(callSecs)}</Chip>}
@@ -153,7 +156,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
                 const d = decisor ?? cur.people[0] ?? null;
                 const spoken = d ? spokenName(d.salutation, d.name) : "";
                 const text = renderScript(step === "opening" ? cur.scripts.opening : cur.scripts.pitch, { ...cur.vars, decisor: spoken });
-                return <p style={{ margin: 0, fontSize: 26, lineHeight: "38px", whiteSpace: "pre-wrap" }}><Highlight text={text} marks={[cur.company.name, spoken]} /></p>;
+                return <p style={{ margin: 0, fontSize: 24, lineHeight: "35px", whiteSpace: "pre-wrap" }}><Highlight text={text} marks={[cur.company.name, spoken]} /></p>;
               })()}
               {step === "opening" && !changing && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -190,10 +193,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
               )}
               </div>
             </section>
-            <section style={{ ...card, padding: "10px 14px", maxHeight: 220, minHeight: 0, overflow: "auto" }}>
+            <section style={{ ...card, padding: "12px 16px", flex: 1, minHeight: 180, overflow: "auto" }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Feedback anterior · mais recente primeiro</span>
               {cur.history.length === 0 && <p style={{ fontSize: 13, color: c.muted }}>Sem histórico.</p>}
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 4 }}><tbody>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 6 }}><tbody>
                 {cur.history.map((h, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${c.line}` }}>
                     <td style={{ padding: "6px 8px 6px 0", whiteSpace: "nowrap", color: c.muted, width: 1 }}>{h.kind === "call" ? fmtDate(h.at) : "Importado"}</td>

@@ -21,11 +21,11 @@ export async function campaignRoutes(app: FastifyInstance, opts: { db: Db }) {
     return previewCampaign(db, b.filters, b.memberIds);
   });
   app.post("/campaigns", admin, async (req) => {
-    const b = z.object({ name: z.string().trim().min(3).max(120), mode: z.enum(["new", "current"]), script: z.string().max(10000), scriptPitchNew: z.string().max(10000).nullable().optional(), scriptPitchCurrent: z.string().max(10000).nullable().optional(), filters: filtersSchema, memberIds: members }).parse(req.body);
+    const b = z.object({ name: z.string().trim().min(3).max(120), mode: z.enum(["new", "current"]), script: z.string().max(10000), scriptPitchNew: z.string().max(10000).nullable().optional(), scriptPitchCurrent: z.string().max(10000).nullable().optional(), dialMode: z.enum(["power", "preview"]).optional(), filters: filtersSchema, memberIds: members }).parse(req.body);
     return createCampaign(db, req.user!, b);
   });
   app.patch("/campaigns/:id", admin, async (req) => {
-    const b = z.object({ name: z.string().trim().min(3).max(120).optional(), script: z.string().max(10000).optional(), scriptPitchNew: z.string().max(10000).nullable().optional(), scriptPitchCurrent: z.string().max(10000).nullable().optional(), status: z.enum(["active", "paused", "ended"]).optional(), memberIds: members.optional() }).parse(req.body);
+    const b = z.object({ name: z.string().trim().min(3).max(120).optional(), script: z.string().max(10000).optional(), scriptPitchNew: z.string().max(10000).nullable().optional(), scriptPitchCurrent: z.string().max(10000).nullable().optional(), dialMode: z.enum(["power", "preview"]).optional(), status: z.enum(["active", "paused", "ended"]).optional(), memberIds: members.optional() }).parse(req.body);
     await updateCampaign(db, req.user!, id.parse(req.params).id, b);
     return { ok: true };
   });
