@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
+import { AuthError } from "./auth/errors.js";
 
 /**
  * Configurações e valores iniciais. Os limites do Power Dialer foram aprovados (Fase 02);
@@ -88,8 +89,26 @@ export async function getAllSettings(db: Db) {
 
 export async function setSetting(db: Db, key: SettingKey, value: unknown, userId: string) {
   const v = SETTINGS[key].schema.parse(value);
+  if (key === "catalogs") checkCatalogs(v as SettingValue<"catalogs">);
   await db.insert(settings).values({ key, value: v, updatedBy: userId })
     .onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date(), updatedBy: userId } });
   await db.insert(auditLog).values({ userId, action: "configuracao_alterada", entity: "settings", entityId: key, details: JSON.stringify(v) });
   return v;
+}
+
+/**
+ * Regras estruturais dos catálogos: o Administrador muda nomes, ativa/desativa e cria motivos,
+ * mas não apaga resultados nem muda o que cada um faz; os identificadores não se repetem; os prazos são coerentes.
+ */
+export function checkCatalogs(v: SettingValue<"catalogs">) {
+  const bad = (m: string): never => { throw new AuthError(400, m); };
+  for (const d of DEFAULT_OUTCOMES) {
+    const o = v.outcomes.find((x) => x.id === d.id);
+    if (!o) bad(`O resultado «${d.label}» não pode ser apagado (pode ser desativado).`);
+    if (o!.effect !== d.effect || o!.group !== d.group) bad(`O que o resultado «${d.label}» faz não pode ser mudado.`);
+  }
+  const ids = v.reasons.map((r) => r.id);
+  if (new Set(ids).size !== ids.length) bad("Há motivos repetidos.");
+  if (!v.reasons.some((r) => r.active)) bad("Tem de haver pelo menos um motivo ativo.");
+  if (v.opportunities.warnDays >= v.opportunities.lateDays) bad("O alerta das oportunidades tem de vir antes do prazo de atrasada.");
 }

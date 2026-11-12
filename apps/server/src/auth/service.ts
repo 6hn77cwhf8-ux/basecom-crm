@@ -13,9 +13,8 @@ const MAX_CODE_ATTEMPTS = 5;
 export const MIN_PASSWORD_LENGTH = 10;
 
 export type PublicUser = { id: string; name: string; email: string; role: "admin" | "team_lead" | "sales"; mustChangePassword: boolean };
-export class AuthError extends Error {
-  constructor(public status: number, message: string) { super(message); }
-}
+import { AuthError } from "./errors.js";
+export { AuthError };
 
 const WRONG = "Email ou palavra-passe incorretos.";
 const minutes = (m: number) => new Date(Date.now() + m * 60_000);
