@@ -69,7 +69,7 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
         </div>
       </nav>
       {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
-      {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpenCompany={onOpenCompany} />}
+      {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpps={() => onNavigate("oportunidades")} onOpenCompany={onOpenCompany} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
     </div>
   );
@@ -127,7 +127,7 @@ const hhmm = (iso: string) => {
 };
 
 /** «O meu dia»: os números de hoje e as próximas tarefas. Atualiza a cada 30 segundos. */
-function MyDayPanel({ onAgenda, onOpenCompany }: { onAgenda: () => void; onOpenCompany: (id: string) => void }) {
+function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void; onOpps: () => void; onOpenCompany: (id: string) => void }) {
   const [d, setD] = useState<MyDay | null>(null);
   useEffect(() => {
     const load = () => api.myDay().then(setD).catch(() => undefined);
@@ -152,6 +152,11 @@ function MyDayPanel({ onAgenda, onOpenCompany }: { onAgenda: () => void; onOpenC
         {row("Vendas", d.sales)}
         {row("Tempo de login", `${Math.floor(d.loggedIn / 3600)} h ${String(Math.floor((d.loggedIn % 3600) / 60)).padStart(2, "0")}`)}
         {row("Intervalo", `${mins(d.breakUsed)} / ${mins(d.breakLimit)} min`, d.breakUsed > d.breakLimit)}
+        {(d.oppsLate > 0 || d.oppsWarn > 0) && (
+          <button onClick={onOpps} style={{ border: 0, marginTop: 10, background: d.oppsLate ? "#FFE5E7" : "#FFF4E5", color: d.oppsLate ? "#A1000F" : "#8A3D00", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+            Oportunidades: {d.oppsLate > 0 ? `${d.oppsLate} atrasada${d.oppsLate === 1 ? "" : "s"}` : ""}{d.oppsLate > 0 && d.oppsWarn > 0 ? " · " : ""}{d.oppsWarn > 0 ? `${d.oppsWarn} em alerta` : ""} →
+          </button>
+        )}
         <span style={{ ...lab, marginTop: 14 }}>Agenda</span>
         {d.late > 0 && <button onClick={onAgenda} style={{ border: 0, background: "#FFE5E7", color: "#A1000F", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>{d.late} atrasada{d.late === 1 ? "" : "s"} →</button>}
         {d.next.length === 0 && <span style={{ fontSize: 13, color: c.muted }}>Sem tarefas.</span>}

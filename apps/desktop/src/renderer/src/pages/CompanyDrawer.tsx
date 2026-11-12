@@ -3,12 +3,12 @@ import { formatPhone } from "@basecom/shared";
 import { api, type CompanyDetail, type Contact, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
 import { StatusChips } from "./Companies";
-import { KIND_LABEL, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
+import { KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
 
 type Tab = "resumo" | "contactos" | "historico" | "oportunidades" | "vendas" | "tickets";
 const TABS: { id: Tab; label: string; later?: string }[] = [
   { id: "resumo", label: "Resumo" }, { id: "contactos", label: "Contactos" }, { id: "historico", label: "Histórico" },
-  { id: "oportunidades", label: "Oportunidades", later: "Fase 3" }, { id: "vendas", label: "Vendas", later: "Arranque B" }, { id: "tickets", label: "Tickets e pendências", later: "Arranque B" },
+  { id: "oportunidades", label: "Oportunidades" }, { id: "vendas", label: "Vendas", later: "Arranque B" }, { id: "tickets", label: "Tickets e pendências", later: "Arranque B" },
 ];
 const PORTAL: Record<string, string> = { CLIENTE: "Cliente", "EX-CLIENTE": "Ex-cliente", PROSPECT: "Prospeto" };
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -45,7 +45,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   const [tab, setTab] = useState<Tab>("resumo");
   const [error, setError] = useState("");
 
-  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
   useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
   const after = () => { setDialog(null); load(); };
@@ -88,7 +88,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               </div>
               <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
                 <button style={btn} disabled title={later}>Nova solicitação</button>
-                <button style={btn} disabled title={later}>Nova oportunidade</button>
+                <button style={btn} onClick={() => setDialog("opp")}>Nova oportunidade</button>
                 {main ? <a href={`tel:+351${main.value}`} style={{ ...btnDark, display: "inline-flex", alignItems: "center", textDecoration: "none" }} title="Liga pelo programa de telefone do computador; com a app Android, liga no telemóvel">Ligar {formatPhone(main.value)}</a>
                   : <button style={btnDark} disabled>Ligar</button>}
               </div>
@@ -99,6 +99,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               {!co.doNotContact && <button style={small} onClick={() => setDialog("dnc")}>Marcar «Não contactar»</button>}
               {co.doNotContact && me.role === "admin" && <button style={small} onClick={() => setDialog("undnc")}>Retirar «Não contactar»</button>}
             </div>
+            {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
             {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"
               text={co.walletKind === "NC" ? "Em FC, a empresa conta 50 % em tudo (pontos, valor concluído). Só por alteração manual." : "Volta a contar 100 %."}
@@ -161,6 +162,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               </div>
             )}
             {tab === "contactos" && <Contacts d={d!} canEdit={canEditContacts} onChange={load} />}
+            {tab === "oportunidades" && <CompanyOpps id={co.id} />}
             {tab === "historico" && <><WalletHistory d={d!} /><History d={d!} /></>}
             {TABS.find((t) => t.id === tab)?.later && (
               <section style={{ ...card, padding: 32, textAlign: "center", color: c.muted }}>Chega no {TABS.find((t) => t.id === tab)!.later}, tal como nas maquetas aprovadas.</section>
@@ -311,5 +313,41 @@ function History({ d, limit, onMore }: { d: CompanyDetail; limit?: number; onMor
       ))}
       {limit && d.notes.length > limit && <button style={{ ...btn, height: 30, marginTop: 10 }} onClick={onMore}>Ver todo o histórico ({d.notes.length})</button>}
     </Card>
+  );
+}
+
+function CompanyOpps({ id }: { id: string }) {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof api.companyOpportunities>> | null>(null);
+  useEffect(() => { api.companyOpportunities(id).then(setRows).catch(() => setRows([])); }, [id]);
+  return (
+    <Card title="Oportunidades">
+      {rows?.length === 0 && <p style={{ fontSize: 14, color: c.muted }}>Sem oportunidades. Crie com «Nova oportunidade» ou pelo resultado «Proposta» de uma chamada.</p>}
+      {rows?.map((o) => (
+        <div key={o.id} style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
+          <span><Chip tone={o.stage === "won" ? "ok" : o.stage === "lost" ? "bad" : "brand"}>{o.stageLabel}</Chip> <span style={{ color: c.muted }}>{o.services ?? ""}</span></span>
+          <span style={{ color: c.muted }}>criada {fmtDate(o.createdAt)}{o.closedAt ? ` · fechada ${fmtDate(o.closedAt)}` : ` · última atividade ${fmtDate(o.lastActivityAt)}`}</span>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function NewOpportunity({ companyId, onClose, onDone }: { companyId: string; onClose: () => void; onDone: () => void }) {
+  const [stage, setStage] = useState("interest");
+  const [services, setServices] = useState("");
+  const [err, setErr] = useState("");
+  const stages = [["interest", "Interesse"], ["survey", "Levantamento"], ["proposal", "Proposta enviada"], ["negotiation", "Em negociação"], ["documents", "Aguarda documentos"]];
+  return (
+    <Modal title="Nova oportunidade" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{stages.map(([id, l]) => <button key={id} onClick={() => setStage(id!)} style={{ ...btn, height: 32, fontSize: 13, background: stage === id ? c.ink : c.card, color: stage === id ? "#FFF" : c.ink }}>{l}</button>)}</div>
+        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600 }}>Serviços<input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></label>
+        <ErrorText>{err}</ErrorText>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={btn} onClick={onClose}>Voltar</button>
+          <button style={btnDark} onClick={() => api.createOpportunity({ companyId, stage, services: services || undefined }).then(onDone).catch((e) => setErr(e.message))}>Criar</button>
+        </div>
+      </div>
+    </Modal>
   );
 }

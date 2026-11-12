@@ -106,3 +106,24 @@ export function nextContactFor(reason: Reason, today: Date, date?: Date | null):
     default: return { at: null, eligibleAt: null };
   }
 }
+
+/** Etapas das oportunidades (catálogo, 3.1). As abertas seguem a regra dos sete dias. */
+export const OPPORTUNITY_STAGES = [
+  { id: "interest", label: "Interesse", open: true },
+  { id: "survey", label: "Levantamento", open: true },
+  { id: "proposal", label: "Proposta enviada", open: true },
+  { id: "negotiation", label: "Em negociação", open: true },
+  { id: "documents", label: "Aguarda documentos", open: true },
+  { id: "won", label: "Ganha", open: false },
+  { id: "lost", label: "Perdida", open: false },
+] as const;
+export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number]["id"];
+
+/**
+ * Regra dos sete dias (catálogo, 3.2): conta desde a última atividade; alerta preventivo ao 5.º dia,
+ * atrasada ao 7.º. Nunca fecha a oportunidade sozinha.
+ */
+export function opportunityAlert(lastActivityAt: Date, now: Date, rules: OpportunityRules = DEFAULT_OPPORTUNITY_RULES): { days: number; level: "ok" | "warn" | "late" } {
+  const days = Math.floor((now.getTime() - lastActivityAt.getTime()) / 86_400_000);
+  return { days, level: days >= rules.lateDays ? "late" : days >= rules.warnDays ? "warn" : "ok" };
+}

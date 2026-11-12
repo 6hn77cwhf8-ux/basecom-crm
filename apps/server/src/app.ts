@@ -12,6 +12,7 @@ import { companyRoutes } from "./routes/companies.js";
 import { campaignRoutes } from "./routes/campaigns.js";
 import { dialerRoutes } from "./routes/dialer.js";
 import { agendaRoutes } from "./routes/agenda.js";
+import { opportunityRoutes } from "./routes/opportunities.js";
 import { timeRoutes } from "./routes/time.js";
 
 export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean }) {
@@ -41,6 +42,7 @@ export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean
   app.register(campaignRoutes, { db: deps.db });
   app.register(dialerRoutes, { db: deps.db });
   app.register(agendaRoutes, { db: deps.db });
+  app.register(opportunityRoutes, { db: deps.db });
   app.register(timeRoutes, { db: deps.db });
   return app;
 }

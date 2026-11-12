@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OUTCOMES, DEFAULT_REASONS, OUTCOME_GROUPS, nextContactFor } from "./catalogs.js";
+import { DEFAULT_OUTCOMES, DEFAULT_REASONS, OUTCOME_GROUPS, nextContactFor, opportunityAlert } from "./catalogs.js";
 
 const r = (id: string) => DEFAULT_REASONS.find((x) => x.id === id)!;
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
@@ -24,5 +24,20 @@ describe("catálogos aprovados", () => {
     expect(iso(nextContactFor(r("loyal_other"), today, d("2027-09-30")).at)).toBe("2027-03-30");
     // Renovou em out/2026: contrato de 24 meses, contacto aos 18 meses (exemplo da maqueta: abr 2028).
     expect(iso(nextContactFor(r("chose_other"), today, d("2026-10-15")).at)).toBe("2028-04-15");
+  });
+});
+
+describe("regra dos sete dias das oportunidades", () => {
+  const d0 = new Date("2026-11-02T10:00:00Z");
+  const at = (days: number) => new Date(d0.getTime() + days * 86_400_000);
+  it("alerta ao 5.º dia e atrasada ao 7.º; antes disso está em dia", () => {
+    expect(opportunityAlert(d0, at(4.9)).level).toBe("ok");
+    expect(opportunityAlert(d0, at(5))).toEqual({ days: 5, level: "warn" });
+    expect(opportunityAlert(d0, at(6.9)).level).toBe("warn");
+    expect(opportunityAlert(d0, at(7))).toEqual({ days: 7, level: "late" });
+    expect(opportunityAlert(d0, at(30)).level).toBe("late");
+  });
+  it("respeita prazos configurados pelo Administrador", () => {
+    expect(opportunityAlert(d0, at(3), { warnDays: 2, lateDays: 3, lostReopenDays: 180 }).level).toBe("late");
   });
 });

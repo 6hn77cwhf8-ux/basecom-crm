@@ -5,6 +5,7 @@ import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { startCall } from "../dialer/service.js";
 import { daySummary } from "../time/service.js";
+import { listOpportunities } from "../opportunities/service.js";
 
 /**
  * Agenda (Fase 3, passo 5): tarefas de cada comercial — callbacks, seguimentos, próximas ações das oportunidades.
@@ -94,7 +95,10 @@ export async function myDay(db: Db, user: PublicUser) {
   const t = await daySummary(db, user.id);
   const next = (await listAgenda(db, user)).slice(0, 4).map((x) => ({ id: x.id, dueAt: x.dueAt, type: x.type, company: x.company, companyId: x.companyId }));
   const late = (await listAgenda(db, user)).filter((x) => new Date(x.dueAt) < new Date()).length;
-  return { ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
+  const opps = await listOpportunities(db, user, { ownerId: user.id });
+  const oppsLate = opps.filter((o) => o.alert?.level === "late").length;
+  const oppsWarn = opps.filter((o) => o.alert?.level === "warn").length;
+  return { oppsLate, oppsWarn, ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
     // Chamadas recebidas: chegam com a app Android (Fase 4), que as devolve ao CRM.
     received: null as number | null, late, next };
 }

@@ -45,7 +45,8 @@ export type DialerEntry = {
 export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string } };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
-export type MyDay = { calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
+export type MyDay = { oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
+export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
 export type WorkState = "working" | "training" | "break" | "switch";
 export type DaySummary = {
   day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;
@@ -149,6 +150,13 @@ export const api = {
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
   agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
   myDay: () => call<MyDay>("/me/day"),
+  opportunities: (q: { ownerId?: string; closed?: boolean } = {}) => call<{ opportunities: Opportunity[] }>(`/opportunities${qs({ ownerId: q.ownerId, closed: q.closed ? "1" : undefined })}`).then((r) => r.opportunities),
+  companyOpportunities: (id: string) => call<{ opportunities: { id: string; stage: string; stageLabel: string; services: string | null; createdAt: string; closedAt: string | null; lastActivityAt: string }[] }>(`/companies/${id}/opportunities`).then((r) => r.opportunities),
+  createOpportunity: (b: { companyId: string; stage?: string; services?: string }) => call("/opportunities", { method: "POST", body: JSON.stringify(b) }),
+  moveOpportunity: (id: string, stage: string, comment?: string) => call(`/opportunities/${id}/stage`, { method: "POST", body: JSON.stringify({ stage, comment }) }),
+  opportunityActivity: (id: string, text: string) => call(`/opportunities/${id}/activity`, { method: "POST", body: JSON.stringify({ text }) }),
+  winOpportunity: (id: string) => call(`/opportunities/${id}/win`, { method: "POST", body: "{}" }),
+  loseOpportunity: (id: string, reasonId: string, comment?: string) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment }) }),
   agendaPeople: () => call<{ people: { id: string; name: string }[] }>("/agenda/people").then((r) => r.people),
   createTask: (b: { companyId: string; type: string; dueAt: string; description?: string; assignedTo?: string }) => call("/agenda/tasks", { method: "POST", body: JSON.stringify(b) }),
   rescheduleTask: (id: string, dueAt: string, reason: string) => call(`/agenda/tasks/${id}/reschedule`, { method: "POST", body: JSON.stringify({ dueAt, reason }) }),
