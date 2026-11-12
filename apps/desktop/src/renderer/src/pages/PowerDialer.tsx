@@ -143,7 +143,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       {phase === "empty" && <Empty text="Não há mais empresas prontas nesta campanha agora. As novas tentativas agendadas voltam a aparecer à hora marcada." action={<button style={btn} onClick={() => load(false)}>Verificar de novo</button>} />}
 
       {cur && cat && (phase === "ready" || phase === "calling" || phase === "loading" || phase === "review") && (
-        /* Quatro quadros (desenho do Leonardo): script | cliente — feedback anterior | telefone. */
+        /* Script e feedback anterior à esquerda; à direita, o cliente com o telefone em baixo (mais espaço para o cliente). */
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12, flex: 1, minHeight: 0 }}>
           <div style={{ display: "contents" }}>
             <section style={{ ...card, gridColumn: 1, gridRow: 1, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflow: "auto" }}>
@@ -209,31 +209,37 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
             </section>
           </div>
 
-          <aside style={{ display: "contents" }}>
-            <section style={{ ...card, gridColumn: 2, gridRow: 1, padding: 16, display: "flex", flexDirection: "column", gap: 8, minHeight: 0, overflow: "auto" }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <b style={{ fontSize: 16, flex: 1 }}>{cur.company.name}</b>
-                {copyBtn("name", cur.company.name)}
+          <aside style={{ gridColumn: 2, gridRow: "1 / span 2", display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+            {/* Caixa do cliente (ordem pedida pelo Leonardo): NIF, nome, telefones, tipo, L2B e permanência, localidade, decisores, tentativa, ficha. */}
+            <section style={{ ...card, flex: 1, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflow: "auto" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <b style={{ fontSize: 17, flex: 1, fontVariantNumeric: "tabular-nums" }}>NIF {cur.company.nif}</b>{copyBtn("nif", cur.company.nif)}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 17, flex: 1, lineHeight: "22px" }}>{cur.company.name}</span>{copyBtn("name", cur.company.name)}
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-                <span style={{ flex: 1 }}>NIF {cur.company.nif}</span>{copyBtn("nif", cur.company.nif)}
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 12, borderTop: `1px solid ${c.line}` }}>
+                <b style={{ fontSize: 22, fontVariantNumeric: "tabular-nums" }}>{cur.phone ? formatPhone(cur.phone.value) : "Sem telefone"}</b>
+                {cur.otherPhones[0] && <span style={{ fontSize: 16, color: c.muted, fontVariantNumeric: "tabular-nums" }}>{formatPhone(cur.otherPhones[0].value)}</span>}
               </div>
-              <div style={{ fontSize: 26, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{cur.phone ? formatPhone(cur.phone.value) : "Sem telefone"}</div>
-              <span style={{ fontSize: 12, color: c.muted }}>
-                {cur.phone?.type === "mobile" ? "Móvel" : "Fixo"} · tentativa {cur.entry.attempts + 1} de {cat.catalogs.attempts.maxAttemptsTotal}
-              </span>
-              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 13, padding: "6px 0", borderTop: `1px solid ${c.line}`, borderBottom: `1px solid ${c.line}` }}>
-                <span style={{ color: c.muted }}>Tipo</span>
-                <b>{cur.company.accountType === "prospect" ? "NN" : cur.company.owner || cur.company.walletKindConfirmed ? cur.company.walletKind : <span style={{ color: c.brand }}>Cliente · NC/FC por identificar</span>}</b>
-                <span style={{ color: c.muted }}>L2B</span><b>{cur.company.l2bMonthly ? `${fmtEur(cur.company.l2bMonthly)}/mês` : "—"}</b>
-                <span style={{ color: c.muted }}>Meses de permanência</span><b>{cur.company.loyaltyMonths ?? "—"}</b>
-                <span style={{ color: c.muted }}>Concelho · Distrito</span><b>{[cur.company.municipality, cur.company.district].filter(Boolean).join(" · ") || "—"}</b>
-                {cur.company.owner && <><span style={{ color: c.muted }}>Carteira</span><b>{cur.company.owner}</b></>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 12, borderTop: `1px solid ${c.line}` }}>
+                <div>{cur.company.accountType === "prospect" ? <Chip>NN</Chip> : cur.company.owner || cur.company.walletKindConfirmed ? <Chip tone={cur.company.walletKind === "FC" ? "warn" : "neutral"}>{cur.company.walletKind}</Chip> : <Chip tone="brand">NC/FC</Chip>}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}><span style={lab}>L2B</span><b style={{ fontSize: 16 }}>{cur.company.l2bMonthly ? `${fmtEur(cur.company.l2bMonthly)}/mês` : "—"}</b></div>
+                  <div style={{ display: "flex", flexDirection: "column" }}><span style={lab}>Fim permanência</span><b style={{ fontSize: 16 }}>{cur.company.loyaltyMonths != null ? `${cur.company.loyaltyMonths} meses` : "—"}</b></div>
+                </div>
+                <span style={{ fontSize: 14 }}>{[cur.company.municipality, cur.company.district].filter(Boolean).join(" - ") || "—"}</span>
               </div>
-              {cur.decisors.length > 0 && <span style={{ fontSize: 13 }}>Decisores: {cur.decisors.join(" · ")}</span>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 12, borderTop: `1px solid ${c.line}` }}>
+                <div style={{ display: "flex", flexDirection: "column" }}><span style={lab}>Decisor</span><span style={{ fontSize: 14, fontWeight: 600 }}>{(() => { const p = decisor ?? cur.people[0]; return p ? `${p.salutation ? p.salutation + " " : ""}${p.name}` : "—"; })()}</span></div>
+                {(() => { const main = (decisor ?? cur.people[0])?.name; const p = cur.people.find((x) => x.name !== main); return p ? <div style={{ display: "flex", flexDirection: "column" }}><span style={lab}>Decisor secundário</span><span style={{ fontSize: 14 }}>{p.salutation ? p.salutation + " " : ""}{p.name}</span></div> : null; })()}
+              </div>
+              <span style={{ fontSize: 12, color: c.muted, fontWeight: 300 }}>{cur.phone?.type === "mobile" ? "Móvel" : "Fixo"} · tentativa {cur.entry.attempts + 1} de {cat.catalogs.attempts.maxAttemptsTotal}{cur.company.owner ? ` · carteira de ${cur.company.owner}` : ""}</span>
               <button style={{ ...small, alignSelf: "flex-start" }} onClick={() => onOpenCompany(cur.company.id)}>Abrir ficha completa →</button>
             </section>
-            <section style={{ ...card, gridColumn: 2, gridRow: 2, padding: 16, display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", minHeight: 0, overflow: "auto" }}>
+            <section style={{ ...card, flex: "0 0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Telefone · ligação manual até à app Android</span>
               {phase === "review"
                 ? <button style={{ ...btnDark, height: 48, fontSize: 16, background: c.brand, borderColor: c.brand }} onClick={() => setPhase("result")}>Voltar ao resultado →</button>
@@ -277,6 +283,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
 }
 
 const small = { ...btn, height: 28, fontSize: 12, padding: "0 10px" };
+const lab = { fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase" as const, color: c.muted };
 
 /** Script com o nome da empresa e do responsável a negrito. */
 function Highlight({ text, marks }: { text: string; marks: string[] }) {
