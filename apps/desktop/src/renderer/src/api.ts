@@ -44,6 +44,7 @@ export type DialerEntry = {
 };
 export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string } };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
+export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
 export type WorkState = "working" | "training" | "break" | "switch";
 export type DaySummary = {
   day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;
@@ -145,6 +146,12 @@ export const api = {
   startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string }) => call<{ id: string; startedAt: string }>("/calls", { method: "POST", body: JSON.stringify(b) }),
   endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
+  agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
+  agendaPeople: () => call<{ people: { id: string; name: string }[] }>("/agenda/people").then((r) => r.people),
+  createTask: (b: { companyId: string; type: string; dueAt: string; description?: string; assignedTo?: string }) => call("/agenda/tasks", { method: "POST", body: JSON.stringify(b) }),
+  rescheduleTask: (id: string, dueAt: string, reason: string) => call(`/agenda/tasks/${id}/reschedule`, { method: "POST", body: JSON.stringify({ dueAt, reason }) }),
+  closeTask: (id: string, status: "done" | "cancelled", note?: string) => call(`/agenda/tasks/${id}/close`, { method: "POST", body: JSON.stringify({ status, note }) }),
+  callFromTask: (id: string) => call<{ callId: string; phone: { id: string; value: string; type: string | null } | null }>(`/agenda/tasks/${id}/call`, { method: "POST", body: "{}" }),
   tasks: () => call<{ tasks: Task[] }>("/tasks").then((r) => r.tasks),
   doneTask: (id: string) => call(`/tasks/${id}/done`, { method: "POST", body: "{}" }),
 
