@@ -18,9 +18,11 @@ jobs:
         include:
           - os: windows-latest
             target: win
-          - os: macos-latest
+          # Mac Intel (MacBook Pro 2019): máquina Intel do GitHub — as «macos-latest» (Apple Silicon) ficavam sem vaga.
+          - os: macos-15-intel
             target: mac
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     env:
       VITE_API_URL: https://crm.basecom.pt
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
