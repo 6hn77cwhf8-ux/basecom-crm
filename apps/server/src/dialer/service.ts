@@ -59,13 +59,47 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   return {
     entry: { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id },
     campaign: { id: k.id, name: k.name, mode: k.mode },
-    company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly },
+    company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly,
+      needsKind: co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed },
     phone: phones[0] ? { id: phones[0].id, value: phones[0].value, type: phones[0].phoneType } : null,
     otherPhones: phones.slice(1).map((p) => ({ id: p.id, value: p.value, type: p.phoneType })),
     script: renderScript(k.script, { comercial: user.name, empresa: co.name, decisor1, decisor2: decisor2 ? `${decisor2.salutation ? decisor2.salutation + " " : ""}${decisor2.personName}` : "" }),
     decisors: [decisor1, decisor2?.personName].filter(Boolean),
     history,
   };
+}
+
+/**
+ * Campanha de Novos clientes de cada comercial (Teste 1, ponto 13): decide o Administrador; o comercial não escolhe.
+ * Sem escolha do Administrador, vale a única campanha ativa a que o comercial pertence.
+ */
+export async function myDialerCampaign(db: Db, user: PublicUser) {
+  const u = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+  const r = await db.execute(sql`select k.id from campaigns k join campaign_members m on m.campaign_id = k.id
+    where m.user_id = ${user.id}::uuid and k.status = 'active' and k.mode = 'new' order by k.created_at`);
+  const ids = (r.rows as { id: string }[]).map((x) => x.id);
+  if (u?.dialerCampaignId && ids.includes(u.dialerCampaignId)) return u.dialerCampaignId;
+  return ids.length === 1 ? ids[0]! : null;
+}
+
+/** O Administrador define a campanha de um comercial (passa a ser membro dela, se ainda não for). */
+export async function setDialerCampaign(db: Db, by: PublicUser, userId: string, campaignId: string | null) {
+  const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!u) throw new AuthError(404, "Utilizador não encontrado.");
+  if (campaignId) {
+    const k = await db.query.campaigns.findFirst({ where: eq(campaigns.id, campaignId) });
+    if (!k || k.mode !== "new" || k.status === "ended") throw new AuthError(400, "Escolha uma campanha de Novos clientes ativa ou em pausa.");
+    const m = await db.query.campaignMembers.findFirst({ where: and(eq(campaignMembers.campaignId, campaignId), eq(campaignMembers.userId, userId)) });
+    if (!m) await db.insert(campaignMembers).values({ campaignId, userId });
+  }
+  await db.update(users).set({ dialerCampaignId: campaignId }).where(eq(users.id, userId));
+  await db.insert(auditLog).values({ userId: by.id, action: "campanha_do_comercial", entity: "user", entityId: userId, details: campaignId ?? "nenhuma" });
+}
+
+/** Lista para o Administrador: cada comercial e a campanha onde trabalha. */
+export async function dialerAssignments(db: Db) {
+  const r = await db.execute(sql`select u.id, u.name, u.role, u.dialer_campaign_id as "campaignId" from users u where u.active and u.role <> 'admin' order by u.name`);
+  return r.rows as { id: string; name: string; role: string; campaignId: string | null }[];
 }
 
 export function renderScript(script: string, v: Record<string, string>) {
@@ -124,7 +158,12 @@ export type ResultInput = {
   /** Data indicada pelo comercial (fim da fidelização, data da renovação, callback, próxima ação). */
   date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string;
   competitor?: { operator?: string; renewalDate?: string; text?: string };
+  /** Clientes NOS sem carteira e sem NC/FC: o comercial identifica no resultado. */
+  walletKind?: "NC" | "FC";
 };
+
+/** Recusas por outro operador (fidelizado ou renovou): a nova abordagem é na data que o cliente sugerir, não automática. */
+const OPERATOR_REASONS = ["loyalty_end", "new_contract"];
 
 /** Regista o resultado e executa as consequências automáticas do catálogo. */
 export async function saveResult(db: Db, user: PublicUser, callId: string, input: ResultInput) {
@@ -139,11 +178,17 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   if (reason?.effect === "other" && !input.comment?.trim()) throw new AuthError(400, "No motivo «Outro», a descrição é obrigatória.");
   if (outcome.effect === "call_later" && !input.at) throw new AuthError(400, "Indique a data e a hora para voltar a ligar.");
   if (["interested", "proposal_sent", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
+  if (reason && OPERATOR_REASONS.includes(reason.effect)) {
+    if (!input.competitor?.operator) throw new AuthError(400, "Indique a operadora atual do cliente.");
+    if (!input.at) throw new AuthError(400, "Indique a data que o cliente sugere para voltar a contactar.");
+  }
 
   const now = new Date();
   const endedAt = call.endedAt ?? now;
   const resultSeconds = Math.max(0, Math.round((now.getTime() - endedAt.getTime()) / 1000));
   const co = (await db.query.companies.findFirst({ where: eq(companies.id, call.companyId) }))!;
+  const needsKind = co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed;
+  if (needsKind && !input.walletKind) throw new AuthError(400, "Cliente sem NC/FC: identifique se é NC ou FC.");
   const entry = call.entryId ? await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, call.entryId) }) : undefined;
   const a = cat.attempts;
   const taskOwner = co.ownerId ?? user.id;
@@ -157,11 +202,15 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       savedAt: now, resultSeconds,
     }).where(eq(calls.id, callId));
 
+    if (needsKind && input.walletKind) {
+      await tx.update(companies).set({ walletKind: input.walletKind, walletKindConfirmed: true, updatedAt: now }).where(eq(companies.id, co.id));
+      await tx.insert(companyNotes).values({ companyId: co.id, kind: "wallet", text: `Identificada como ${input.walletKind}.`, userId: user.id });
+    }
     const note = [outcome.label, reason?.label, input.comment?.trim()].filter(Boolean).join(" · ");
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "call", text: note, userId: user.id });
     if (input.competitor && (input.competitor.operator || input.competitor.text)) {
       const cp = input.competitor;
-      await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Outra operadora: ${[cp.operator, cp.renewalDate && `renovação ${cp.renewalDate}`, cp.text].filter(Boolean).join(" · ")}` });
+      await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Outra operadora: ${[cp.operator, (input.date ?? cp.renewalDate) && `fim de fidelização ${input.date ?? cp.renewalDate}`, cp.text].filter(Boolean).join(" · ")}` });
     }
 
     // Tentativas desta empresa nesta campanha, hoje (Lisboa).
@@ -224,9 +273,12 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
         await setEntry({ status: "done" });
         const r = reason!;
         const base = input.date ? new Date(`${input.date}T00:00:00Z`) : null;
-        const nc = nextContactFor(r, now, base);
+        const byOperator = OPERATOR_REASONS.includes(r.effect);
+        // Por outro operador: a data é a que o cliente sugeriu (obrigatória); nos restantes motivos, prazos do catálogo.
+        const nc = byOperator ? { at: new Date(input.at!), eligibleAt: new Date(input.at!) } : nextContactFor(r, now, base);
         const patch: Partial<typeof companies.$inferInsert> = {};
-        if (r.effect === "loyalty_end" && input.date) patch.loyaltyEnd = input.date;
+        if (byOperator && input.date) patch.loyaltyEnd = input.date;
+        if (byOperator && input.competitor?.operator) patch.operator = input.competitor.operator;
         if (nc.eligibleAt) patch.campaignEligibleFrom = nc.eligibleAt.toISOString().slice(0, 10);
         if (r.effect === "company_closed") { patch.inactive = true; await leaveAllCampaigns(); }
         if (Object.keys(patch).length) await tx.update(companies).set({ ...patch, updatedAt: now }).where(eq(companies.id, co.id));

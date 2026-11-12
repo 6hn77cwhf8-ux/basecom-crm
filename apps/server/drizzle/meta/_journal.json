@@ -64,6 +64,13 @@
       "when": 1794431139267,
       "tag": "0008_ponto",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794486661237,
+      "tag": "0009_teste1",
+      "breakpoints": true
     }
   ]
 }

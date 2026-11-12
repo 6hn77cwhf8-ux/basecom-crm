@@ -11,7 +11,7 @@ import { normalizeCompanyName } from "@basecom/shared";
 
 export type CompanyFilters = {
   q?: string; accountType?: "client" | "prospect"; owner?: string; wallet?: "NC" | "FC";
-  status?: "dnc" | "review" | "nif"; municipality?: string; district?: string; sector?: string; offset?: number; limit?: number;
+  status?: "dnc" | "review" | "nif" | "mismatch" | "unidentified"; municipality?: string; district?: string; sector?: string; offset?: number; limit?: number;
 };
 
 const ACCENTED = "áàâãäéèêëíìîïóòôõöúùûüç";
@@ -41,6 +41,14 @@ function searchCond(q: string): SQL | undefined {
   return sql`(${sql.join(parts, sql` or `)})`;
 }
 
+/** Tipo de conta da folha (NC = Cliente, NN = Prospeto) que não cruza com o estado no portal NOS. */
+const MISMATCH = sql`((${companies.accountType} = 'client' and ${companies.portalStatus} = 'PROSPECT') or (${companies.accountType} = 'prospect' and ${companies.portalStatus} = 'CLIENTE'))`;
+/** Clientes NOS sem carteira ainda sem NC/FC identificado pelo comercial. */
+const UNIDENTIFIED = sql`(${companies.accountType} = 'client' and ${companies.ownerId} is null and not ${companies.walletKindConfirmed})`;
+
+/** Campanha e tipo da NBO («SOMA | Adicionar fixo»), sem as ofertas. */
+export const NBO_HEAD = sql.raw(`trim(split_part(nbo_campaign, ' — ', 1))`);
+
 function where(f: CompanyFilters) {
   const c: (SQL | undefined)[] = [searchCond(f.q ?? "")];
   if (f.accountType) c.push(eq(companies.accountType, f.accountType));
@@ -51,6 +59,8 @@ function where(f: CompanyFilters) {
   if (f.status === "dnc") c.push(eq(companies.doNotContact, true));
   if (f.status === "review") c.push(isNotNull(companies.needsReview));
   if (f.status === "nif") c.push(eq(companies.nifValid, false));
+  if (f.status === "mismatch") c.push(MISMATCH);
+  if (f.status === "unidentified") c.push(UNIDENTIFIED);
   if (f.municipality) c.push(eq(companies.municipality, f.municipality));
   if (f.district) c.push(eq(companies.district, f.district));
   if (f.sector) c.push(eq(companies.sector, f.sector));
@@ -66,6 +76,7 @@ export async function listCompanies(db: Db, f: CompanyFilters) {
     ownerId: companies.ownerId, owner: users.name,
     walletKind: companies.walletKind, doNotContact: companies.doNotContact, needsReview: companies.needsReview,
     nifValid: companies.nifValid, operator: companies.operator, loyaltyEnd: companies.loyaltyEnd,
+    l2bMonthly: companies.l2bMonthly, portalStatus: companies.portalStatus, walletKindConfirmed: companies.walletKindConfirmed,
   }).from(companies).leftJoin(users, eq(users.id, companies.ownerId)).where(w)
     .orderBy(asc(companies.name)).offset(f.offset ?? 0).limit(Math.min(f.limit ?? 50, 200));
   return { total, rows };
@@ -82,6 +93,8 @@ export async function companyKpis(db: Db) {
     clients: sql<number>`count(*) filter (where ${companies.accountType} = 'client')::int`,
     dnc: sql<number>`count(*) filter (where ${companies.doNotContact})::int`,
     review: sql<number>`count(*) filter (where ${companies.needsReview} is not null or not ${companies.nifValid})::int`,
+    mismatch: sql<number>`count(*) filter (where ${MISMATCH})::int`,
+    unidentified: sql<number>`count(*) filter (where ${UNIDENTIFIED})::int`,
   }).from(companies);
   return k!;
 }
@@ -94,6 +107,9 @@ export async function filterOptions(db: Db) {
     municipalities: await list("municipality"), districts: await list("district"), sectors: await list("sector"),
     operators: await list("operator"), products: await list("product"), technologies: await list("technology"),
     portalStatuses: await list("portalStatus"), sizes: await list("size"),
+    municipalitiesByDistrict: Object.fromEntries((await db.execute(sql`select district, array_agg(distinct municipality order by municipality) as m from companies
+      where district is not null and municipality is not null group by district`)).rows.map((r) => [r.district as string, r.m as string[]])),
+    nboCampaigns: (await db.execute(sql`select ${NBO_HEAD} as v, count(*)::int as n from companies where nbo_campaign is not null group by 1 order by 1`)).rows as { v: string; n: number }[],
   };
 }
 

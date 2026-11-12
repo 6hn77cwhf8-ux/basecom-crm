@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, lte } from "drizzle-orm";
-import { cycleForDate, cycleFromIndex } from "@basecom/shared";
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { cycleForDate, cycleFromIndex, normalizePhone } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, companies, companyContacts, companyNotes, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -96,6 +96,10 @@ async function loadCompany(db: Db, id: string) {
 function canEdit(by: PublicUser, ownerId: string | null) {
   return by.role === "admin" || (ownerId !== null && ownerId === by.id);
 }
+/** Contactos: também quem trabalha empresas sem carteira (nas campanhas). */
+function canEditContacts(by: PublicUser, ownerId: string | null) {
+  return canEdit(by, ownerId) || ownerId === null;
+}
 
 /** NC/FC só por alteração manual, com justificação (FC conta 50 % em tudo). */
 export async function setWalletKind(db: Db, by: PublicUser, companyId: string, kind: "NC" | "FC", reason: string) {
@@ -109,6 +113,18 @@ export async function setWalletKind(db: Db, by: PublicUser, companyId: string, k
   await db.insert(auditLog).values({ userId: by.id, action: "carteira_nc_fc_alterada", entity: "company", entityId: companyId, details: `${co.walletKind} → ${kind}: ${reason.trim()}` });
 }
 
+/**
+ * Clientes NOS sem carteira ainda não identificados como NC ou FC: o comercial tem de identificar (Teste 1, ponto 8).
+ * Qualquer perfil identifica uma vez; depois, só por alteração manual com justificação.
+ */
+export async function identifyWalletKind(db: Db, by: PublicUser, companyId: string, kind: "NC" | "FC") {
+  const co = await loadCompany(db, companyId);
+  if (co.ownerId || co.walletKindConfirmed) throw new AuthError(409, "Esta empresa já tem NC/FC identificado.");
+  await db.update(companies).set({ walletKind: kind, walletKindConfirmed: true, updatedAt: new Date() }).where(eq(companies.id, companyId));
+  await db.insert(companyNotes).values({ companyId, kind: "wallet", text: `Identificada como ${kind}.`, userId: by.id });
+  await db.insert(auditLog).values({ userId: by.id, action: "carteira_nc_fc_identificada", entity: "company", entityId: companyId, details: kind });
+}
+
 /** «Não contactar» (oposição RGPD): qualquer perfil marca; só o Administrador retira. */
 export async function setDoNotContact(db: Db, by: PublicUser, companyId: string, value: boolean, reason: string) {
   const co = await loadCompany(db, companyId);
@@ -120,17 +136,56 @@ export async function setDoNotContact(db: Db, by: PublicUser, companyId: string,
   await db.insert(auditLog).values({ userId: by.id, action: value ? "nao_contactar_marcado" : "nao_contactar_retirado", entity: "company", entityId: companyId, details: reason.trim() });
 }
 
-/** Telefone ou email «Incorreto»: nunca é reativado por uma importação. */
+/**
+ * Telefone ou email «Incorreto»: nunca é reativado por uma importação.
+ * Se era o principal, o seguinte válido do mesmo tipo passa a principal (sai logo do contacto principal).
+ */
 export async function setContactStatus(db: Db, by: PublicUser, contactId: string, status: "valid" | "incorrect") {
   const ct = await db.query.companyContacts.findFirst({ where: eq(companyContacts.id, contactId) });
   if (!ct) throw new AuthError(404, "Contacto não encontrado.");
   const co = await loadCompany(db, ct.companyId);
-  // Empresas sem carteira: o comercial poderá editar quando estiverem numa campanha sua (Fase 3).
-  if (!canEdit(by, co.ownerId)) throw new AuthError(403, "Só o responsável da carteira ou o Administrador alteram os contactos desta empresa.");
+  if (!canEditContacts(by, co.ownerId)) throw new AuthError(403, "Só o responsável da carteira ou o Administrador alteram os contactos desta empresa.");
   if (ct.status === status) return;
-  await db.update(companyContacts).set({ status }).where(eq(companyContacts.id, contactId));
-  await db.insert(companyNotes).values({ companyId: co.id, kind: "note", text: `Contacto ${ct.value} marcado como ${status === "incorrect" ? "Incorreto" : "Válido"}`, userId: by.id });
-  await db.insert(auditLog).values({ userId: by.id, action: "contacto_estado_alterado", entity: "company", entityId: co.id, details: `${ct.value} → ${status}` });
+  await db.transaction(async (tx) => {
+    await tx.update(companyContacts).set({ status, ...(status === "incorrect" ? { isPrimary: false } : {}) }).where(eq(companyContacts.id, contactId));
+    if (status === "incorrect" && ct.isPrimary) {
+      const [next] = await tx.select({ id: companyContacts.id }).from(companyContacts)
+        .where(and(eq(companyContacts.companyId, co.id), eq(companyContacts.kind, ct.kind), eq(companyContacts.status, "valid"))).orderBy(companyContacts.createdAt).limit(1);
+      if (next) await tx.update(companyContacts).set({ isPrimary: true, personName: sql`coalesce(${companyContacts.personName}, ${ct.personName})`, salutation: sql`coalesce(${companyContacts.salutation}, ${ct.salutation})` }).where(eq(companyContacts.id, next.id));
+    }
+    await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", text: `Contacto ${ct.value} marcado como ${status === "incorrect" ? "Incorreto" : "Válido"}`, userId: by.id });
+    await tx.insert(auditLog).values({ userId: by.id, action: "contacto_estado_alterado", entity: "company", entityId: co.id, details: `${ct.value} → ${status}` });
+  });
+}
+
+/** Acrescentar um telefone ou email à empresa (com o nome da pessoa, opcional). */
+export async function addContact(db: Db, by: PublicUser, companyId: string, input: { kind: "phone" | "email"; value: string; personName?: string; salutation?: string; primary?: boolean }) {
+  const co = await loadCompany(db, companyId);
+  if (!canEditContacts(by, co.ownerId)) throw new AuthError(403, "Só o responsável da carteira ou o Administrador alteram os contactos desta empresa.");
+  let value = input.value.trim();
+  let phoneType: string | null = null;
+  if (input.kind === "phone") {
+    const p = normalizePhone(value);
+    if (!p) throw new AuthError(400, "Telefone inválido: use 9 algarismos (ex.: 912 345 678).");
+    value = p.national; phoneType = p.type;
+  } else {
+    value = value.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new AuthError(400, "Email inválido.");
+  }
+  const existing = await db.select().from(companyContacts).where(and(eq(companyContacts.companyId, co.id), eq(companyContacts.kind, input.kind)));
+  const dup = existing.find((x) => x.value === value);
+  if (dup?.status === "valid") throw new AuthError(409, "Este contacto já existe na ficha.");
+  if (dup) throw new AuthError(409, "Este contacto está marcado como incorreto. Pode voltar a marcá-lo como válido.");
+  const primary = input.primary || !existing.some((x) => x.isPrimary && x.status === "valid");
+  return db.transaction(async (tx) => {
+    if (primary) await tx.update(companyContacts).set({ isPrimary: false }).where(and(eq(companyContacts.companyId, co.id), eq(companyContacts.kind, input.kind)));
+    const [row] = await tx.insert(companyContacts).values({
+      companyId: co.id, kind: input.kind, value, phoneType, personName: input.personName?.trim() || null, salutation: input.salutation?.trim() || null, isPrimary: primary,
+    }).returning();
+    await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", text: `Contacto acrescentado: ${value}${input.personName?.trim() ? ` (${input.personName.trim()})` : ""}`, userId: by.id });
+    await tx.insert(auditLog).values({ userId: by.id, action: "contacto_acrescentado", entity: "company", entityId: co.id, details: value });
+    return row!;
+  });
 }
 
 /** Regra fixa: consultas a empresas de outra carteira ficam em auditoria. */

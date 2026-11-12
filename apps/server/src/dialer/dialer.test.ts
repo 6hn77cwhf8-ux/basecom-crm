@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { campaignEntries, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
+import { campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { createCampaign } from "../campaigns/service.js";
-import { endCall, nextEntry, saveResult, startCall, type ResultInput } from "./service.js";
+import { endCall, myDialerCampaign, nextEntry, saveResult, setDialerCampaign, startCall, type ResultInput } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -128,5 +128,38 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     const n = await nextEntry(db, toPublic(admin), campaignId);
     expect(n).not.toBeNull();
     await db.delete(users).where(eq(users.id, outsider!.id));
+  });
+
+  it("Recusa por outro operador: operadora obrigatória e nova abordagem na data que o cliente sugere", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    await expect(call(ana, { outcomeId: "not_interested", reasonId: "loyal_other", date: "2027-09-30" })).rejects.toThrow(/operadora/);
+    const at = "2027-03-15T10:00:00.000Z";
+    const { n } = await call(ana, { outcomeId: "not_interested", reasonId: "loyal_other", date: "2027-09-30", at, competitor: { operator: "MEO" } });
+    const co = (await db.query.companies.findFirst({ where: eq(companies.id, n.company.id) }))!;
+    expect(co).toMatchObject({ loyaltyEnd: "2027-09-30", operator: "MEO", campaignEligibleFrom: "2027-03-15" });
+    const [t] = await db.select().from(tasks).where(eq(tasks.companyId, n.company.id));
+    expect(t!.dueAt.toISOString().slice(0, 10)).toBe("2027-03-15");
+  });
+
+  it("Cliente NOS sem carteira: o resultado obriga a identificar NC ou FC", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const n = (await nextEntry(db, toPublic(bia), campaignId))!;
+    await db.update(companies).set({ accountType: "client", walletKindConfirmed: false, ownerId: null }).where(eq(companies.id, n.company.id));
+    expect((await nextEntry(db, toPublic(bia), campaignId))!.company.needsKind).toBe(true);
+    const c = await startCall(db, toPublic(bia), { companyId: n.company.id, contactId: n.phone?.id, entryId: n.entry.id, source: "new" });
+    await expect(saveResult(db, toPublic(bia), c.id, { outcomeId: "no_answer" })).rejects.toThrow(/NC ou FC/);
+    await saveResult(db, toPublic(bia), c.id, { outcomeId: "no_answer", walletKind: "FC" });
+    expect((await db.query.companies.findFirst({ where: eq(companies.id, n.company.id) }))).toMatchObject({ walletKind: "FC", walletKindConfirmed: true });
+  });
+
+  it("Campanha de cada comercial: decide o Administrador (e passa a ser membro)", async () => {
+    expect(await myDialerCampaign(db, toPublic(ana))).toBe(campaignId); // única campanha
+    const [cat] = await db.insert(users).values({ name: `cat ${tag}`, email: `cat-d${tag}@basecom.pt`, role: "sales", passwordHash: "x", mustChangePassword: false }).returning();
+    expect(await myDialerCampaign(db, toPublic(cat!))).toBeNull();
+    await setDialerCampaign(db, toPublic(admin), cat!.id, campaignId);
+    expect(await myDialerCampaign(db, toPublic(cat!))).toBe(campaignId);
+    await db.delete(campaignMembers).where(eq(campaignMembers.userId, cat!.id));
+    await db.execute(sql`delete from audit_log where entity_id = ${cat!.id}`);
+    await db.delete(users).where(eq(users.id, cat!.id));
   });
 });

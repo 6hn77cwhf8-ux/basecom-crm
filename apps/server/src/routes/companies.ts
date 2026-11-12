@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { companyKpis, filterOptions, getCompany, listCompanies, quickSearch } from "../companies/service.js";
-import { auditForeignView, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
+import { addContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
 
 /** Empresas: todos os perfis consultam (a carteira só limita tarefas e campanhas). */
 export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -14,7 +14,7 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
     const f = z.object({
       q: z.string().max(100).optional(), accountType: z.enum(["client", "prospect"]).optional(),
       owner: z.union([z.literal("none"), z.literal("any"), z.string().uuid()]).optional(), wallet: z.enum(["NC", "FC"]).optional(),
-      status: z.enum(["dnc", "review", "nif"]).optional(), municipality: z.string().max(100).optional(),
+      status: z.enum(["dnc", "review", "nif", "mismatch", "unidentified"]).optional(), municipality: z.string().max(100).optional(),
       district: z.string().max(100).optional(), sector: z.string().max(100).optional(),
       offset: z.coerce.number().int().min(0).optional(), limit: z.coerce.number().int().min(1).max(200).optional(),
     }).parse(req.query);
@@ -47,6 +47,15 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
     const b = z.object({ value: z.boolean(), reason }).parse(req.body);
     await setDoNotContact(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b.value, b.reason);
     return { ok: true };
+  });
+  app.post("/companies/:id/identify-kind", any, async (req) => {
+    const b = z.object({ kind: z.enum(["NC", "FC"]) }).parse(req.body);
+    await identifyWalletKind(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b.kind);
+    return { ok: true };
+  });
+  app.post("/companies/:id/contacts", any, async (req) => {
+    const b = z.object({ kind: z.enum(["phone", "email"]), value: z.string().trim().min(3).max(200), personName: z.string().max(120).optional(), salutation: z.string().max(20).optional(), primary: z.boolean().optional() }).parse(req.body);
+    return addContact(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b);
   });
   app.patch("/contacts/:id", any, async (req) => {
     const b = z.object({ status: z.enum(["valid", "incorrect"]) }).parse(req.body);

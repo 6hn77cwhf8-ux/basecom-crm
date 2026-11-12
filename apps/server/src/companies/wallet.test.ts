@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
 import { auditLog, companies, companyContacts, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
-import { applyDueWalletChanges, auditForeignView, cancelScheduled, cycleStart, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind } from "./wallet.js";
+import { addContact, applyDueWalletChanges, identifyWalletKind, auditForeignView, cancelScheduled, cycleStart, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind } from "./wallet.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -77,5 +77,23 @@ describe.skipIf(!url)("carteiras", () => {
     await auditForeignView(db, toPublic(bia), ids[0]!, bia.id);
     const views = await db.select().from(auditLog).where(and(eq(auditLog.action, "consulta_outra_carteira"), eq(auditLog.entityId, ids[0]!)));
     expect(views.map((v) => v.userId)).toEqual([ana.id]);
+  });
+
+  it("contacto principal incorreto é substituído pelo seguinte; acrescentar contactos; identificar NC/FC", async () => {
+    const co = ids[2]!; // sem carteira? garantir
+    await db.update(companies).set({ ownerId: null, walletKindConfirmed: false }).where(eq(companies.id, co));
+    const a = await addContact(db, toPublic(ana), co, { kind: "phone", value: `912 ${tag.slice(0, 3)} ${tag.slice(3)}`, personName: "Rui Sá", salutation: "Sr." });
+    expect(a).toMatchObject({ isPrimary: true, phoneType: "mobile" });
+    const b = await addContact(db, toPublic(ana), co, { kind: "phone", value: `22${tag}1` });
+    expect(b.isPrimary).toBe(false);
+    await expect(addContact(db, toPublic(ana), co, { kind: "phone", value: a.value })).rejects.toThrow(/já existe/);
+    await expect(addContact(db, toPublic(ana), co, { kind: "email", value: "nao-e-email" })).rejects.toThrow(/inválido/);
+    await setContactStatus(db, toPublic(ana), a.id, "incorrect");
+    const nb = (await db.query.companyContacts.findFirst({ where: eq(companyContacts.id, b.id) }))!;
+    expect(nb).toMatchObject({ isPrimary: true, personName: "Rui Sá" });
+
+    await identifyWalletKind(db, toPublic(ana), co, "FC");
+    expect(await db.query.companies.findFirst({ where: eq(companies.id, co) })).toMatchObject({ walletKind: "FC", walletKindConfirmed: true });
+    await expect(identifyWalletKind(db, toPublic(bia), co, "NC")).rejects.toThrow(/já tem/);
   });
 });

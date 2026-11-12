@@ -22,6 +22,8 @@ export const filtersSchema = z.object({
   products: z.array(z.string()).max(50).optional(),
   technologies: z.array(z.string()).max(20).optional(),
   portalStatus: z.array(z.string()).max(5).optional(),
+  /** Campanha NBO da NOS, sem as ofertas (ex.: «SOMA | Adicionar fixo»). */
+  nboCampaigns: z.array(z.string()).max(50).optional(),
   loyaltyEndFrom: z.string().date().optional(),
   loyaltyEndTo: z.string().date().optional(),
   /** Só empresas sem carteira (ignora as carteiras dos comerciais da campanha). */
@@ -44,6 +46,7 @@ function eligible(f: CampaignFilters, memberIds: string[], excludeCampaignId?: s
     inList(sql`c.district`, f.districts), inList(sql`c.municipality`, f.municipalities), inList(sql`c.sector`, f.sectors),
     inList(sql`c.operator`, f.operators), inList(sql`c.size`, f.sizes), inList(sql`c.product`, f.products),
     inList(sql`c.technology`, f.technologies), inList(sql`c.portal_status`, f.portalStatus),
+    inList(sql`trim(split_part(c.nbo_campaign, ' — ', 1))`, f.nboCampaigns),
     f.loyaltyEndFrom ? sql`c.loyalty_end >= ${f.loyaltyEndFrom}` : undefined,
     f.loyaltyEndTo ? sql`c.loyalty_end <= ${f.loyaltyEndTo}` : undefined,
   ];

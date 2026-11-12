@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  /** Campanha de Novos clientes em que o comercial trabalha, decidida pelo Administrador. */
+  dialerCampaignId: uuid("dialer_campaign_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -115,6 +117,8 @@ export const companies = pgTable("companies", {
   /** Dono da carteira; nulo = sem carteira («Basecom»). */
   ownerId: uuid("owner_id").references(() => users.id),
   walletKind: walletKindEnum("wallet_kind").notNull().default("NC"),
+  /** NC/FC identificado: sempre nas empresas em carteira; nos clientes sem carteira, o comercial tem de identificar. */
+  walletKindConfirmed: boolean("wallet_kind_confirmed").notNull().default(false),
   /** RGPD: nunca é reativada por uma importação. */
   doNotContact: boolean("do_not_contact").notNull().default(false),
   /** Empresa encerrada (resultado «Empresa encerrada»): sai de todas as campanhas. */
