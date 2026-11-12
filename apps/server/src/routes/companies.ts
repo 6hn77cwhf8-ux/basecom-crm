@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { companyKpis, filterOptions, getCompany, listCompanies, quickSearch } from "../companies/service.js";
+import { companyKpis, filterOptions, getCompany, listCompanies, quickSearch, SORT_KEYS } from "../companies/service.js";
 import { addContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
 
 /** Empresas: todos os perfis consultam (a carteira só limita tarefas e campanhas). */
@@ -16,6 +16,7 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
       owner: z.union([z.literal("none"), z.literal("any"), z.string().uuid()]).optional(), wallet: z.enum(["NC", "FC"]).optional(),
       status: z.enum(["dnc", "review", "nif", "mismatch", "unidentified"]).optional(), municipality: z.string().max(100).optional(),
       district: z.string().max(100).optional(), sector: z.string().max(100).optional(),
+      sort: z.enum(SORT_KEYS).optional(), dir: z.enum(["asc", "desc"]).optional(),
       offset: z.coerce.number().int().min(0).optional(), limit: z.coerce.number().int().min(1).max(200).optional(),
     }).parse(req.query);
     return listCompanies(db, f);

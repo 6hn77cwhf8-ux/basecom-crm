@@ -16,7 +16,7 @@ export type CompanyRow = {
   l2bMonthly: string | null; portalStatus: string | null; walletKindConfirmed: boolean;
 };
 export type CompanyKpis = { total: number; noOwner: number; withOwner: number; nc: number; fc: number; clients: number; dnc: number; review: number; mismatch: number; unidentified: number };
-export type CompanyFilters = Partial<{ q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; offset: number; limit: number }>;
+export type CompanyFilters = Partial<{ sort: string; dir: "asc" | "desc"; q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; offset: number; limit: number }>;
 export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[]; operators?: string[]; products?: string[]; technologies?: string[]; portalStatuses?: string[]; sizes?: string[]; municipalitiesByDistrict?: Record<string, string[]>; nboCampaigns?: { v: string; n: number }[] };
 export type CampaignFilters = Partial<{ accountType: "client" | "prospect"; districts: string[]; municipalities: string[]; sectors: string[]; operators: string[]; sizes: string[]; products: string[]; technologies: string[]; portalStatus: string[]; loyaltyEndFrom: string; loyaltyEndTo: string; onlyWithoutOwner: boolean; nboCampaigns: string[] }>;
 export type Campaign = { id: string; name: string; mode: "new" | "current"; status: "active" | "paused" | "ended"; script: string; scriptPitchNew: string | null; scriptPitchCurrent: string | null; filters: CampaignFilters; createdAt: string; members: { id: string; name: string }[]; total: number; pending: number; ready: number; done: number; exhausted: number };
@@ -42,7 +42,7 @@ export type DialerEntry = {
   scripts: { opening: string; pitch: string }; vars: Record<string, string>; people: { salutation: string | null; name: string }[];
   history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
 };
-export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC" };
+export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string } };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type WorkState = "working" | "training" | "break" | "switch";
 export type DaySummary = {

@@ -166,4 +166,14 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await db.execute(sql`delete from audit_log where entity_id = ${cat!.id}`);
     await db.delete(users).where(eq(users.id, cat!.id));
   });
+
+  it("Mudar de decisor: fica nos Contactos como decisor principal e passa a vir primeiro no script", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const { n } = await call(ana, { outcomeId: "call_later", at: new Date(Date.now() + 86400_000).toISOString(), newDecisor: { salutation: "Sr.", name: "Rui Sá" } });
+    const person = (await db.select().from(companyContacts).where(and(eq(companyContacts.companyId, n.company.id), eq(companyContacts.kind, "person"))))[0]!;
+    expect(person).toMatchObject({ personName: "Rui Sá", salutation: "Sr.", isPrimary: true });
+    await db.update(campaignEntries).set({ nextAt: null, assignedTo: null, lockedBy: null, lockedUntil: null }).where(eq(campaignEntries.companyId, n.company.id));
+    const again = (await nextEntry(db, toPublic(ana), campaignId))!;
+    if (again.company.id === n.company.id) expect(again.people[0]).toEqual({ salutation: "Sr.", name: "Rui Sá" });
+  });
 });

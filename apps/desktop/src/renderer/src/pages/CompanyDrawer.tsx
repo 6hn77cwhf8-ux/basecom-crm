@@ -61,7 +61,8 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   const emails = d?.contacts.filter((x) => x.kind === "email" && x.status === "valid") ?? [];
   const main = phones.find((p) => p.isPrimary) ?? phones[0];
   const mainEmail = emails.find((p) => p.isPrimary) ?? emails[0];
-  const decisor = d?.contacts.find((x) => x.isPrimary && x.personName && x.status === "valid") ?? d?.contacts.find((x) => x.personName && x.status === "valid");
+  // Decisor principal: o indicado numa chamada («Mudar de decisor») tem prioridade sobre o da importação.
+  const decisor = d?.contacts.find((x) => x.kind === "person" && x.isPrimary) ?? d?.contacts.find((x) => x.isPrimary && x.personName && x.status === "valid") ?? d?.contacts.find((x) => x.personName && x.status === "valid");
   const later = "Chega na Fase 3, com o Power Dialer e as oportunidades.";
   const canEdit = !!co && (me.role === "admin" || (!!co.ownerId && co.ownerId === me.id));
   // Contactos: também quem trabalha empresas sem carteira.
@@ -224,7 +225,7 @@ function Contacts({ d, canEdit, onChange }: { d: CompanyDetail; canEdit: boolean
           : x.status === "incorrect" ? x.value : <a href={`mailto:${x.value}`} style={link}>{x.value}</a>}
         {x.isPrimary && x.status !== "incorrect" && " · principal"}
       </span>
-      {x.kind === "person" ? <Chip>2.º decisor</Chip> : x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : <Chip tone="ok">Válido</Chip>}
+      {x.kind === "person" ? <Chip tone={x.isPrimary ? "brand" : "neutral"}>{x.isPrimary ? "Decisor principal" : "2.º decisor"}</Chip> : x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : <Chip tone="ok">Válido</Chip>}
       {canEdit && x.kind !== "person" ? <button style={{ ...small, height: 26 }} onClick={() => api.setContactStatus(x.id, x.status === "incorrect" ? "valid" : "incorrect").then(onChange)}>{x.status === "incorrect" ? "Marcar válido" : "Marcar incorreto"}</button> : <span />}
     </div>
   );

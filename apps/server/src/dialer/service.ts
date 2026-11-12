@@ -51,7 +51,8 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   const co = (await db.query.companies.findFirst({ where: eq(companies.id, e.companyId) }))!;
   const contacts = await db.select().from(companyContacts).where(eq(companyContacts.companyId, co.id)).orderBy(desc(companyContacts.isPrimary), companyContacts.createdAt);
   const phones = contacts.filter((x) => x.kind === "phone" && x.status === "valid");
-  const people = contacts.filter((x) => x.personName);
+  // Decisor principal: o indicado na chamada (contacto «pessoa» principal) vem primeiro.
+  const people = contacts.filter((x) => x.personName && x.status !== "incorrect").sort((a, b) => Number(b.kind === "person" && b.isPrimary) - Number(a.kind === "person" && a.isPrimary));
   const owner = co.ownerId ? (await db.query.users.findFirst({ where: eq(users.id, co.ownerId) }))?.name ?? null : null;
   const history = await companyFeed(db, co.id, 12);
   const decisor1 = people[0] ? `${people[0].salutation ? people[0].salutation + " " : ""}${people[0].personName}` : "";
@@ -170,6 +171,8 @@ export type ResultInput = {
   competitor?: { operator?: string; renewalDate?: string; text?: string };
   /** Clientes NOS sem carteira e sem NC/FC: o comercial identifica no resultado. */
   walletKind?: "NC" | "FC";
+  /** «Mudar de decisor» na abertura: fica nos Contactos como decisor principal. */
+  newDecisor?: { salutation?: string | null; name: string };
 };
 
 /** Recusas por outro operador (fidelizado ou renovou): a nova abordagem é na data que o cliente sugerir, não automática. */
@@ -216,7 +219,16 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       await tx.update(companies).set({ walletKind: input.walletKind, walletKindConfirmed: true, updatedAt: now }).where(eq(companies.id, co.id));
       await tx.insert(companyNotes).values({ companyId: co.id, kind: "wallet", text: `Identificada como ${input.walletKind}.`, userId: user.id });
     }
-    // Decisor indicado na chamada («Mudar de decisor» na abertura ou «Decisor ausente»).
+    if (input.newDecisor?.name.trim()) {
+      const nd = { salutation: input.newDecisor.salutation?.trim() || null, name: input.newDecisor.name.trim() };
+      const people = await tx.select().from(companyContacts).where(and(eq(companyContacts.companyId, co.id), sql`${companyContacts.personName} is not null`));
+      const same = people.find((p) => p.personName!.toLowerCase() === nd.name.toLowerCase());
+      await tx.update(companyContacts).set({ isPrimary: false }).where(and(eq(companyContacts.companyId, co.id), eq(companyContacts.kind, "person")));
+      if (same?.kind === "person") await tx.update(companyContacts).set({ isPrimary: true, salutation: nd.salutation ?? same.salutation }).where(eq(companyContacts.id, same.id));
+      else if (!same || same.kind !== "person") await tx.insert(companyContacts).values({ companyId: co.id, kind: "person", value: nd.name, personName: nd.name, salutation: nd.salutation, isPrimary: true });
+      await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Novo decisor indicado na chamada: ${nd.salutation ? nd.salutation + " " : ""}${nd.name}` });
+    }
+    // Decisor indicado em «Decisor ausente».
     if (input.decisorName?.trim()) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Decisor: ${input.decisorName.trim()}` });
     const note = [outcome.label, reason?.label, input.comment?.trim()].filter(Boolean).join(" · ");
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "call", text: note, userId: user.id });

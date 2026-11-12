@@ -9,9 +9,18 @@ import { normalizeCompanyName } from "@basecom/shared";
  * as de outra carteira nunca entram nas suas tarefas nem campanhas.
  */
 
+export const SORT_KEYS = ["nif", "name", "accountType", "district", "municipality", "sector", "l2b", "owner", "wallet", "loyaltyEnd"] as const;
+export type SortKey = (typeof SORT_KEYS)[number];
+const SORT_COL = {
+  nif: companies.nif, name: companies.name, accountType: companies.accountType, district: companies.district, municipality: companies.municipality,
+  sector: companies.sector, l2b: companies.l2bMonthly, owner: users.name, wallet: companies.walletKind, loyaltyEnd: companies.loyaltyEnd,
+};
+
 export type CompanyFilters = {
   q?: string; accountType?: "client" | "prospect"; owner?: string; wallet?: "NC" | "FC";
-  status?: "dnc" | "review" | "nif" | "mismatch" | "unidentified"; municipality?: string; district?: string; sector?: string; offset?: number; limit?: number;
+  status?: "dnc" | "review" | "nif" | "mismatch" | "unidentified";
+  /** Ordenação por coluna, como no Excel (vazios sempre no fim). */
+  sort?: SortKey; dir?: "asc" | "desc"; municipality?: string; district?: string; sector?: string; offset?: number; limit?: number;
 };
 
 const ACCENTED = "áàâãäéèêëíìîïóòôõöúùûüç";
@@ -78,7 +87,7 @@ export async function listCompanies(db: Db, f: CompanyFilters) {
     nifValid: companies.nifValid, operator: companies.operator, loyaltyEnd: companies.loyaltyEnd,
     l2bMonthly: companies.l2bMonthly, portalStatus: companies.portalStatus, walletKindConfirmed: companies.walletKindConfirmed,
   }).from(companies).leftJoin(users, eq(users.id, companies.ownerId)).where(w)
-    .orderBy(asc(companies.name)).offset(f.offset ?? 0).limit(Math.min(f.limit ?? 50, 200));
+    .orderBy(...(f.sort && f.sort !== "name" ? [sql`${SORT_COL[f.sort]} ${sql.raw(f.dir === "desc" ? "desc" : "asc")} nulls last`] : []), f.sort === "name" && f.dir === "desc" ? desc(companies.name) : asc(companies.name)).offset(f.offset ?? 0).limit(Math.min(f.limit ?? 50, 200));
   return { total, rows };
 }
 

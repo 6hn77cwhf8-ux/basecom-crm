@@ -37,7 +37,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   const allPicked = pageIds.length > 0 && pageIds.every((id) => picked.has(id));
 
   const set = (k: keyof CompanyFilters, v: string) => { setF((o) => ({ ...o, [k]: v || undefined })); setPage(0); };
-  const active = useMemo(() => Object.entries(f).filter(([, v]) => v).length, [f]);
+  const active = useMemo(() => Object.entries(f).filter(([k, v]) => v && k !== "sort" && k !== "dir").length, [f]);
   const clear = () => { setF({}); setQ(""); setPage(0); };
   const sel = { ...input, height: 36, minWidth: 0 };
 
@@ -105,7 +105,14 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
             <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>
               {isAdmin && <th style={{ ...th, width: 28 }}><input type="checkbox" aria-label="Selecionar todas desta página" checked={allPicked}
                 onChange={() => setPicked((p) => { const n = new Set(p); pageIds.forEach((id) => (allPicked ? n.delete(id) : n.add(id))); return n; })} /></th>}
-              {["NIF", "Empresa", "Tipo", "Distrito", "Concelho", "Setor", "L2B", "Responsável", "Carteira", "Estado"].map((h) => <th key={h} style={h === "L2B" ? { ...th, textAlign: "right" } : th}>{h}</th>)}
+              {COLS.map(([h, k]) => {
+                const on = (f.sort ?? "name") === k;
+                const arrow = on ? ((f.dir ?? "asc") === "asc" ? " ▲" : " ▼") : "";
+                return <th key={h} style={h === "L2B" ? { ...th, textAlign: "right" } : th}>
+                  {k ? <button title="Ordenar (clique outra vez para inverter)" onClick={() => { setF((o) => ({ ...o, sort: k, dir: on && (o.dir ?? "asc") === "asc" ? "desc" : (k === "l2b" && !on ? "desc" : "asc") })); setPage(0); }}
+                    style={{ border: 0, background: "none", padding: 0, cursor: "pointer", font: "inherit", fontWeight: on ? 700 : 600, color: on ? c.ink : "inherit" }}>{h}{arrow}</button> : h}
+                </th>;
+              })}
             </tr></thead>
             <tbody>
               {data?.rows.map((r) => (
@@ -149,6 +156,9 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
  * Estado da empresa. O tipo de conta (Cliente / NN) já está noutra coluna, por isso aqui só aparecem os avisos:
  * Não contactar, NIF, duplicado, dados que não cruzam (folha ≠ portal NOS) e NC/FC por identificar.
  */
+/** Colunas da lista e a chave de ordenação (como no Excel: clicar ordena, clicar outra vez inverte). */
+const COLS: [string, string | null][] = [["NIF", "nif"], ["Empresa", "name"], ["Tipo", "accountType"], ["Distrito", "district"], ["Concelho", "municipality"], ["Setor", "sector"], ["L2B", "l2b"], ["Responsável", "owner"], ["Carteira", "wallet"], ["Estado", null]];
+
 export function StatusChips({ r }: { r: Pick<CompanyRow, "doNotContact" | "needsReview" | "nifValid" | "accountType" | "portalStatus" | "ownerId" | "walletKindConfirmed"> }) {
   const mismatch = (r.accountType === "client" && r.portalStatus === "PROSPECT") || (r.accountType === "prospect" && r.portalStatus === "CLIENTE");
   const unidentified = r.accountType === "client" && !r.ownerId && !r.walletKindConfirmed;
