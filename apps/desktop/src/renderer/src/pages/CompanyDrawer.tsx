@@ -3,6 +3,7 @@ import { formatPhone } from "@basecom/shared";
 import { api, type CompanyDetail, type Contact, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
 import { StatusChips } from "./Companies";
+import { QuickCall } from "./QuickCall";
 import { DeleteDialog, KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
 
 type Tab = "resumo" | "contactos" | "historico" | "oportunidades" | "vendas" | "tickets";
@@ -45,6 +46,8 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   const [tab, setTab] = useState<Tab>("resumo");
   const [error, setError] = useState("");
 
+  // Ligar pela app BASECOM do telemóvel (botão «Ligar» e números da ficha).
+  const [calling, setCalling] = useState<{ id: string; value: string } | null>(null);
   const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
   useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
@@ -89,7 +92,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
                 <button style={btn} disabled title={later}>Nova solicitação</button>
                 <button style={btn} onClick={() => setDialog("opp")}>Nova oportunidade</button>
-                {main ? <a href={`tel:+351${main.value}`} style={{ ...btnDark, display: "inline-flex", alignItems: "center", textDecoration: "none" }} title="Liga pelo programa de telefone do computador; com a app Android, liga no telemóvel">Ligar {formatPhone(main.value)}</a>
+                {main ? <button style={btnDark} title="Liga pelo telemóvel BASECOM e regista o resultado" onClick={() => setCalling(main)}>Ligar {formatPhone(main.value)}</button>
                   : <button style={btnDark} disabled>Ligar</button>}
               </div>
             </header>
@@ -102,6 +105,8 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             </div>
             {dialog === "address" && <AddressDialog co={co} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
             {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
+            {calling && <QuickCall company={{ id: co.id, name: co.name, nif: co.nif }} contact={calling} needsKind={co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed}
+              onClose={() => setCalling(null)} onSaved={() => { setCalling(null); setTab("historico"); load(); }} />}
             {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
             {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"
@@ -141,7 +146,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                 </Card>
                 <Card title="Contacto principal" action={canEditContacts ? <button style={{ ...small, height: 26 }} onClick={() => setDialog("address")}>Editar morada</button> : undefined}>
                   <Row k="Decisor" v={decisor?.personName ? `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.personName}` : "—"} />
-                  <Row k="Telefone" v={main ? <><a href={`tel:+351${main.value}`} style={link} title="Ligar">{formatPhone(main.value)}</a> · {main.phoneType === "mobile" ? "Móvel" : "Fixo"}</> : "—"} />
+                  <Row k="Telefone" v={main ? <><button style={{ ...link, border: 0, background: "none", padding: 0, cursor: "pointer", font: "inherit" }} title="Ligar pelo telemóvel BASECOM" onClick={() => setCalling(main)}>{formatPhone(main.value)}</button> · {main.phoneType === "mobile" ? "Móvel" : "Fixo"}</> : "—"} />
                   <Row k="Email" v={mainEmail ? <a href={`mailto:${mainEmail.value}`} style={link} title="Abrir no email (Outlook)">{mainEmail.value}</a> : "—"} />
                   <Row k="Morada" v={co.address ?? "—"} />
                   <Row k="Código postal" v={[co.postalCode, co.locality].filter(Boolean).join(" ") || "—"} />
@@ -161,11 +166,11 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                   <Row k="Saída da NOS" v={co.nosExitMonth ? fmtMonth(co.nosExitMonth) : "—"} />
                   <Nbo value={co.nboCampaign} />
                 </Card>
-                <div style={{ gridColumn: "1 / -1" }}><Contacts d={d!} canEdit={canEditContacts} onChange={load} /></div>
+                <div style={{ gridColumn: "1 / -1" }}><Contacts d={d!} canEdit={canEditContacts} onChange={load} onCall={setCalling} /></div>
                 <div style={{ gridColumn: "1 / -1" }}><History d={d!} limit={5} onMore={() => setTab("historico")} /></div>
               </div>
             )}
-            {tab === "contactos" && <Contacts d={d!} canEdit={canEditContacts} onChange={load} />}
+            {tab === "contactos" && <Contacts d={d!} canEdit={canEditContacts} onChange={load} onCall={setCalling} />}
             {tab === "oportunidades" && <CompanyOpps id={co.id} />}
             {tab === "historico" && <><WalletHistory d={d!} /><History d={d!} /></>}
             {TABS.find((t) => t.id === tab)?.later && (
@@ -219,7 +224,7 @@ function WalletHistory({ d }: { d: CompanyDetail }) {
   );
 }
 
-function Contacts({ d, canEdit, onChange }: { d: CompanyDetail; canEdit: boolean; onChange: () => void }) {
+function Contacts({ d, canEdit, onChange, onCall }: { d: CompanyDetail; canEdit: boolean; onChange: () => void; onCall: (x: Contact) => void }) {
   const [adding, setAdding] = useState(false);
   const [showBad, setShowBad] = useState(false);
   const good = d.contacts.filter((x) => x.status !== "incorrect");
@@ -241,7 +246,7 @@ function Contacts({ d, canEdit, onChange }: { d: CompanyDetail; canEdit: boolean
         </span>
       )}
       <span style={{ textDecoration: x.status === "incorrect" ? "line-through" : "none" }}>
-        {x.kind === "phone" ? <>{x.status === "incorrect" ? formatPhone(x.value) : <a href={`tel:+351${x.value}`} style={link}>{formatPhone(x.value)}</a>} · {x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}</>
+        {x.kind === "phone" ? <>{x.status === "incorrect" ? formatPhone(x.value) : <button style={{ ...link, border: 0, background: "none", padding: 0, cursor: "pointer", font: "inherit" }} title="Ligar pelo telemóvel BASECOM" onClick={() => onCall(x)}>{formatPhone(x.value)}</button>} · {x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}</>
           : x.kind === "person" ? <span style={{ color: c.muted }}>Sem telefone nem email</span>
           : x.status === "incorrect" ? x.value : <a href={`mailto:${x.value}`} style={link}>{x.value}</a>}
         {x.isPrimary && x.status !== "incorrect" && " · principal"}

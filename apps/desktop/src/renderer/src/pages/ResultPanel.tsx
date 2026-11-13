@@ -17,7 +17,9 @@ const toIso = (local: string) => (local ? new Date(local).toISOString() : undefi
  * Ecrã do resultado (maquetas «Resultado»): botões do grupo, opções, motivo, comentários e feedback de outra operadora.
  * Mostra o tempo que falta para registar (15 s por omissão); ultrapassar não bloqueia, mas fica registado.
  */
-export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, onGroup, onBack, onSave }: {
+export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, live, onGroup, onBack, onSave }: {
+  /** Resultado aberto com a chamada ainda a decorrer no telemóvel: só grava quando a chamada acabar. */
+  live?: { secs: number; queued: boolean; onHangUp: () => void };
   hidden?: boolean; needsKind?: boolean; cat: Catalogs; group: Group; company: { name: string; nif: string; phone?: string; decisor?: string };
   endedAt: number; busy: boolean; error: string; onGroup: (g: Group) => void; onBack: () => void; onSave: (r: ResultInput) => void;
 }) {
@@ -77,14 +79,21 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
     <section style={{ ...card, padding: 20, display: hidden ? "none" : "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0, overflow: "auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Chamada terminada</span>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: live ? "#1E6F33" : c.muted }}>{live ? "Em chamada" : "Chamada terminada"}</span>
           <h2 style={{ margin: "2px 0", fontSize: 20 }}>{company.name}</h2>
           <span style={{ fontSize: 13, color: c.muted }}>NIF {company.nif}{company.phone ? ` · ${company.phone}` : ""}{company.decisor ? ` · ${company.decisor}` : ""}</span>
         </div>
-        <div role="timer" style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 12, color: c.muted }}>Tempo para registar (desde que desligou)</div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: secs > limit ? "#D70015" : c.ink }}>{secs} / {limit} s</div>
-        </div>
+        {live ? (
+          <div style={{ textAlign: "right", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+            <span style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#1E6F33" }}>{String(Math.floor(live.secs / 60)).padStart(2, "0")}:{String(live.secs % 60).padStart(2, "0")}</span>
+            <button style={{ ...btnDark, height: 36, background: "#D70015", borderColor: "#D70015" }} onClick={live.onHangUp}>Desligar</button>
+          </div>
+        ) : (
+          <div role="timer" style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: c.muted }}>Tempo para registar (desde que desligou)</div>
+            <div style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: secs > limit ? "#D70015" : c.ink }}>{secs} / {limit} s</div>
+          </div>
+        )}
       </header>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -148,7 +157,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       <ErrorText>{error}</ErrorText>
       <footer style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
         <button style={btn} onClick={onBack}>← Voltar ao script</button>
-        <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : "Guardar resultado ⏎"}</button>
+        <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          {live?.queued && <span role="status" style={{ fontSize: 13, color: "#1E6F33", fontWeight: 600 }}>Pronto: grava sozinho quando a chamada acabar.</span>}
+          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? (live.queued ? "Atualizar ⏎" : "Guardar no fim da chamada ⏎") : "Guardar resultado ⏎"}</button>
+        </span>
       </footer>
     </section>
   );

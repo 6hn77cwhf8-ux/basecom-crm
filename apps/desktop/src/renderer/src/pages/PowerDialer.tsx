@@ -49,6 +49,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   // Telemóvel (app BASECOM): marca sozinho e informa o fim da chamada.
   const phone = usePhone();
   const [viaPhone, setViaPhone] = useState(false);
+  // Resultado aberto durante a chamada no telemóvel: a chamada continua; o resultado grava quando ela acabar.
+  const [live, setLive] = useState(false);
+  const [queued, setQueued] = useState(false);
+  const pendingRef = useRef<ResultInput | null>(null);
   const [phoneDialog, setPhoneDialog] = useState(false);
 
   const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
@@ -80,7 +84,23 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     if (!n?.phone) return;
     const preview = n.campaign.dialMode === "preview";
     const r = await api.startCall({ companyId: n.company.id, contactId: n.phone.id, entryId: n.entry.id, source: preview ? "current" : "new", consultedNos: preview ? consultedRef.current : undefined });
-    setCallId(r.id); setStartedAt(Date.now()); setViaPhone(r.viaPhone); setPhase("calling");
+    setCallId(r.id); setStartedAt(Date.now()); setViaPhone(r.viaPhone); setLive(false); setQueued(false); pendingRef.current = null; setPhase("calling");
+  }
+  /** Tecla ou botão de resultado durante a chamada. Pelo telemóvel não desliga: o comercial preenche enquanto fala. */
+  function openResult(g: Group) {
+    if (!viaPhone) { hangUp(g); return; }
+    setLive(true); setGroup(g); setResultKey((k) => k + 1); setPhase("result");
+  }
+  /** A chamada acabou com o resultado já aberto: o tempo dos 15 s conta daqui e, se já estava pronto, grava. */
+  function liveEnded(end: number) {
+    setLive(false); setEndedAt(end);
+    const r = pendingRef.current; pendingRef.current = null; setQueued(false);
+    if (r) saveRef.current(r);
+  }
+  async function hangUpLive() {
+    if (!callId) return;
+    await api.endCall(callId).catch(() => undefined);
+    liveEnded(Date.now());
   }
   async function hangUp(g: Group = "noanswer") {
     if (!callId) return;
@@ -88,12 +108,14 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     setEndedAt(Date.now()); setGroup(g); setResultKey((k) => k + 1); setPhase("result");
   }
   // Fim informado pelo telemóvel: abre o resultado sozinho (não atendida → sugere «Não atende»). O tempo dos 15 s conta daí.
-  useCallEnd(callId, phase === "calling", (end, answered) => {
+  useCallEnd(callId, phase === "calling" || live, (end, answered) => {
+    if (live) { liveEnded(end); return; }
     setEndedAt(end); setGroup(answered === false ? "noanswer" : "refuse"); setResultKey((k) => k + 1); setPhase("result");
   });
 
   async function save(r: ResultInput) {
     if (!callId) return;
+    if (live) { pendingRef.current = r; setQueued(true); return; }
     setBusy(true); setError("");
     try {
       // Decisor mudado na abertura: fica registado no histórico da empresa.
@@ -106,6 +128,8 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       setPhase("countdown"); setEndedAt(Date.now());
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
+  const saveRef = useRef(save);
+  saveRef.current = save;
   // Encadeamento: 10 s depois de guardar, a empresa seguinte é marcada automaticamente.
   const wait = cat?.timeLimits.nextCallSeconds ?? 10;
   const left = phase === "countdown" ? Math.max(0, wait - Math.floor((Date.now() - endedAt) / 1000)) : 0;
@@ -118,7 +142,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       const g = GROUPS.find((x) => x.key === e.key);
       if (!g) return;
       e.preventDefault();
-      if (phase === "calling") hangUp(g.id); else { setGroup(g.id); setPhase("result"); }
+      if (phase === "calling") openResult(g.id); else { setGroup(g.id); setPhase("result"); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -289,6 +313,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
 
       {cur && cat && (phase === "result" || phase === "review") && (
         <ResultPanel key={resultKey} hidden={phase === "review"} needsKind={cur.company.needsKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
+          live={live ? { secs: Math.floor((Date.now() - startedAt) / 1000), queued, onHangUp: () => { hangUpLive(); } } : undefined}
           company={{ name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
           onBack={() => setPhase("review")} onSave={save} />
       )}
@@ -307,7 +332,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       {cur && (phase === "calling") && (
         <footer style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
           {GROUPS.map((g) => (
-            <button key={g.id} onClick={() => hangUp(g.id)} style={{ ...btn, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 15, ...(g.id === "sale" ? { background: c.ink, color: "#FFF", borderColor: c.ink } : {}) }}>
+            <button key={g.id} onClick={() => openResult(g.id)} style={{ ...btn, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 15, ...(g.id === "sale" ? { background: c.ink, color: "#FFF", borderColor: c.ink } : {}) }}>
               {g.label}<span style={{ fontSize: 11, opacity: 0.6 }}>tecla {g.key}</span>
             </button>
           ))}
