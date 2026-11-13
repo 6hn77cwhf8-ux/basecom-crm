@@ -20,6 +20,8 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [dialog, setDialog] = useState<{ kind: "activity" | "lose" | "move"; o: Opportunity } | null>(null);
   const [error, setError] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const load = () => api.opportunities({ ownerId: owner || undefined, closed }).then(setRows).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [owner, closed]);
   useEffect(() => { api.catalogs().then(setCat).catch(() => undefined); if (isAdmin) api.agendaPeople().then(setPeople).catch(() => undefined); }, []);
@@ -56,9 +58,20 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
           {OPEN.map((s) => {
             const list = rows?.filter((o) => o.stage === s.id) ?? [];
             return (
-              <section key={s.id} style={{ background: "#ECECF0", borderRadius: 14, padding: 8, display: "flex", flexDirection: "column", gap: 8, minHeight: 120 }}>
+              <section key={s.id}
+                // Arrastar um cartão para outra etapa muda a etapa (fica no histórico como «Mudar etapa»).
+                onDragOver={(e) => { if (dragId) { e.preventDefault(); setOver(s.id); } }}
+                onDragLeave={() => setOver((x) => (x === s.id ? null : x))}
+                onDrop={(e) => {
+                  e.preventDefault(); setOver(null);
+                  const o = rows?.find((x) => x.id === dragId); setDragId(null);
+                  if (!o || o.stage === s.id) return;
+                  setRows((r) => r?.map((x) => (x.id === o.id ? { ...x, stage: s.id, stageLabel: s.label } : x)) ?? r);
+                  api.moveOpportunity(o.id, s.id).then(load).catch((err) => { setError(err.message); load(); });
+                }}
+                style={{ background: over === s.id ? "#FFE3D3" : "#ECECF0", outline: over === s.id ? "2px dashed #FF5A00" : "none", borderRadius: 14, padding: 8, display: "flex", flexDirection: "column", gap: 8, minHeight: 120, transition: "background .15s" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px" }}><b style={{ fontSize: 13 }}>{s.label}</b><span style={{ fontSize: 12, color: c.muted }}>{list.length}</span></div>
-                {list.map((o) => <OppCard key={o.id} o={o} showOwner={isAdmin && !owner} onOpen={() => onOpenCompany(o.companyId)} onAction={(kind) => setDialog({ kind, o })}
+                {list.map((o) => <OppCard key={o.id} o={o} onDrag={(on) => setDragId(on ? o.id : null)} dragging={dragId === o.id} showOwner={isAdmin && !owner} onOpen={() => onOpenCompany(o.companyId)} onAction={(kind) => setDialog({ kind, o })}
                   onWin={() => confirm(`Marcar «${o.company}» como Ganha? Se a empresa não tiver carteira, passa para a carteira de ${o.owner}.`) && api.winOpportunity(o.id).then(load).catch((e) => setError(e.message))} />)}
               </section>
             );
@@ -75,10 +88,11 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
 const link = { border: 0, background: "none", padding: 0, cursor: "pointer", fontWeight: 700, fontSize: 14, color: c.ink, textAlign: "left" as const, fontFamily: "inherit" };
 const small = { ...btn, height: 28, fontSize: 12, padding: "0 8px" };
 
-function OppCard({ o, showOwner, onOpen, onAction, onWin }: { o: Opportunity; showOwner: boolean; onOpen: () => void; onAction: (k: "activity" | "lose" | "move") => void; onWin: () => void }) {
+function OppCard({ o, showOwner, onOpen, onAction, onWin, onDrag, dragging }: { o: Opportunity; showOwner: boolean; onDrag: (on: boolean) => void; dragging: boolean; onOpen: () => void; onAction: (k: "activity" | "lose" | "move") => void; onWin: () => void }) {
   const lvl = o.alert?.level ?? "ok";
   return (
-    <article style={{ ...card, padding: 12, display: "flex", flexDirection: "column", gap: 6, borderColor: lvl === "late" ? "#D70015" : lvl === "warn" ? "#E8A23A" : c.line }}>
+    <article draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", o.id); onDrag(true); }} onDragEnd={() => onDrag(false)}
+      title="Arraste para outra etapa" style={{ ...card, padding: 12, display: "flex", flexDirection: "column", gap: 6, cursor: "grab", opacity: dragging ? 0.5 : 1, borderColor: lvl === "late" ? "#D70015" : lvl === "warn" ? "#E8A23A" : c.line }}>
       <button onClick={onOpen} style={{ ...link, fontSize: 13 }}>{o.company}</button>
       <span style={{ fontSize: 12, color: c.muted }}>{[o.services, o.l2bMonthly ? `L2B ${fmtEur(o.l2bMonthly)}` : null].filter(Boolean).join(" · ") || "—"}</span>
       <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>

@@ -17,7 +17,7 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
   const [up, setUp] = useState<Upload | null>(null);
   const [sheets, setSheets] = useState<Record<string, SheetAction>>({});
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [trial, setTrial] = useState(true);
+  const [trial, setTrial] = useState(false);
   const [summary, setSummary] = useState<PreviewSummary | null>(null);
   const [done, setDone] = useState<{ number: number; created: number; updated: number } | null>(null);
   const [busy, setBusy] = useState("");
@@ -111,7 +111,7 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
           </div>
           <Foot>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginRight: "auto" }}>
-              <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)} /> Ensaio com {fmtInt(up.trialSize)} empresas (recomendado na primeira vez)
+              <input type="checkbox" checked={trial} onChange={(e) => setTrial(e.target.checked)} /> Só um ensaio com {fmtInt(up.trialSize)} empresas (por omissão importa o ficheiro completo)
             </label>
             <button style={btn} onClick={() => setStep(1)}>Voltar</button>
             <button style={btnDark} disabled={!!busy || !Object.values(mapping).includes("nif")} onClick={() => preview()}>Ver pré-visualização</button>

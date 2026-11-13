@@ -17,7 +17,8 @@ const toIso = (local: string) => (local ? new Date(local).toISOString() : undefi
  * Ecrã do resultado (maquetas «Resultado»): botões do grupo, opções, motivo, comentários e feedback de outra operadora.
  * Mostra o tempo que falta para registar (15 s por omissão); ultrapassar não bloqueia, mas fica registado.
  */
-export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, live, onGroup, onBack, onSave }: {
+export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, live, backLabel, onGroup, onBack, onSave }: {
+  backLabel?: string;
   /** Resultado aberto com a chamada ainda a decorrer no telemóvel: só grava quando a chamada acabar. */
   live?: { secs: number; queued: boolean; onHangUp: () => void };
   hidden?: boolean; needsKind?: boolean; cat: Catalogs; group: Group; company: { name: string; nif: string; phone?: string; decisor?: string };
@@ -39,7 +40,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   useEffect(() => { setOutcome(options.length === 1 ? options[0]! : null); setReason(null); }, [group]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
   const limit = cat.timeLimits.resultSeconds;
-  const secs = Math.floor((now - endedAt) / 1000);
+  const secs = Math.max(0, Math.floor((now - endedAt) / 1000));
 
   const eff = outcome?.effect;
   /** Recusa por outro operador: operadora obrigatória e nova abordagem na data que o cliente sugerir (não automática). */
@@ -156,7 +157,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
 
       <ErrorText>{error}</ErrorText>
       <footer style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-        <button style={btn} onClick={onBack}>← Voltar ao script</button>
+        <button style={btn} onClick={onBack}>← {backLabel ?? "Voltar ao script"}</button>
         <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {live?.queued && <span role="status" style={{ fontSize: 13, color: "#1E6F33", fontWeight: 600 }}>Pronto: grava sozinho quando a chamada acabar.</span>}
           <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? (live.queued ? "Atualizar ⏎" : "Guardar no fim da chamada ⏎") : "Guardar resultado ⏎"}</button>

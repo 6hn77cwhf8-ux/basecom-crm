@@ -229,6 +229,18 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
                     <button style={{ ...btnDark, height: 36 }} disabled={newName.trim().length < 2} onClick={() => { setDecisor({ salutation: newSal || null, name: newName.trim() }); setChanging(false); setStep("pitch"); }}>Confirmar</button>
                     <button style={{ ...btn, height: 36 }} onClick={() => setChanging(false)}>Cancelar</button>
                   </div>
+                  {/* Sugestões enquanto escreve: pessoas já registadas nesta empresa (evita duplicar o mesmo decisor). */}
+                  {(() => {
+                    const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const q = norm(newName.trim());
+                    const hits = q.length >= 2 ? cur.people.filter((p) => norm(p.name).includes(q)) : [];
+                    return hits.length > 0 && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 13, color: c.muted }}>Já existe:</span>
+                        {hits.map((p) => <button key={p.name} style={{ ...btn, height: 30, fontSize: 13, borderColor: c.brand }} onClick={() => { setDecisor(p); setNewName(""); setChanging(false); setStep("pitch"); }}>{p.salutation ? p.salutation + " " : ""}{p.name}</button>)}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               {step === "pitch" && (

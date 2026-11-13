@@ -7,7 +7,7 @@ const big = { ...input, height: 44, fontSize: 15, width: "100%" };
 const primary = { ...btnDark, height: 46, fontSize: 15, width: "100%" };
 
 export function Login({ onDone }: { onDone: (u: User) => void }) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem("bc_email") ?? ""; } catch { return ""; } });
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<LoginStep | null>(null);
@@ -18,7 +18,7 @@ export function Login({ onDone }: { onDone: (u: User) => void }) {
     setBusy(true); setError("");
     try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
-  const submitPassword = (e: FormEvent) => { e.preventDefault(); run(async () => setStep(await api.login(email, password))); };
+  const submitPassword = (e: FormEvent) => { e.preventDefault(); try { localStorage.setItem("bc_email", email.trim()); } catch { /* sem armazenamento */ } run(async () => setStep(await api.login(email, password))); };
   const submitCode = (e: FormEvent) => { e.preventDefault(); if (step) run(async () => onDone(await api.confirmCode(step.challengeToken, code))); };
   const back = () => { setStep(null); setCode(""); setError(""); };
 
@@ -26,8 +26,8 @@ export function Login({ onDone }: { onDone: (u: User) => void }) {
     return (
       <AuthLayout title="Entrar" subtitle="Use o seu email e a sua palavra-passe.">
         <form onSubmit={submitPassword} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Field label="Email"><input style={big} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus /></Field>
-          <Field label="Palavra-passe"><input style={big} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
+          <Field label="Email"><input style={big} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus={!email} /></Field>
+          <Field label="Palavra-passe"><input style={big} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus={!!email} /></Field>
           <button style={{ ...primary, marginTop: 6 }} disabled={busy}>{busy ? "A entrar…" : "Entrar"}</button>
           <ErrorText>{error}</ErrorText>
         </form>

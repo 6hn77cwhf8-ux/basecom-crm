@@ -182,7 +182,7 @@ export const api = {
   loseOpportunity: (id: string, reasonId: string, comment?: string, extra?: { operator: string; date: string }) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment, ...extra }) }),
   wallet: (q: { ownerId?: string; tasks?: string; q?: string }) => call<{ companies: WalletRow[] }>(`/wallet${qs(q)}`).then((r) => r.companies),
   callFromWallet: (id: string) => call<{ callId: string; phone: { id: string; value: string; type: string | null } }>(`/wallet/${id}/call`, { method: "POST", body: "{}" }),
-  agendaPeople: () => call<{ people: { id: string; name: string }[] }>("/agenda/people").then((r) => r.people),
+  agendaPeople: () => call<{ people: { id: string; name: string; role: string }[] }>("/agenda/people").then((r) => r.people),
   createTask: (b: { companyId: string; type: string; dueAt: string; description?: string; assignedTo?: string }) => call("/agenda/tasks", { method: "POST", body: JSON.stringify(b) }),
   rescheduleTask: (id: string, dueAt: string, reason: string) => call(`/agenda/tasks/${id}/reschedule`, { method: "POST", body: JSON.stringify({ dueAt, reason }) }),
   closeTask: (id: string, status: "done" | "cancelled", note?: string) => call(`/agenda/tasks/${id}/close`, { method: "POST", body: JSON.stringify({ status, note }) }),

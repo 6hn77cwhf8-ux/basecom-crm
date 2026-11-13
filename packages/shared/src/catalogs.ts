@@ -116,7 +116,7 @@ export const OPPORTUNITY_STAGES = [
   { id: "survey", label: "Levantamento", open: true },
   { id: "proposal", label: "Proposta enviada", open: true },
   { id: "negotiation", label: "Em negociação", open: true },
-  { id: "documents", label: "Aguarda documentos", open: true },
+  { id: "documents", label: "Aguarda docs", open: true },
   { id: "won", label: "Ganha", open: false },
   { id: "lost", label: "Perdida", open: false },
 ] as const;

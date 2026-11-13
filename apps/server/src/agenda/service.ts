@@ -83,7 +83,7 @@ export async function callFromTask(db: Db, user: PublicUser, id: string) {
 
 /** Pessoas cujas agendas, carteiras e oportunidades o ator pode consultar (equipa ou toda a estrutura). */
 export async function agendaPeople(db: Db, actor: PublicUser) {
-  return (await visiblePeople(db, actor)).map((p) => ({ id: p.id, name: p.name }));
+  return (await visiblePeople(db, actor)).map((p) => ({ id: p.id, name: p.name, role: p.role }));
 }
 
 const fmt = (d: Date) => d.toLocaleString("pt-PT", { timeZone: "Europe/Lisbon", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });

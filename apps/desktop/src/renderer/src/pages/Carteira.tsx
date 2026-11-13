@@ -58,7 +58,7 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
             </section>
             <section style={{ ...card, padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
               <b style={{ fontSize: 22, fontVariantNumeric: "tabular-nums" }}><a href={`tel:+351${calling.phone}`} style={{ color: c.ink }}>{formatPhone(calling.phone)}</a></b>
-              <span style={{ fontSize: 13, color: c.muted }}>{r.decisor ?? "Sem decisor"} · {r.lines} linhas</span>
+              <span style={{ fontSize: 13, color: c.muted }}>{r.decisor ?? "Sem decisor"} · {r.lines} RGU</span>
               <button style={{ ...btnDark, height: 48, background: "#D70015", borderColor: "#D70015" }} onClick={async () => { await api.endCall(calling.callId).catch(() => undefined); setCalling({ ...calling, ended: Date.now() }); }}>Desligar</button>
             </section>
           </div>
@@ -80,7 +80,7 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
         <div style={{ display: "flex", gap: 8, padding: 12, borderBottom: `1px solid ${c.line}`, alignItems: "center", flexWrap: "wrap" }}>
           <input style={{ ...input, height: 36, flex: "1 1 240px" }} placeholder="Pesquisar por nome, NIF ou telefone" value={q} onChange={(e) => setQ(e.target.value)} />
           {isAdmin && <select aria-label="Carteira de" style={{ ...input, height: 36 }} value={owner} onChange={(e) => setOwner(e.target.value)}>
-            <option value="">Carteira de: todos</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+            <option value="">Carteira de: todos</option>{people.filter((p) => (p as { role?: string }).role !== "admin").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
           <select aria-label="Tarefas" style={{ ...input, height: 36 }} value={tasks} onChange={(e) => setTasks(e.target.value)}>
             <option value="">Tarefas: todas</option><option value="with">Com tarefas</option><option value="late">Com tarefas atrasadas</option><option value="without">Sem tarefas</option>
           </select>
@@ -91,7 +91,7 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
         <div style={{ overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>
-              {["Empresa", "Decisor", "Telefone", "", "Linhas", "Próxima ação", "Último contacto", "Tarefas", ...(isAdmin && !owner ? ["Carteira"] : [])].map((h, i) => <th key={i} style={th}>{h}</th>)}
+              {["Empresa", "Decisor", "Telefone", "", "RGU", "Próxima ação", "Último contacto", "Tarefas", ...(isAdmin && !owner ? ["Carteira"] : [])].map((h, i) => <th key={i} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {rows?.map((r) => {

@@ -47,6 +47,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   const [error, setError] = useState("");
 
   // Ligar pela app BASECOM do telemóvel (botão «Ligar» e números da ficha).
+  const [oppsKey, setOppsKey] = useState(0);
   const [calling, setCalling] = useState<{ id: string; value: string } | null>(null);
   const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
@@ -107,7 +108,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
             {calling && <QuickCall company={{ id: co.id, name: co.name, nif: co.nif }} contact={calling} needsKind={co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed}
               onClose={() => setCalling(null)} onSaved={() => { setCalling(null); setTab("historico"); load(); }} />}
-            {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); load(); }} />}
+            {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); setOppsKey((k) => k + 1); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
             {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"
               text={co.walletKind === "NC" ? "Em FC, a empresa conta 50 % em tudo (pontos, valor concluído). Só por alteração manual." : "Volta a contar 100 %."}
@@ -171,7 +172,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               </div>
             )}
             {tab === "contactos" && <Contacts d={d!} canEdit={canEditContacts} onChange={load} onCall={setCalling} />}
-            {tab === "oportunidades" && <CompanyOpps id={co.id} />}
+            {tab === "oportunidades" && <CompanyOpps key={oppsKey} id={co.id} onNew={() => setDialog("opp")} />}
             {tab === "historico" && <><WalletHistory d={d!} /><History d={d!} /></>}
             {TABS.find((t) => t.id === tab)?.later && (
               <section style={{ ...card, padding: 32, textAlign: "center", color: c.muted }}>Chega no {TABS.find((t) => t.id === tab)!.later}, tal como nas maquetas aprovadas.</section>
@@ -342,11 +343,11 @@ function History({ d, limit, onMore }: { d: CompanyDetail; limit?: number; onMor
   );
 }
 
-function CompanyOpps({ id }: { id: string }) {
+function CompanyOpps({ id, onNew }: { id: string; onNew: () => void }) {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof api.companyOpportunities>> | null>(null);
   useEffect(() => { api.companyOpportunities(id).then(setRows).catch(() => setRows([])); }, [id]);
   return (
-    <Card title="Oportunidades">
+    <Card title="Oportunidades" action={<button style={{ ...small, height: 26 }} onClick={onNew}>+ Nova oportunidade</button>}>
       {rows?.length === 0 && <p style={{ fontSize: 14, color: c.muted }}>Sem oportunidades. Crie com «Nova oportunidade» ou pelo resultado «Proposta» de uma chamada.</p>}
       {rows?.map((o) => (
         <div key={o.id} style={{ display: "flex", justifyContent: "space-between", gap: 16, padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
@@ -362,7 +363,7 @@ function NewOpportunity({ companyId, onClose, onDone }: { companyId: string; onC
   const [stage, setStage] = useState("interest");
   const [services, setServices] = useState("");
   const [err, setErr] = useState("");
-  const stages = [["interest", "Interesse"], ["survey", "Levantamento"], ["proposal", "Proposta enviada"], ["negotiation", "Em negociação"], ["documents", "Aguarda documentos"]];
+  const stages = [["interest", "Interesse"], ["survey", "Levantamento"], ["proposal", "Proposta enviada"], ["negotiation", "Em negociação"], ["documents", "Aguarda docs"]];
   return (
     <Modal title="Nova oportunidade" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
