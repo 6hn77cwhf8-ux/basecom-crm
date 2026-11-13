@@ -3,6 +3,8 @@ import ExcelJS from "exceljs";
 import { eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
 import { companies, companyContacts, companyNotes, importBatches, users } from "../db/schema.js";
+import { editAddress } from "../companies/wallet.js";
+import { toPublic } from "../auth/service.js";
 import { commitBase, DEFAULT_MAPPING, listBatchRows, previewBase, revertBatch, uploadBase } from "./base.js";
 
 const url = process.env.DATABASE_URL;
@@ -180,5 +182,35 @@ describe.skipIf(!url)("importação da base de empresas", () => {
       expect(batch.status).toBe("preview");
       expect(created).toBe(0);
     }
+  });
+
+  it("o CRM manda: morada editada e contactos confirmados não mudam com a importação; os outros ganham o Contacto 1 como principal", async () => {
+    const H = ["NIF da Empresa", "Nome da Empresa", "Tipo de Conta", "Contacto 1", "Decisor", "Morada", "Código Postal", "Concelho", "Distrito"];
+    const a = nif(`6${tag.slice(-6)}8`), b = nif(`6${tag.slice(-6)}9`);
+    const run = async (rows: unknown[][]) => {
+      const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet("NN"); ws.addRow(H); for (const r of rows) ws.addRow(r);
+      const up = await uploadBase(db, adminId, `crm-manda-${batches.length}.xlsx`, Buffer.from(await wb.xlsx.writeBuffer()));
+      batches.push(up.id);
+      await previewBase(db, adminId, up.id, { sheets: { NN: "import" }, mapping: DEFAULT_MAPPING, limit: null });
+      await commitBase(db, adminId, up.id);
+    };
+    await run([[a, "Alfa Lda", "Prospect", "912000001", "Rui Sá", "Rua A 1", "4000-001", "Porto", "Porto"], [b, "Beta Lda", "Prospect", "912000002", "Ana Lopes", "Rua B 2", "4000-002", "Porto", "Porto"]]);
+    const ca = (await db.select().from(companies).where(eq(companies.nif, a)))[0]!;
+    const cb = (await db.select().from(companies).where(eq(companies.nif, b)))[0]!;
+    // Alfa: morada corrigida no CRM e contactos confirmados.
+    const admin = (await db.query.users.findFirst({ where: eq(users.id, adminId) }))!;
+    await editAddress(db, toPublic(admin), ca.id, { address: "Avenida Nova 10", postalCode: "4100-100" });
+    await db.update(companies).set({ contactsLockedAt: new Date() }).where(eq(companies.id, ca.id));
+    // Nova importação com morada e telefone diferentes nas duas.
+    await run([[a, "Alfa Lda", "Prospect", "913000001", "Outro Nome", "Rua Velha 9", "4999-999", "Gaia", "Porto"], [b, "Beta Lda", "Prospect", "913000002", "Carla Dias", "Rua B 3", "4000-003", "Porto", "Porto"]]);
+    const ca2 = (await db.select().from(companies).where(eq(companies.id, ca.id)))[0]!;
+    expect(ca2).toMatchObject({ address: "Avenida Nova 10", postalCode: "4100-100", municipality: "Porto" });
+    const pa = await db.select().from(companyContacts).where(eq(companyContacts.companyId, ca.id));
+    expect(pa.map((x) => x.value)).toEqual(["912000001"]); // nada de novo nos contactos confirmados
+    const cb2 = (await db.select().from(companies).where(eq(companies.id, cb.id)))[0]!;
+    expect(cb2).toMatchObject({ address: "Rua B 3", postalCode: "4000-003" });
+    const pb = await db.select().from(companyContacts).where(eq(companyContacts.companyId, cb.id));
+    expect(pb.find((x) => x.isPrimary)).toMatchObject({ value: "913000002", personName: "Carla Dias" });
+    expect(pb.find((x) => x.value === "912000002")!.isPrimary).toBe(false);
   });
 });

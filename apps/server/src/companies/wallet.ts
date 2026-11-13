@@ -154,6 +154,7 @@ export async function setContactStatus(db: Db, by: PublicUser, contactId: string
       if (next) await tx.update(companyContacts).set({ isPrimary: true, personName: sql`coalesce(${companyContacts.personName}, ${ct.personName})`, salutation: sql`coalesce(${companyContacts.salutation}, ${ct.salutation})` }).where(eq(companyContacts.id, next.id));
     }
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", text: `Contacto ${ct.value} marcado como ${status === "incorrect" ? "Incorreto" : "Válido"}`, userId: by.id });
+    await lockContacts(tx as unknown as Db, co.id);
     await tx.insert(auditLog).values({ userId: by.id, action: "contacto_estado_alterado", entity: "company", entityId: co.id, details: `${ct.value} → ${status}` });
   });
 }
@@ -184,6 +185,7 @@ export async function addContact(db: Db, by: PublicUser, companyId: string, inpu
     }).returning();
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", text: `Contacto acrescentado: ${value}${input.personName?.trim() ? ` (${input.personName.trim()})` : ""}`, userId: by.id });
     await tx.insert(auditLog).values({ userId: by.id, action: "contacto_acrescentado", entity: "company", entityId: co.id, details: value });
+    await lockContacts(tx as unknown as Db, co.id);
     return row!;
   });
 }
@@ -210,4 +212,44 @@ export async function deleteCompanies(db: Db, by: PublicUser, ids: string[], rea
     await tx.insert(auditLog).values({ userId: by.id, action: "empresas_apagadas", entity: "company", details: `${rows.length} empresa(s). Justificação: ${reason.trim()}. ${list}${rows.length > 200 ? " …" : ""}` });
   });
   return { deleted: rows.length };
+}
+
+/** A partir daqui o CRM manda nos contactos e nomes desta empresa: a importação deixa de os alterar. */
+export async function lockContacts(db: Db, companyId: string) {
+  await db.update(companies).set({ contactsLockedAt: sql`coalesce(${companies.contactsLockedAt}, now())` }).where(eq(companies.id, companyId));
+}
+
+const ADDRESS_FIELDS = ["address", "postalCode", "locality", "municipality", "district"] as const;
+const ADDRESS_LABEL: Record<(typeof ADDRESS_FIELDS)[number], string> = { address: "Morada", postalCode: "Código postal", locality: "Localidade", municipality: "Concelho", district: "Distrito" };
+
+/** Editar a morada na ficha: fica no histórico (antes → depois) e a importação deixa de a alterar. */
+export async function editAddress(db: Db, by: PublicUser, companyId: string, input: Partial<Record<(typeof ADDRESS_FIELDS)[number], string | null>>) {
+  const co = await loadCompany(db, companyId);
+  if (!canEditContacts(by, co.ownerId)) throw new AuthError(403, "Só o responsável da carteira ou o Administrador alteram esta empresa.");
+  const patch: Record<string, string | null> = {};
+  const changes: string[] = [];
+  for (const k of ADDRESS_FIELDS) {
+    if (!(k in input)) continue;
+    const v = input[k]?.trim() || null;
+    const before = (co as Record<string, unknown>)[k] as string | null;
+    if (v !== before) { patch[k] = v; changes.push(`${ADDRESS_LABEL[k]}: ${before ?? "—"} → ${v ?? "—"}`); }
+  }
+  if (input.postalCode && !/^\d{4}-\d{3}$/.test(input.postalCode.trim())) throw new AuthError(400, "Código postal no formato 1234-567.");
+  if (!changes.length) return;
+  await db.update(companies).set({ ...patch, addressEditedAt: new Date(), updatedAt: new Date() }).where(eq(companies.id, co.id));
+  await db.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: by.id, text: `Morada alterada no CRM · ${changes.join(" · ")}` });
+  await db.insert(auditLog).values({ userId: by.id, action: "morada_alterada", entity: "company", entityId: co.id, details: changes.join(" · ") });
+}
+
+/** Corrigir o nome (e o tratamento) de um contacto. */
+export async function editContact(db: Db, by: PublicUser, contactId: string, input: { personName?: string | null; salutation?: string | null }) {
+  const ct = await db.query.companyContacts.findFirst({ where: eq(companyContacts.id, contactId) });
+  if (!ct) throw new AuthError(404, "Contacto não encontrado.");
+  const co = await loadCompany(db, ct.companyId);
+  if (!canEditContacts(by, co.ownerId)) throw new AuthError(403, "Só o responsável da carteira ou o Administrador alteram os contactos desta empresa.");
+  const name = input.personName === undefined ? ct.personName : input.personName?.trim() || null;
+  const sal = input.salutation === undefined ? ct.salutation : input.salutation?.trim() || null;
+  await db.update(companyContacts).set({ personName: name, salutation: sal, ...(ct.kind === "person" && name ? { value: name } : {}) }).where(eq(companyContacts.id, ct.id));
+  await db.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: by.id, text: `Nome do contacto ${ct.kind === "person" ? "" : ct.value + " "}alterado: ${[ct.salutation, ct.personName].filter(Boolean).join(" ") || "—"} → ${[sal, name].filter(Boolean).join(" ") || "—"}` });
+  await lockContacts(db, co.id);
 }

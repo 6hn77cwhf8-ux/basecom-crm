@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { companyKpis, listCompanyIds, filterOptions, getCompany, listCompanies, quickSearch, SORT_KEYS } from "../companies/service.js";
-import { addContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
+import { addContact, editAddress, editContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
 
 /** Empresas: todos os perfis consultam (a carteira só limita tarefas e campanhas). */
 export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -58,8 +58,16 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
     return addContact(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b);
   });
   app.patch("/contacts/:id", any, async (req) => {
-    const b = z.object({ status: z.enum(["valid", "incorrect"]) }).parse(req.body);
-    await setContactStatus(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b.status);
+    const b = z.object({ status: z.enum(["valid", "incorrect"]).optional(), personName: z.string().max(120).nullable().optional(), salutation: z.string().max(20).nullable().optional() }).parse(req.body);
+    const cid = z.object({ id: z.string().uuid() }).parse(req.params).id;
+    if (b.status) await setContactStatus(db, req.user!, cid, b.status);
+    if (b.personName !== undefined || b.salutation !== undefined) await editContact(db, req.user!, cid, b);
+    return { ok: true };
+  });
+  app.patch("/companies/:id/address", any, async (req) => {
+    const s = z.string().max(200).nullable().optional();
+    const b = z.object({ address: s, postalCode: s, locality: s, municipality: s, district: s }).parse(req.body);
+    await editAddress(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b);
     return { ok: true };
   });
 }

@@ -45,7 +45,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   const [tab, setTab] = useState<Tab>("resumo");
   const [error, setError] = useState("");
 
-  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
   useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
   const after = () => { setDialog(null); load(); };
@@ -100,6 +100,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               {co.doNotContact && me.role === "admin" && <button style={small} onClick={() => setDialog("undnc")}>Retirar «Não contactar»</button>}
               {me.role === "admin" && <button style={{ ...small, color: "#A1000F" }} onClick={() => setDialog("delete")}>Apagar empresa</button>}
             </div>
+            {dialog === "address" && <AddressDialog co={co} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
             {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
             {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
@@ -138,13 +139,14 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                   <Row k="Grupo económico" v={co.economicGroup ?? "—"} />
                   {co.lastSourceYear && <Row k="Última atualização da informação" v={String(co.lastSourceYear)} />}
                 </Card>
-                <Card title="Contacto principal">
+                <Card title="Contacto principal" action={canEditContacts ? <button style={{ ...small, height: 26 }} onClick={() => setDialog("address")}>Editar morada</button> : undefined}>
                   <Row k="Decisor" v={decisor?.personName ? `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.personName}` : "—"} />
                   <Row k="Telefone" v={main ? <><a href={`tel:+351${main.value}`} style={link} title="Ligar">{formatPhone(main.value)}</a> · {main.phoneType === "mobile" ? "Móvel" : "Fixo"}</> : "—"} />
                   <Row k="Email" v={mainEmail ? <a href={`mailto:${mainEmail.value}`} style={link} title="Abrir no email (Outlook)">{mainEmail.value}</a> : "—"} />
                   <Row k="Morada" v={co.address ?? "—"} />
                   <Row k="Código postal" v={[co.postalCode, co.locality].filter(Boolean).join(" ") || "—"} />
                   <Row k="Concelho · Distrito" v={[co.municipality, co.district].filter(Boolean).join(" · ") || "—"} />
+                  {co.addressEditedAt && <span style={{ fontSize: 11, color: c.muted }}>Morada editada no CRM a {fmtDate(co.addressEditedAt)}: as importações não a alteram.</span>}
                 </Card>
                 <Card title="Serviços NOS">
                   <Row k="Operadora atual" v={co.operator ?? "—"} />
@@ -180,10 +182,13 @@ function Notice({ tone, children }: { tone: "warn" | "bad"; children: ReactNode 
   return <p role="note" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, fontSize: 13, background: tone === "bad" ? "#FFE5E7" : "#FFF4E5", color: tone === "bad" ? "#A1000F" : "#8A3D00" }}>{children}</p>;
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function Card({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <section style={{ ...card, padding: "16px 18px" }}>
-      <h2 style={{ margin: "0 0 6px", fontSize: 11, lineHeight: "14px", fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>{title}</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "0 0 6px" }}>
+        <h2 style={{ margin: 0, fontSize: 11, lineHeight: "14px", fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -219,9 +224,22 @@ function Contacts({ d, canEdit, onChange }: { d: CompanyDetail; canEdit: boolean
   const [showBad, setShowBad] = useState(false);
   const good = d.contacts.filter((x) => x.status !== "incorrect");
   const bad = d.contacts.filter((x) => x.status === "incorrect");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [nm, setNm] = useState({ sal: "", name: "" });
   const row = (x: Contact) => (
     <div key={x.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 16, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
-      <span style={{ fontWeight: x.isPrimary ? 600 : 400 }}>{x.personName ? `${x.salutation ? x.salutation + " " : ""}${x.personName}` : <span style={{ color: c.muted }}>Contacto da empresa</span>}</span>
+      {editing === x.id ? (
+        <span style={{ display: "flex", gap: 6 }}>
+          <select style={{ ...input, height: 30, width: 76 }} value={nm.sal} onChange={(e) => setNm({ ...nm, sal: e.target.value })}><option value="">—</option><option>Sr.</option><option>Srª</option><option>Dr.</option><option>Drª</option><option>Eng.</option><option>Engª</option></select>
+          <input style={{ ...input, height: 30, flex: 1 }} autoFocus value={nm.name} onChange={(e) => setNm({ ...nm, name: e.target.value })} />
+          <button style={{ ...small, height: 30 }} onClick={() => api.editContact(x.id, { personName: nm.name || null, salutation: nm.sal || null }).then(() => { setEditing(null); onChange(); })}>Guardar</button>
+        </span>
+      ) : (
+        <span style={{ fontWeight: x.isPrimary ? 600 : 400, display: "flex", gap: 6, alignItems: "center" }}>
+          {x.personName ? `${x.salutation ? x.salutation + " " : ""}${x.personName}` : <span style={{ color: c.muted }}>Contacto da empresa</span>}
+          {canEdit && <button title="Editar o nome" onClick={() => { setEditing(x.id); setNm({ sal: x.salutation ?? "", name: x.personName ?? "" }); }} style={{ border: 0, background: "none", cursor: "pointer", color: c.muted, fontSize: 13, padding: 0 }}>✎</button>}
+        </span>
+      )}
       <span style={{ textDecoration: x.status === "incorrect" ? "line-through" : "none" }}>
         {x.kind === "phone" ? <>{x.status === "incorrect" ? formatPhone(x.value) : <a href={`tel:+351${x.value}`} style={link}>{formatPhone(x.value)}</a>} · {x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}</>
           : x.kind === "person" ? <span style={{ color: c.muted }}>Sem telefone nem email</span>
@@ -238,6 +256,7 @@ function Contacts({ d, canEdit, onChange }: { d: CompanyDetail; canEdit: boolean
         <h2 style={{ margin: 0, fontSize: 11, lineHeight: "14px", fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Contactos</h2>
         {canEdit && !adding && <button style={small} onClick={() => setAdding(true)}>+ Acrescentar contacto</button>}
       </div>
+      {d.company.contactsLockedAt && <p style={{ margin: "0 0 6px", fontSize: 12, color: c.muted }}>Contactos confirmados no CRM (editados ou já atendidos): as importações não os alteram.</p>}
       {adding && <AddContact companyId={d.company.id} onClose={() => setAdding(false)} onDone={() => { setAdding(false); onChange(); }} />}
       {good.length === 0 && <p style={{ fontSize: 14, color: c.muted }}>Sem contactos válidos.</p>}
       {good.map(row)}
@@ -348,6 +367,30 @@ function NewOpportunity({ companyId, onClose, onDone }: { companyId: string; onC
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
           <button style={btnDark} onClick={() => api.createOpportunity({ companyId, stage, services: services || undefined }).then(onDone).catch((e) => setErr(e.message))}>Criar</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Editar a morada (o CRM passa a mandar nela: as importações deixam de a alterar). */
+function AddressDialog({ co, onClose, onDone }: { co: CompanyDetail["company"]; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ address: co.address ?? "", postalCode: co.postalCode ?? "", locality: co.locality ?? "", municipality: co.municipality ?? "", district: co.district ?? "" });
+  const [err, setErr] = useState("");
+  const field = (k: keyof typeof f, label: string, ph = "") => (
+    <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, fontWeight: 600 }}>{label}<input style={input} value={f[k]} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></label>
+  );
+  return (
+    <Modal title="Editar morada" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {field("address", "Morada", "Rua, número, andar")}
+        <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 10 }}>{field("postalCode", "Código postal", "4000-123")}{field("locality", "Localidade")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>{field("municipality", "Concelho")}{field("district", "Distrito")}</div>
+        <span style={{ fontSize: 12, color: c.muted }}>Fica no histórico (antes → depois). A partir daqui, as importações não alteram a morada desta empresa.</span>
+        <ErrorText>{err}</ErrorText>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={btn} onClick={onClose}>Voltar</button>
+          <button style={btnDark} onClick={() => api.editAddress(co.id, f).then(onDone).catch((e) => setErr(e.message))}>Guardar</button>
         </div>
       </div>
     </Modal>

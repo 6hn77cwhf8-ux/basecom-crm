@@ -253,6 +253,8 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     }
     // Decisor indicado em «Decisor ausente».
     if (input.decisorName?.trim()) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Decisor: ${input.decisorName.trim()}` });
+    // Chamada atendida: os contactos e o decisor ficam confirmados (a importação deixa de os alterar).
+    if (!NO_CONTACT.includes(outcome.effect) || input.newDecisor) await tx.update(companies).set({ contactsLockedAt: sql`coalesce(${companies.contactsLockedAt}, now())` }).where(eq(companies.id, co.id));
     // Primeira chamada atendida: a empresa sai das outras campanhas onde estava por trabalhar (fica só nesta).
     if (entry && !NO_CONTACT.includes(outcome.effect)) {
       await tx.update(campaignEntries).set({ status: "removed", lockedBy: null, lockedUntil: null })

@@ -26,7 +26,7 @@ export type Note = { id: string; kind: string; text: string; at: string; user: s
 export type CompanyDetail = {
   company: CompanyRow & { size: string | null; employeesBand: string | null; l2bMonthly: string | null; address: string | null; postalCode: string | null; economicGroup: string | null; lastSourceYear: number | null; sources: string | null; createdAt: string; updatedAt: string;
     annualRevenue: string | null; locationsPotential: string | null; rgu: Record<string, number> | null; product: string | null; technology: string | null;
-    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null };
+    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null; addressEditedAt: string | null; contactsLockedAt: string | null };
   contacts: Contact[]; notes: Note[];
   wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };
@@ -137,6 +137,8 @@ export const api = {
   setDoNotContact: (id: string, value: boolean, reason: string) => call(`/companies/${id}/do-not-contact`, { method: "POST", body: JSON.stringify({ value, reason }) }),
   identifyKind: (id: string, kind: "NC" | "FC") => call(`/companies/${id}/identify-kind`, { method: "POST", body: JSON.stringify({ kind }) }),
   addContact: (id: string, b: { kind: "phone" | "email"; value: string; personName?: string; salutation?: string; primary?: boolean }) => call<Contact>(`/companies/${id}/contacts`, { method: "POST", body: JSON.stringify(b) }),
+  editAddress: (id: string, b: { address?: string | null; postalCode?: string | null; locality?: string | null; municipality?: string | null; district?: string | null }) => call(`/companies/${id}/address`, { method: "PATCH", body: JSON.stringify(b) }),
+  editContact: (id: string, b: { personName?: string | null; salutation?: string | null }) => call(`/contacts/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
   setContactStatus: (id: string, status: "valid" | "incorrect") => call(`/contacts/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
 
   campaigns: () => call<{ campaigns: Campaign[] }>("/campaigns").then((r) => r.campaigns),

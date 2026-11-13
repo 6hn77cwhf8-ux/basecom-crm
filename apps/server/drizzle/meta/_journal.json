@@ -120,6 +120,13 @@
       "when": 1794583189129,
       "tag": "0016_recusa_operadora_4_meses",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794583216927,
+      "tag": "0017_crm_manda_contactos",
+      "breakpoints": true
     }
   ]
 }

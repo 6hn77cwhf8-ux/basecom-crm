@@ -119,6 +119,12 @@ export const companies = pgTable("companies", {
   walletKind: walletKindEnum("wallet_kind").notNull().default("NC"),
   /** NC/FC identificado: sempre nas empresas em carteira; nos clientes sem carteira, o comercial tem de identificar. */
   walletKindConfirmed: boolean("wallet_kind_confirmed").notNull().default(false),
+  /**
+   * O CRM manda (revisão de 13 nov): morada editada no CRM → a importação deixa de a alterar;
+   * contactos/nomes editados no CRM ou já confirmados numa chamada atendida → a importação deixa de os alterar.
+   */
+  addressEditedAt: timestamp("address_edited_at", { withTimezone: true }),
+  contactsLockedAt: timestamp("contacts_locked_at", { withTimezone: true }),
   /** RGPD: nunca é reativada por uma importação. */
   doNotContact: boolean("do_not_contact").notNull().default(false),
   /** Empresa encerrada (resultado «Empresa encerrada»): sai de todas as campanhas. */

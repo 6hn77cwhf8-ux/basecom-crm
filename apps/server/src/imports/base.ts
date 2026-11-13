@@ -419,7 +419,8 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
       }
       const sets: Record<string, unknown>[] = [];
       const befores: { id: string; before: Record<string, unknown> }[] = [];
-      const children: { id: string; d: Staged; known: Set<string>; knownNotes: Set<string> }[] = [];
+      const children: { id: string; d: Staged; known: Set<string>; knownNotes: Set<string>; notesOnly?: boolean }[] = [];
+      const primaries: { id: string; value: string; name: string | null; salutation: string | null }[] = [];
       for (const r of part) {
         const d = r.data as Staged;
         const cur = curById.get(r.companyId!);
@@ -435,15 +436,21 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
           portal_status: cols.portalStatus ?? null, nos_exit_month: cols.nosExitMonth ?? null, nbo_campaign: cols.nboCampaign ?? null,
         });
         befores.push({ id: r.id, before });
-        children.push({ id: cur.id, d, known: known.get(cur.id) ?? new Set(), knownNotes: knownNotes.get(cur.id) ?? new Set() });
+        // Contactos editados no CRM ou já confirmados numa chamada atendida: o CRM manda (só entra o histórico).
+        const locked = !!cur.contactsLockedAt;
+        children.push({ id: cur.id, d, known: known.get(cur.id) ?? new Set(), knownNotes: knownNotes.get(cur.id) ?? new Set(), notesOnly: locked });
+        if (!locked && d.phones[0]) primaries.push({ id: cur.id, value: d.phones[0].value, name: d.decisor?.name ?? null, salutation: d.decisor?.salutation ?? null });
         counts.updated++;
       }
       if (!sets.length) continue;
       // Campo vazio no ficheiro mantém o valor atual (coalesce); o nome vem sempre do ficheiro.
       await tx.execute(sql`update companies c set name = x.name, name_key = x.name_key,
-          address = coalesce(x.address, c.address), postal_code = coalesce(x.postal_code, c.postal_code), municipality = coalesce(x.municipality, c.municipality),
-          locality = coalesce(x.locality, c.locality), loyalty_end = coalesce(x.loyalty_end, c.loyalty_end), l2b_monthly = coalesce(x.l2b_monthly, c.l2b_monthly),
-          size = coalesce(x.size, c.size), district = coalesce(x.district, c.district), sector = coalesce(x.sector, c.sector),
+          -- Morada editada no CRM: o CRM manda (a importação não a altera).
+          address = case when c.address_edited_at is null then coalesce(x.address, c.address) else c.address end,
+          postal_code = case when c.address_edited_at is null then coalesce(x.postal_code, c.postal_code) else c.postal_code end,
+          municipality = case when c.address_edited_at is null then coalesce(x.municipality, c.municipality) else c.municipality end,
+          locality = case when c.address_edited_at is null then coalesce(x.locality, c.locality) else c.locality end, loyalty_end = coalesce(x.loyalty_end, c.loyalty_end), l2b_monthly = coalesce(x.l2b_monthly, c.l2b_monthly),
+          size = coalesce(x.size, c.size), district = case when c.address_edited_at is null then coalesce(x.district, c.district) else c.district end, sector = coalesce(x.sector, c.sector),
           annual_revenue = coalesce(x.annual_revenue, c.annual_revenue), locations_potential = coalesce(x.locations_potential, c.locations_potential),
           rgu = coalesce(x.rgu, c.rgu), product = coalesce(x.product, c.product), technology = coalesce(x.technology, c.technology),
           loyalty_months = coalesce(x.loyalty_months, c.loyalty_months), portal_status = coalesce(x.portal_status, c.portal_status),
@@ -454,6 +461,14 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
         where c.id = x.id`);
       await tx.execute(sql`update import_rows r set before = x.before from jsonb_to_recordset(${JSON.stringify(befores)}::jsonb) as x(id uuid, before jsonb) where r.id = x.id`);
       await insertChildren(tx as unknown as Db, children, batchId, userId);
+      // Não tocados no CRM: o Contacto 1 do ficheiro passa a ser o telefone principal (com o decisor do ficheiro).
+      if (primaries.length) {
+        await tx.execute(sql`update company_contacts cc set is_primary = (cc.value = x.value),
+            person_name = case when cc.value = x.value then coalesce(x.name, cc.person_name) else cc.person_name end,
+            salutation = case when cc.value = x.value then coalesce(x.salutation, cc.salutation) else cc.salutation end
+          from jsonb_to_recordset(${JSON.stringify(primaries)}::jsonb) as x(id uuid, value text, name text, salutation text)
+          where cc.company_id = x.id and cc.kind = 'phone' and cc.status = 'valid'`);
+      }
     }
     await tx.update(importBatches).set({ status: "committed", committedAt: new Date(), summary: { ...(batch.summary as object), committed: counts } }).where(eq(importBatches.id, batchId));
     await tx.insert(auditLog).values({ userId, action: "importacao_gravada", entity: "import_batch", entityId: batchId, details: `Lote ${batch.number}: ${counts.created} novas, ${counts.updated} atualizadas` });
@@ -461,10 +476,12 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
   return { number: batch.number, ...counts };
 }
 
-async function insertChildren(tx: Db, items: { id: string; d: Staged; known: Set<string>; knownNotes: Set<string> }[], batchId: string, userId: string) {
+async function insertChildren(tx: Db, items: { id: string; d: Staged; known: Set<string>; knownNotes: Set<string>; notesOnly?: boolean }[], batchId: string, userId: string) {
   const contacts: (typeof companyContacts.$inferInsert)[] = [];
   const notes: (typeof companyNotes.$inferInsert)[] = [];
-  for (const { id, d, known, knownNotes } of items) {
+  for (const { id, d, known, knownNotes, notesOnly } of items) {
+    for (const n of d.notes) if (!knownNotes.has(n.text)) notes.push({ companyId: id, kind: n.kind, text: n.text, userId, batchId });
+    if (notesOnly) continue;
     const firstNew = known.size === 0;
     d.phones.forEach((p, i) => {
       if (known.has(p.value)) return;
@@ -475,7 +492,6 @@ async function insertChildren(tx: Db, items: { id: string; d: Staged; known: Set
     const d2 = d.decisor2;
     if (d.email2 && !known.has(d.email2)) contacts.push({ companyId: id, kind: "email", value: d.email2, personName: d2?.name ?? null, salutation: d2?.salutation ?? null, batchId });
     else if (d2 && !d.email2 && !known.has(d2.name)) contacts.push({ companyId: id, kind: "person", value: d2.name, personName: d2.name, salutation: d2.salutation, batchId });
-    for (const n of d.notes) if (!knownNotes.has(n.text)) notes.push({ companyId: id, kind: n.kind, text: n.text, userId, batchId });
   }
   for (let i = 0; i < contacts.length; i += 1000) await tx.insert(companyContacts).values(contacts.slice(i, i + 1000));
   for (let i = 0; i < notes.length; i += 1000) await tx.insert(companyNotes).values(notes.slice(i, i + 1000));
