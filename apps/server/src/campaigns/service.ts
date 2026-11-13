@@ -62,7 +62,9 @@ function filterCond(f: CampaignFilters) {
 
 /** Regras fixas (porque uma empresa pode ficar de fora), cada uma com o seu nome para explicar contagens a zero. */
 function ruleConds(f: CampaignFilters, memberIds: string[], excludeCampaignId?: string) {
-  const other = sql`exists (select 1 from campaign_entries e join campaigns k on k.id = e.campaign_id where e.company_id = c.id and e.status = 'pending' and k.status <> 'ended'${excludeCampaignId ? sql` and k.id <> ${excludeCampaignId}::uuid` : sql``}${f.takeFromOtherCampaigns ? sql` and (e.assigned_to is not null or e.locked_until > now())` : sql``})`;
+  // Partilha (13 nov): enquanto ninguém falou com a empresa, pode estar em várias campanhas; depois da primeira chamada atendida, fica só numa.
+  const contacted = sql`exists (select 1 from calls x where x.company_id = c.id and x.saved_at is not null and x.effect not in ('no_answer', 'busy', 'voicemail', 'wrong_number'))`;
+  const other = sql`(${contacted} and exists (select 1 from campaign_entries e join campaigns k on k.id = e.campaign_id where e.company_id = c.id and e.status = 'pending' and k.status <> 'ended'${excludeCampaignId ? sql` and k.id <> ${excludeCampaignId}::uuid` : sql``}${f.takeFromOtherCampaigns ? sql` and (e.assigned_to is not null or e.locked_until > now())` : sql``}))`;
   return {
     blocked: sql`(c.do_not_contact or c.inactive)`,
     cooldown: sql`(c.campaign_eligible_from is not null and c.campaign_eligible_from > current_date)`,

@@ -52,8 +52,13 @@ describe.skipIf(!url)("Oportunidades", () => {
 
     const lost = await createOpportunity(db, toPublic(ana), { companyId: c2 });
     await expect(loseOpportunity(db, toPublic(ana), lost.id, "inexistente")).rejects.toThrow(/motivo/);
-    await loseOpportunity(db, toPublic(ana), lost.id, "loyal_other");
-    const days = (new Date((await db.query.companies.findFirst({ where: eq(companies.id, c2) }))!.campaignEligibleFrom!).getTime() - Date.now()) / 86_400_000;
-    expect(Math.round(days)).toBeGreaterThanOrEqual(179); // seis meses (prazo configurável)
+    await expect(loseOpportunity(db, toPublic(ana), lost.id, "loyal_other")).rejects.toThrow(/operadora/);
+    await loseOpportunity(db, toPublic(ana), lost.id, "loyal_other", undefined, { operator: "Vodafone", date: "2028-01-31" });
+    expect((await db.query.companies.findFirst({ where: eq(companies.id, c2) }))).toMatchObject({ campaignEligibleFrom: "2027-09-30", operator: "Vodafone", loyaltyEnd: "2028-01-31" });
+    const c3 = await co(4);
+    const lost2 = await createOpportunity(db, toPublic(ana), { companyId: c3 });
+    await loseOpportunity(db, toPublic(ana), lost2.id, "price");
+    const days = (new Date((await db.query.companies.findFirst({ where: eq(companies.id, c3) }))!.campaignEligibleFrom!).getTime() - Date.now()) / 86_400_000;
+    expect(Math.round(days)).toBeGreaterThanOrEqual(89); // motivo «Preço»: 90 dias
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { OPPORTUNITY_STAGES } from "@basecom/shared";
+import { OPPORTUNITY_STAGES, operatorRefusalNote } from "@basecom/shared";
 import { api, type Catalogs, type Opportunity, type Reason, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, fmtEur, input, PageHeader } from "../ui";
 import { Modal } from "./Wallet";
@@ -139,19 +139,30 @@ function Lose({ o, reasons, onClose, onDone }: { o: Opportunity; reasons: Reason
   const [reason, setReason] = useState<Reason | null>(null);
   const [comment, setComment] = useState("");
   const [err, setErr] = useState("");
-  const ok = !!reason && (reason.effect !== "other" || comment.trim().length > 0);
+  const [operator, setOperator] = useState("");
+  const [date, setDate] = useState("");
+  // Outra operadora (igual à recusa): operadora e data de fim; contacto automático X meses antes.
+  const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
+  const ok = !!reason && (reason.effect !== "other" || comment.trim().length > 0) && (!byOperator || (!!operator && !!date));
   return (
     <Modal title={`Oportunidade perdida · ${o.company}`} onClose={onClose} width={620}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <Field label="Motivo (obrigatório)">
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{reasons.map((r) => <button key={r.id} onClick={() => setReason(r)} style={{ ...btn, height: 32, fontSize: 12, background: reason?.id === r.id ? c.ink : c.card, color: reason?.id === r.id ? "#FFF" : c.ink }}>{r.label}</button>)}</div>
         </Field>
+        {byOperator && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
+            <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra"].map((op) => <button key={op} onClick={() => setOperator(op)} style={{ ...btn, height: 30, fontSize: 12, background: operator === op ? c.ink : c.card, color: operator === op ? "#FFF" : c.ink }}>{op}</button>)}</div></Field>
+            <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+            {operator && date && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(operator, date, reason!.monthsBefore ?? 4)}</span>}
+          </div>
+        )}
         <Field label={reason?.effect === "other" ? "Descrição (obrigatória)" : "Comentário"}><input style={input} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
-        {reason && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{reason.effect === "company_closed" ? "A empresa fica encerrada e sai de todas as campanhas." : reason.effect === "cooldown" ? `Volta a poder entrar em campanhas daqui a ${reason.days} dias.` : "Volta a poder entrar em campanhas daqui a seis meses."}</span>}
+        {reason && !byOperator && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{reason.effect === "company_closed" ? "A empresa fica encerrada e sai de todas as campanhas." : reason.effect === "cooldown" ? `Volta a poder entrar em campanhas daqui a ${reason.days} dias.` : "Volta a poder entrar em campanhas daqui a seis meses."}</span>}
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={{ ...btnDark, background: "#A1000F", borderColor: "#A1000F" }} disabled={!ok} onClick={() => api.loseOpportunity(o.id, reason!.id, comment || undefined).then(onDone).catch((e) => setErr(e.message))}>Marcar como perdida</button>
+          <button style={{ ...btnDark, background: "#A1000F", borderColor: "#A1000F" }} disabled={!ok} onClick={() => api.loseOpportunity(o.id, reason!.id, comment || undefined, byOperator ? { operator, date } : undefined).then(onDone).catch((e) => setErr(e.message))}>Marcar como perdida</button>
         </div>
       </div>
     </Modal>

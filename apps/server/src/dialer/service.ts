@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { DEFAULT_SCRIPTS, lisbonDay, nboHead, nextContactFor, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { DEFAULT_SCRIPTS, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -36,6 +36,8 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
         and (e.next_at is null or e.next_at <= now())
         and (e.locked_until is null or e.locked_until < now() or e.locked_by = ${user.id}::uuid)
         and not c.do_not_contact and not c.inactive
+        -- A mesma empresa pode estar em várias campanhas: nunca a dá a duas pessoas ao mesmo tempo.
+        and not exists (select 1 from campaign_entries o where o.company_id = e.company_id and o.id <> e.id and o.locked_by <> ${user.id}::uuid and o.locked_until > now())
       order by (e.locked_by = ${user.id}::uuid and e.locked_until >= now()) desc nulls last,
                (e.next_at is not null) desc, (e.assigned_to is not null) desc, e.next_at nulls last, e.created_at, e.id
       limit 1 for update of e skip locked)
@@ -195,6 +197,8 @@ export type ResultInput = {
 
 /** Recusas por outro operador (fidelizado ou renovou): a nova abordagem é na data que o cliente sugerir, não automática. */
 const OPERATOR_REASONS = ["loyalty_end", "new_contract"];
+/** Resultados sem conversa com o cliente. */
+export const NO_CONTACT = ["no_answer", "busy", "voicemail", "wrong_number"];
 
 /** Regista o resultado e executa as consequências automáticas do catálogo. */
 export async function saveResult(db: Db, user: PublicUser, callId: string, input: ResultInput) {
@@ -211,14 +215,15 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   if (["interested", "proposal_sent", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
   if (reason && OPERATOR_REASONS.includes(reason.effect)) {
     if (!input.competitor?.operator) throw new AuthError(400, "Indique a operadora atual do cliente.");
-    if (!input.at) throw new AuthError(400, "Indique a data que o cliente sugere para voltar a contactar.");
+    if (!input.date) throw new AuthError(400, "Indique a data de fim da fidelização.");
   }
 
   const now = new Date();
   const endedAt = call.endedAt ?? now;
   const resultSeconds = Math.max(0, Math.round((now.getTime() - endedAt.getTime()) / 1000));
   const co = (await db.query.companies.findFirst({ where: eq(companies.id, call.companyId) }))!;
-  const needsKind = co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed;
+  // NC/FC só se pede quando houve conversa (não se pede num «Não atendeu», «Ocupado», voicemail ou número errado).
+  const needsKind = co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed && !NO_CONTACT.includes(outcome.effect);
   if (needsKind && !input.walletKind) throw new AuthError(400, "Cliente sem NC/FC: identifique se é NC ou FC.");
   const entry = call.entryId ? await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, call.entryId) }) : undefined;
   const a = cat.attempts;
@@ -248,6 +253,11 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     }
     // Decisor indicado em «Decisor ausente».
     if (input.decisorName?.trim()) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `Decisor: ${input.decisorName.trim()}` });
+    // Primeira chamada atendida: a empresa sai das outras campanhas onde estava por trabalhar (fica só nesta).
+    if (entry && !NO_CONTACT.includes(outcome.effect)) {
+      await tx.update(campaignEntries).set({ status: "removed", lockedBy: null, lockedUntil: null })
+        .where(and(eq(campaignEntries.companyId, co.id), eq(campaignEntries.status, "pending"), sql`${campaignEntries.id} <> ${entry.id}::uuid`));
+    }
     const note = [outcome.label, reason?.label, input.comment?.trim()].filter(Boolean).join(" · ");
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "call", text: note, userId: user.id });
     if (input.competitor && (input.competitor.operator || input.competitor.text)) {
@@ -315,8 +325,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
         const r = reason!;
         const base = input.date ? new Date(`${input.date}T00:00:00Z`) : null;
         const byOperator = OPERATOR_REASONS.includes(r.effect);
-        // Por outro operador: a data é a que o cliente sugeriu (obrigatória); nos restantes motivos, prazos do catálogo.
-        const nc = byOperator ? { at: new Date(input.at!), eligibleAt: new Date(input.at!) } : nextContactFor(r, now, base);
+        // Por outra operadora: só a data de fim; o contacto fica marcado X meses antes (4 por omissão, configurável).
+        const nc = nextContactFor(r, now, base);
+        if (byOperator) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: operatorRefusalNote(input.competitor!.operator!, input.date!, r.monthsBefore ?? 4) });
         const patch: Partial<typeof companies.$inferInsert> = {};
         if (byOperator && input.date) patch.loyaltyEnd = input.date;
         if (byOperator && input.competitor?.operator) patch.operator = input.competitor.operator;

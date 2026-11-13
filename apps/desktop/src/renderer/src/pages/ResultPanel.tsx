@@ -1,3 +1,4 @@
+import { operatorRefusalNote } from "@basecom/shared";
 import { useEffect, useMemo, useState } from "react";
 import type { Catalogs, Outcome, Reason, ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
@@ -41,8 +42,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const eff = outcome?.effect;
   /** Recusa por outro operador: operadora obrigatória e nova abordagem na data que o cliente sugerir (não automática). */
   const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
+  // NC/FC só quando houve conversa (num «Não atendeu» não se pede).
+  const askKind = needsKind && !!outcome && !["no_answer", "busy", "voicemail", "wrong_number"].includes(outcome.effect);
   const needsAt = eff === "call_later" || eff === "interested" || eff === "proposal_sent" || eff === "negotiating" || reason?.effect === "other";
-  const ready = (!needsKind || !!kind) && (!byOperator || (!!comp.operator && !!date && !!at)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
+  const ready = (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
     && (eff !== "call_later" || !!at) && (!["interested", "proposal_sent", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
 
   const nextContact = useMemo(() => {
@@ -59,7 +62,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
     onSave({
       outcomeId: outcome.id, reasonId: reason?.id, comment: comment.trim() || undefined, date: date || undefined, at: toIso(at),
       forMe: eff === "call_later" ? forMe : undefined, nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
-      decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: needsKind && kind ? kind : undefined,
+      decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
     });
   }
   useEffect(() => {
@@ -104,8 +107,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
           <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: o })}>{o}</button>)}</div></Field>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-            <Field label="Voltar a contactar em — data que o cliente sugere (obrigatório)"><input style={{ ...input, width: 230 }} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
           </div>
+          {comp.operator && date && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(comp.operator, date, reason?.monthsBefore ?? 4)}</div>}
         </div>
       )}
       {nextContact && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}><b>Próximo contacto (automático):</b> {nextContact}</div>}
@@ -125,7 +128,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <textarea style={{ ...input, height: 64, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} />
       </Field>
 
-      {needsKind && (
+      {askKind && (
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 12px", background: c.warnSoft, borderRadius: 10 }}>
           <b style={{ fontSize: 13 }}>Cliente NOS sem NC/FC: identifique (obrigatório)</b>
           {(["NC", "FC"] as const).map((k) => <button key={k} style={pill(kind === k)} onClick={() => setKind(k)}>{k}</button>)}

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { campaignEntries, campaigns, companies, companyContacts, users } from "../db/schema.js";
+import { calls, campaignEntries, campaigns, companies, companyContacts, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { createCampaign, listCampaigns, previewCampaign, refreshCampaign, updateCampaign } from "./service.js";
 
@@ -37,6 +37,7 @@ describe.skipIf(!url)("campanhas: que empresas entram", () => {
   });
   afterAll(async () => {
     await db.delete(campaigns).where(inArray(campaigns.id, created));
+    await db.delete(calls).where(inArray(calls.companyId, Object.values(co)));
     await db.delete(companies).where(inArray(companies.id, Object.values(co)));
     await db.execute(sql`delete from audit_log where user_id = ${admin.id}`);
     await db.delete(users).where(inArray(users.id, [admin.id, ana.id, bia.id]));
@@ -59,12 +60,16 @@ describe.skipIf(!url)("campanhas: que empresas entram", () => {
     expect(co.da_bia! in byCo).toBe(false); // outra carteira nunca entra
 
     // Uma empresa não fica em duas campanhas ativas.
-    const again = await previewCampaign(db, { districts: [district] }, [ana.id]);
-    expect(again).toMatchObject({ total: 0, other_campaign: 3 });
-    // Trazer de outras campanhas: só as que ninguém tem reservadas (a da Ana fica com ela).
-    expect((await previewCampaign(db, { districts: [district], takeFromOtherCampaigns: true }, [ana.id])).total).toBe(2);
+    // Partilha (13 nov): sem nenhuma chamada atendida, a empresa pode estar também noutra campanha.
+    expect(await previewCampaign(db, { districts: [district] }, [ana.id])).toMatchObject({ total: 3, other_campaign: 0 });
+    // Depois de uma chamada atendida, fica só na campanha onde está.
+    await db.insert(calls).values({ companyId: co.livre!, userId: ana.id, source: "new", savedAt: new Date(), effect: "call_later", outcomeId: "call_later" });
+    expect(await previewCampaign(db, { districts: [district] }, [ana.id])).toMatchObject({ total: 2, other_campaign: 1 });
+    // Trazer de outras campanhas: inclui as atendidas que ninguém tem reservadas.
+    expect((await previewCampaign(db, { districts: [district], takeFromOtherCampaigns: true }, [ana.id])).total).toBe(3);
+    // O cliente ainda não foi atendido: pode entrar também numa campanha da Bia.
     const only = await previewCampaign(db, { districts: [district], accountType: "client" }, [bia.id]);
-    expect(only.total).toBe(0);
+    expect(only.total).toBe(1);
   });
 
   it("atualizar a lista acrescenta as novas; terminar liberta as pendentes", async () => {

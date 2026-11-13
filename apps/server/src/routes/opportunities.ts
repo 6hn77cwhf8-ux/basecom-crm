@@ -24,7 +24,7 @@ export async function opportunityRoutes(app: FastifyInstance, opts: { db: Db }) 
   });
   app.post("/opportunities/:id/win", any, async (req) => { await winOpportunity(db, req.user!, id.parse(req.params).id); return { ok: true }; });
   app.post("/opportunities/:id/lose", any, async (req) => {
-    const b = z.object({ reasonId: z.string().min(1), comment: z.string().max(1000).optional() }).parse(req.body);
-    await loseOpportunity(db, req.user!, id.parse(req.params).id, b.reasonId, b.comment); return { ok: true };
+    const b = z.object({ reasonId: z.string().min(1), comment: z.string().max(1000).optional(), operator: z.string().max(40).optional(), date: z.string().date().optional() }).parse(req.body);
+    await loseOpportunity(db, req.user!, id.parse(req.params).id, b.reasonId, b.comment, { operator: b.operator, date: b.date }); return { ok: true };
   });
 }

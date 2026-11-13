@@ -24,7 +24,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
   const [who, setWho] = useState(isAdmin ? "" : me.id);
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [error, setError] = useState("");
-  const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "reschedule" | "cancel"; t: AgendaTask } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "reschedule" | "cancel" | "done"; t: AgendaTask } | null>(null);
   const [calling, setCalling] = useState<{ t: AgendaTask; callId: string; phone: string | null; ended: number | null; group: Group; needsKind: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -68,7 +68,9 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
     setBusy(true); setError("");
     try {
       await api.saveResult(calling.callId, r);
-      await api.closeTask(calling.t.id, "done", "resultado registado na chamada").catch(() => undefined);
+      // Feedback da tarefa = o resultado da chamada (e o comentário, se houver).
+      const label = cat?.catalogs.outcomes.find((o) => o.id === r.outcomeId)?.label ?? "Chamada feita";
+      await api.closeTask(calling.t.id, "done", [label, r.comment].filter(Boolean).join(" · ")).catch(() => undefined);
       setCalling(null); load();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
@@ -132,7 +134,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {(t.assignedTo === me.id) && <button style={{ ...btnDark, height: 32, fontSize: 13 }} disabled={!t.phone} title={t.phone ? "Ligar e registar o resultado" : "Sem telefone válido"} onClick={() => startCall(t)}>Ligar</button>}
-                <button style={small} onClick={() => api.closeTask(t.id, "done").then(load).catch((e) => setError(e.message))}>Concluir</button>
+                <button style={small} onClick={() => setDialog({ kind: "done", t })}>Concluir</button>
                 <button style={small} onClick={() => setDialog({ kind: "reschedule", t })}>Reagendar</button>
                 <button style={{ ...small, color: "#A1000F" }} onClick={() => setDialog({ kind: "cancel", t })}>Cancelar</button>
               </div>
@@ -141,6 +143,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
         </section>
       ))}
       {dialog?.kind === "reschedule" && <Reschedule t={dialog.t} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
+      {dialog?.kind === "done" && <DoneTask t={dialog.t} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "cancel" && <CancelTask t={dialog.t} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "new" && cat && <NewTask types={cat.catalogs.taskTypes} me={me} people={people} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
     </>
@@ -162,6 +165,24 @@ function Reschedule({ t, onClose, onDone }: { t: AgendaTask; onClose: () => void
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
           <button style={btnDark} disabled={!at || reason.trim().length < 5} onClick={() => api.rescheduleTask(t.id, new Date(at).toISOString(), reason).then(onDone).catch((e) => setErr(e.message))}>Reagendar</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Concluir pede sempre o feedback: fica no histórico como «Tarefa terminada: {feedback}». */
+function DoneTask({ t, onClose, onDone }: { t: AgendaTask; onClose: () => void; onDone: () => void }) {
+  const [note, setNote] = useState("");
+  const [err, setErr] = useState("");
+  return (
+    <Modal title={`Concluir «${t.type}» · ${t.company}`} onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <Field label="Feedback (obrigatório; fica no histórico da empresa)"><input style={input} autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: proposta enviada por email; ligar sexta" /></Field>
+        <ErrorText>{err}</ErrorText>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={btn} onClick={onClose}>Voltar</button>
+          <button style={btnDark} disabled={note.trim().length < 3} onClick={() => api.closeTask(t.id, "done", note).then(onDone).catch((e) => setErr(e.message))}>Concluir</button>
         </div>
       </div>
     </Modal>

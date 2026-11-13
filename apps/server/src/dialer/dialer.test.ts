@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { notifications, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
+import { companyNotes, notifications, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { createCampaign } from "../campaigns/service.js";
 import { endCall, skipEntry, myDialerCampaign, nextEntry, saveResult, setDialerCampaign, startCall, type ResultInput } from "./service.js";
@@ -134,16 +134,18 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await db.delete(users).where(eq(users.id, outsider!.id));
   });
 
-  it("Recusa por outro operador: operadora obrigatória e nova abordagem na data que o cliente sugere", async () => {
+  it("Recusa por outra operadora: operadora e fim de fidelização obrigatórios; contacto 4 meses antes, com nota automática", async () => {
     await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
     await expect(call(ana, { outcomeId: "not_interested", reasonId: "loyal_other", date: "2027-09-30" })).rejects.toThrow(/operadora/);
-    const at = "2027-03-15T10:00:00.000Z";
-    const { n } = await call(ana, { outcomeId: "not_interested", reasonId: "loyal_other", date: "2027-09-30", at, competitor: { operator: "MEO" } });
+    const { n } = await call(ana, { outcomeId: "not_interested", reasonId: "loyal_other", date: "2027-09-30", competitor: { operator: "MEO" } });
     const co = (await db.query.companies.findFirst({ where: eq(companies.id, n.company.id) }))!;
-    expect(co).toMatchObject({ loyaltyEnd: "2027-09-30", operator: "MEO", campaignEligibleFrom: "2027-03-15" });
+    expect(co).toMatchObject({ loyaltyEnd: "2027-09-30", operator: "MEO", campaignEligibleFrom: "2027-05-30" });
     const [t] = await db.select().from(tasks).where(eq(tasks.companyId, n.company.id));
-    expect(t!.dueAt.toISOString().slice(0, 10)).toBe("2027-03-15");
+    expect(t!.dueAt.toISOString().slice(0, 10)).toBe("2027-05-31"); // 30/05/2027 é domingo: passa para o dia útil seguinte
+    const notes = await db.select().from(companyNotes).where(eq(companyNotes.companyId, n.company.id));
+    expect(notes.map((x) => x.text)).toContain("Cliente da MEO até 30/09/2027, agendado contacto para 4 meses antes.");
   });
+
 
   it("Cliente NOS sem carteira: o resultado obriga a identificar NC ou FC", async () => {
     await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
@@ -151,8 +153,8 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await db.update(companies).set({ accountType: "client", walletKindConfirmed: false, ownerId: null }).where(eq(companies.id, n.company.id));
     expect((await nextEntry(db, toPublic(bia), campaignId))!.company.needsKind).toBe(true);
     const c = await startCall(db, toPublic(bia), { companyId: n.company.id, contactId: n.phone?.id, entryId: n.entry.id, source: "new" });
-    await expect(saveResult(db, toPublic(bia), c.id, { outcomeId: "no_answer" })).rejects.toThrow(/NC ou FC/);
-    await saveResult(db, toPublic(bia), c.id, { outcomeId: "no_answer", walletKind: "FC" });
+    await expect(saveResult(db, toPublic(bia), c.id, { outcomeId: "call_later", at: new Date(Date.now() + 86400_000).toISOString() })).rejects.toThrow(/NC ou FC/);
+    await saveResult(db, toPublic(bia), c.id, { outcomeId: "call_later", at: new Date(Date.now() + 86400_000).toISOString(), walletKind: "FC" });
     expect((await db.query.companies.findFirst({ where: eq(companies.id, n.company.id) }))).toMatchObject({ walletKind: "FC", walletKindConfirmed: true });
   });
 
@@ -203,5 +205,27 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     const got = await db.select().from(notifications).where(and(eq(notifications.userId, admin.id), eq(notifications.kind, "result_late")));
     expect(got.length).toBe(1);
     expect(got[0]!.text).toContain(`ana ${tag}`);
+  });
+
+  it("Empresa partilhada por duas campanhas: nunca vai a duas pessoas ao mesmo tempo; atendida, sai da outra campanha", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(eq(campaignEntries.campaignId, campaignId));
+    const shared = await company(77, 1);
+    const k2 = await createCampaign(db, toPublic(admin), { name: `PD2 ${tag}`, mode: "new", script: "", filters: { districts: [district] }, memberIds: [bia.id] });
+    campIds.push(k2.id);
+    await db.insert(campaignEntries).values({ campaignId, companyId: shared }).onConflictDoNothing();
+    // Só a empresa partilhada fica pronta nas duas campanhas.
+    await db.update(campaignEntries).set({ nextAt: new Date(Date.now() + 86400_000) }).where(and(inArray(campaignEntries.campaignId, [campaignId, k2.id]), sql`company_id <> ${shared}::uuid`));
+    try {
+      const a = (await nextEntry(db, toPublic(ana), campaignId))!;
+      expect(a.company.id).toBe(shared);
+      expect(await nextEntry(db, toPublic(bia), k2.id)).toBeNull(); // a Ana já a tem no ecrã
+      const c = await startCall(db, toPublic(ana), { companyId: shared, contactId: a.phone?.id, entryId: a.entry.id, source: "new" });
+      await endCall(db, toPublic(ana), c.id);
+      await saveResult(db, toPublic(ana), c.id, { outcomeId: "call_later", at: new Date(Date.now() + 86400_000).toISOString() });
+      const other = (await db.select().from(campaignEntries).where(and(eq(campaignEntries.campaignId, k2.id), eq(campaignEntries.companyId, shared))))[0]!;
+      expect(other.status).toBe("removed");
+    } finally {
+      await db.update(campaignEntries).set({ nextAt: null }).where(inArray(campaignEntries.campaignId, [campaignId, k2.id]));
+    }
   });
 });

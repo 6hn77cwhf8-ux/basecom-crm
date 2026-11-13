@@ -113,6 +113,13 @@
       "when": 1794510310485,
       "tag": "0015_telefonia",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794583189129,
+      "tag": "0016_recusa_operadora_4_meses",
+      "breakpoints": true
     }
   ]
 }

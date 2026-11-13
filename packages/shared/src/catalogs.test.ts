@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OUTCOMES, DEFAULT_REASONS, OUTCOME_GROUPS, nextContactFor, opportunityAlert } from "./catalogs.js";
+import { DEFAULT_OUTCOMES, DEFAULT_REASONS, OUTCOME_GROUPS, nextContactFor, operatorRefusalNote, opportunityAlert } from "./catalogs.js";
 
 const r = (id: string) => DEFAULT_REASONS.find((x) => x.id === id)!;
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
@@ -20,10 +20,11 @@ describe("catálogos aprovados", () => {
     expect(iso(nextContactFor(r("satisfied"), today).eligibleAt)).toBe("2027-02-09"); // 90 dias
     expect(iso(nextContactFor(r("no_need"), today).eligibleAt)).toBe("2027-05-10"); // 180 dias
     expect(iso(nextContactFor(r("decisor_undecided"), today).at)).toBe("2026-12-11"); // tarefa a 30 dias
-    // Fidelizado até 30/09/2027: primeiro contacto 6 meses antes.
-    expect(iso(nextContactFor(r("loyal_other"), today, d("2027-09-30")).at)).toBe("2027-03-30");
-    // Renovou em out/2026: contrato de 24 meses, contacto aos 18 meses (exemplo da maqueta: abr 2028).
-    expect(iso(nextContactFor(r("chose_other"), today, d("2026-10-15")).at)).toBe("2028-04-15");
+    // Outra operadora (13 nov): fim da fidelização a 30/09/2027 → contacto 4 meses antes (30/05/2027), nos dois motivos.
+    expect(iso(nextContactFor(r("loyal_other"), today, d("2027-09-30")).at)).toBe("2027-05-30");
+    expect(iso(nextContactFor(r("chose_other"), today, d("2027-09-30")).at)).toBe("2027-05-30");
+    expect(iso(nextContactFor(r("loyal_other"), today, d("2028-01-31")).at)).toBe("2027-09-30"); // fim de mês
+    expect(operatorRefusalNote("MEO", "2027-09-30", 4)).toBe("Cliente da MEO até 30/09/2027, agendado contacto para 4 meses antes.");
   });
 });
 

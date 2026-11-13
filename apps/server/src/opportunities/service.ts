@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { OPPORTUNITY_STAGES, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
+import { OPPORTUNITY_STAGES, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
-import { auditLog, campaignEntries, companies, companyNotes, opportunities, walletChanges } from "../db/schema.js";
+import { auditLog, campaignEntries, companies, companyNotes, opportunities, tasks, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
@@ -87,21 +87,29 @@ export async function winOpportunity(db: Db, user: PublicUser, id: string) {
 }
 
 /** Perdida: motivo obrigatório; volta às campanhas ao fim de seis meses, salvo prazo diferente do motivo. */
-export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string) {
+export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string, operatorInfo?: { operator?: string; date?: string }) {
   const o = await load(db, user, id);
   const cat = await getSetting(db, "catalogs");
   const reason = (cat.reasons as Reason[]).find((r) => r.id === reasonId && r.active);
   if (!reason) throw new AuthError(400, "Escolha o motivo da perda.");
   if (reason.effect === "other" && !comment?.trim()) throw new AuthError(400, "No motivo «Outro», a descrição é obrigatória.");
   const now = new Date();
+  // Outra operadora (igual à recusa): operadora e fim de fidelização; contacto X meses antes do fim.
+  const byOperator = reason.effect === "loyalty_end" || reason.effect === "new_contract";
+  if (byOperator && (!operatorInfo?.operator || !operatorInfo.date)) throw new AuthError(400, "Indique a operadora e a data de fim da fidelização.");
+  const nc = byOperator ? nextContactFor(reason, now, new Date(`${operatorInfo!.date}T00:00:00Z`)) : null;
   const days = reason.effect === "cooldown" ? reason.days ?? 0 : (cat.opportunities as OpportunityRules).lostReopenDays;
-  const eligible = new Date(now.getTime() + days * 86_400_000).toISOString().slice(0, 10);
+  const eligible = (nc?.eligibleAt ?? new Date(now.getTime() + days * 86_400_000)).toISOString().slice(0, 10);
   await db.transaction(async (tx) => {
     await tx.update(opportunities).set({ stage: "lost", lostReasonId: reason.id, closedAt: now, lastActivityAt: now }).where(eq(opportunities.id, id));
     if (reason.effect === "company_closed") {
       await tx.update(companies).set({ inactive: true, updatedAt: now }).where(eq(companies.id, o.companyId));
       await tx.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.companyId, o.companyId), eq(campaignEntries.status, "pending")));
-    } else await tx.update(companies).set({ campaignEligibleFrom: eligible, updatedAt: now }).where(eq(companies.id, o.companyId));
+    } else await tx.update(companies).set({ campaignEligibleFrom: eligible, ...(byOperator ? { loyaltyEnd: operatorInfo!.date, operator: operatorInfo!.operator } : {}), updatedAt: now }).where(eq(companies.id, o.companyId));
+    if (byOperator) {
+      await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: operatorRefusalNote(operatorInfo!.operator!, operatorInfo!.date!, reason.monthsBefore ?? 4) });
+      if (nc?.at) await tx.insert(tasks).values({ companyId: o.companyId, type: "Ligar", assignedTo: o.ownerId, dueAt: nextWorkingMoment(nc.at), description: `Primeiro contacto após «${reason.label}»`, origin: "opportunity", opportunityId: o.id, createdBy: user.id });
+    }
     await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: `Oportunidade perdida: ${reason.label}${comment?.trim() ? ` · ${comment.trim()}` : ""}${reason.effect !== "company_closed" ? ` · volta às campanhas a ${eligible.split("-").reverse().join("/")}` : ""}` });
     await tx.insert(auditLog).values({ userId: user.id, action: "oportunidade_perdida", entity: "company", entityId: o.companyId, details: reason.label });
   });

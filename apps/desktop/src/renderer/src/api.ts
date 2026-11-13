@@ -174,7 +174,7 @@ export const api = {
   moveOpportunity: (id: string, stage: string, comment?: string) => call(`/opportunities/${id}/stage`, { method: "POST", body: JSON.stringify({ stage, comment }) }),
   opportunityActivity: (id: string, text: string) => call(`/opportunities/${id}/activity`, { method: "POST", body: JSON.stringify({ text }) }),
   winOpportunity: (id: string) => call(`/opportunities/${id}/win`, { method: "POST", body: "{}" }),
-  loseOpportunity: (id: string, reasonId: string, comment?: string) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment }) }),
+  loseOpportunity: (id: string, reasonId: string, comment?: string, extra?: { operator: string; date: string }) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment, ...extra }) }),
   wallet: (q: { ownerId?: string; tasks?: string; q?: string }) => call<{ companies: WalletRow[] }>(`/wallet${qs(q)}`).then((r) => r.companies),
   callFromWallet: (id: string) => call<{ callId: string; phone: { id: string; value: string; type: string | null } }>(`/wallet/${id}/call`, { method: "POST", body: "{}" }),
   agendaPeople: () => call<{ people: { id: string; name: string }[] }>("/agenda/people").then((r) => r.people),

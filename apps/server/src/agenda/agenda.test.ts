@@ -50,7 +50,9 @@ describe.skipIf(!url)("Agenda", () => {
     expect(c.phone?.value).toBe(`91${tag}1`);
     expect((await db.query.calls.findFirst({ where: eq(calls.id, c.callId) }))!.source).toBe("agenda");
     await expect(closeTask(db, toPublic(ana), t!.id, "cancelled")).rejects.toThrow(/porque/);
-    await closeTask(db, toPublic(ana), t!.id, "done");
+    await expect(closeTask(db, toPublic(ana), t!.id, "done")).rejects.toThrow(/feedback/);
+    await closeTask(db, toPublic(ana), t!.id, "done", "Falei com o Rui, envia proposta amanhã");
+    expect((await db.select().from(companyNotes).where(eq(companyNotes.companyId, coId))).map((n) => n.text)).toContain("Tarefa terminada: Falei com o Rui, envia proposta amanhã");
     const d = await myDay(db, toPublic(ana));
     expect(d).toMatchObject({ calls: 0, sales: 0, late: 0 });
     expect(d.breakLimit).toBeGreaterThan(0);

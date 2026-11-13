@@ -59,9 +59,11 @@ export async function rescheduleTask(db: Db, user: PublicUser, id: string, dueAt
 
 export async function closeTask(db: Db, user: PublicUser, id: string, status: "done" | "cancelled", note?: string) {
   const t = await loadTask(db, user, id);
+  // Não se termina uma tarefa sem feedback (revisão de 13 nov); cancelar pede o motivo.
+  if (status === "done" && (note ?? "").trim().length < 3) throw new AuthError(400, "Escreva o feedback da tarefa.");
   if (status === "cancelled" && (note ?? "").trim().length < 5) throw new AuthError(400, "Indique porque cancela a tarefa.");
   await db.update(tasks).set({ status, doneAt: new Date() }).where(eq(tasks.id, id));
-  await db.insert(companyNotes).values({ companyId: t.companyId, kind: "note", userId: user.id, text: `Tarefa «${t.type}» ${status === "done" ? "concluída" : "cancelada"}${note?.trim() ? `: ${note.trim()}` : ""}` });
+  await db.insert(companyNotes).values({ companyId: t.companyId, kind: "note", userId: user.id, text: status === "done" ? `Tarefa terminada: ${note!.trim()}` : `Tarefa «${t.type}» cancelada: ${note!.trim()}` });
 }
 
 /**

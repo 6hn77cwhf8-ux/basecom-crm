@@ -62,8 +62,9 @@ export type ReasonEffect = "cooldown" | "loyalty_end" | "new_contract" | "follow
 export type Reason = { id: string; label: string; effect: ReasonEffect; days?: number; monthsBefore?: number; contractMonths?: number; active: boolean };
 
 export const DEFAULT_REASONS: Reason[] = [
-  { id: "loyal_other", label: "Fidelizado a outra operadora", effect: "loyalty_end", monthsBefore: 6, active: true },
-  { id: "chose_other", label: "Escolheu outra proposta ou renovou com outro operador", effect: "new_contract", contractMonths: 24, monthsBefore: 6, active: true },
+  // Outra operadora (decisão de 13 nov): só a operadora e a data de fim; contacto 4 meses antes dessa data.
+  { id: "loyal_other", label: "Fidelizado a outra operadora", effect: "loyalty_end", monthsBefore: 4, active: true },
+  { id: "chose_other", label: "Escolheu outra proposta ou renovou com outro operador", effect: "new_contract", monthsBefore: 4, active: true },
   { id: "satisfied", label: "Satisfeito com a solução atual", effect: "cooldown", days: 90, active: true },
   { id: "price", label: "Preço", effect: "cooldown", days: 90, active: true },
   { id: "no_need", label: "Sem necessidade", effect: "cooldown", days: 180, active: true },
@@ -89,19 +90,21 @@ export const COMPETITOR_OPERATORS = ["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "
  */
 export function nextContactFor(reason: Reason, today: Date, date?: Date | null): { at: Date | null; eligibleAt: Date | null } {
   const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
-  const addMonths = (d: Date, n: number) => { const x = new Date(d); x.setUTCMonth(x.getUTCMonth() + n); return x; };
+  // Meses de calendário sem «saltar» o mês: 31/01 − 4 meses = 30/09 (e não 01/10).
+  const addMonths = (d: Date, n: number) => {
+    const y = d.getUTCFullYear(), m = d.getUTCMonth() + n;
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), last), d.getUTCHours(), d.getUTCMinutes()));
+  };
   switch (reason.effect) {
     case "cooldown": return { at: null, eligibleAt: addDays(today, reason.days ?? 0) };
     case "followup_task": return { at: addDays(today, reason.days ?? 0), eligibleAt: null };
-    case "loyalty_end": {
-      if (!date) return { at: null, eligibleAt: null };
-      const at = addMonths(date, -(reason.monthsBefore ?? 0));
-      return { at: at > today ? at : today, eligibleAt: at };
-    }
+    // Outra operadora (fidelizado ou renovou): a data é o fim da fidelização; contacto X meses antes (4 por omissão).
+    case "loyalty_end":
     case "new_contract": {
-      const base = date ?? today;
-      const at = addMonths(base, (reason.contractMonths ?? 24) - (reason.monthsBefore ?? 0));
-      return { at, eligibleAt: at };
+      if (!date) return { at: null, eligibleAt: null };
+      const at = addMonths(date, -(reason.monthsBefore ?? 4));
+      return { at: at > today ? at : today, eligibleAt: at };
     }
     default: return { at: null, eligibleAt: null };
   }
@@ -126,4 +129,10 @@ export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number]["id"];
 export function opportunityAlert(lastActivityAt: Date, now: Date, rules: OpportunityRules = DEFAULT_OPPORTUNITY_RULES): { days: number; level: "ok" | "warn" | "late" } {
   const days = Math.floor((now.getTime() - lastActivityAt.getTime()) / 86_400_000);
   return { days, level: days >= rules.lateDays ? "late" : days >= rules.warnDays ? "warn" : "ok" };
+}
+
+/** Nota automática da recusa por outra operadora: «Cliente da MEO até 30/09/2027, agendado contacto para 4 meses antes.» */
+export function operatorRefusalNote(operator: string, endDate: string, monthsBefore: number): string {
+  const [y, m, d] = endDate.slice(0, 10).split("-");
+  return `Cliente da ${operator} até ${d}/${m}/${y}, agendado contacto para ${monthsBefore} ${monthsBefore === 1 ? "mês" : "meses"} antes.`;
 }
