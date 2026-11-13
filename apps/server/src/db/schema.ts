@@ -405,6 +405,8 @@ export const phoneCommands = pgTable("phone_commands", {
   deviceId: uuid("device_id").notNull().references(() => devices.id, { onDelete: "cascade" }),
   callId: uuid("call_id").references(() => calls.id, { onDelete: "cascade" }),
   number: text("number").notNull(),
+  /** dial = marcar o número · hangup = desligar a chamada em curso («Desligar» no CRM) */
+  kind: text("kind").notNull().default("dial"),
   /** pending | sent | done | expired */
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

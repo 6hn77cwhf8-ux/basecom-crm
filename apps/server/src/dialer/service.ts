@@ -6,7 +6,7 @@ import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { currentState, setState } from "../time/service.js";
 import { notifyLeadOrAdmin } from "../notifications/service.js";
-import { queueDial } from "../phone/service.js";
+import { queueDial, queueHangup } from "../phone/service.js";
 
 /**
  * Power Dialer (catálogo, secções 2 e 14): fila por comercial, chamadas e consequências automáticas.
@@ -181,6 +181,8 @@ export async function endCall(db: Db, user: PublicUser, callId: string) {
   const c = await db.query.calls.findFirst({ where: eq(calls.id, callId) });
   if (!c || c.userId !== user.id) throw new AuthError(404, "Chamada não encontrada.");
   if (!c.endedAt) await db.update(calls).set({ endedAt: new Date() }).where(eq(calls.id, callId));
+  // Chamada feita pelo telemóvel: o telemóvel desliga também.
+  await queueHangup(db, user.id, callId);
   return { endedAt: c.endedAt ?? new Date() };
 }
 

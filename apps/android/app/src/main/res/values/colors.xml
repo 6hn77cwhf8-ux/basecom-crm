@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="basecom_white">#FFFFFF</color>
+    <color name="basecom_orange">#FF5A00</color>
+    <color name="basecom_ink">#0B0B0B</color>
+    <color name="basecom_surface">#F5F5F7</color>
+</resources>

@@ -1,0 +1,1 @@
+ALTER TABLE "phone_commands" ADD COLUMN "kind" text DEFAULT 'dial' NOT NULL;

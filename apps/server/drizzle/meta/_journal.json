@@ -127,6 +127,13 @@
       "when": 1794583216927,
       "tag": "0017_crm_manda_contactos",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794583528061,
+      "tag": "0018_desligar_no_telemovel",
+      "breakpoints": true
     }
   ]
 }

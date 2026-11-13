@@ -75,6 +75,7 @@ class PhoneService : Service() {
             .setContentTitle("BASECOM ligado ao CRM")
             .setContentText("As chamadas pedidas no CRM são marcadas neste telemóvel.")
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            .setColor(0xFFFF5A00.toInt())
             .setContentIntent(open)
             .setOngoing(true)
             .build()
@@ -104,7 +105,10 @@ class PhoneService : Service() {
             try {
                 val cmd = api.next()
                 backoff = 2_000L
-                if (cmd != null) main.post { dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null }) }
+                if (cmd != null) main.post {
+                    if (cmd.optString("kind") == "hangup") hangUp()
+                    else dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
+                }
             } catch (e: Api.HttpError) {
                 if (e.status == 401) { api.token = null; running = false; stopSelf(); return }
                 Thread.sleep(backoff); backoff = (backoff * 2).coerceAtMost(30_000)
@@ -124,6 +128,13 @@ class PhoneService : Service() {
         }
         // Se a chamada nunca chegar a começar (sem rede, cancelada), fecha-a ao fim de 60 s.
         main.postDelayed({ if (outCallId == callId && !outOffhook) finishOutgoing(0) }, 60_000)
+    }
+
+    /** «Desligar» no CRM: termina a chamada em curso (precisa da autorização de atender/terminar chamadas). */
+    @Suppress("DEPRECATION")
+    private fun hangUp() {
+        if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) return
+        try { getSystemService(TelecomManager::class.java).endCall() } catch (_: Exception) {}
     }
 
     private fun onState(state: String, number: String?) {

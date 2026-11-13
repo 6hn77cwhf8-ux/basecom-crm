@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
 import { calls, companies, companyContacts, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
-import { startCall } from "../dialer/service.js";
+import { endCall, startCall } from "../dialer/service.js";
 import { incomingStats, callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, myDevice, nextCommand, pairDevice, receivedToday } from "./service.js";
 
 const url = process.env.DATABASE_URL;
@@ -45,6 +45,9 @@ describe.skipIf(!url)("telefonia: app Android", () => {
     const cmd = await nextCommand(db, d.id, 0);
     expect(cmd).toMatchObject({ number: `+35196${tag}1`, callId: c.id });
     expect(await nextCommand(db, d.id, 0)).toBeNull();
+    // «Desligar» no CRM: o telemóvel recebe o pedido de desligar.
+    await endCall(db, toPublic(ana), c.id);
+    expect(await nextCommand(db, d.id, 0)).toMatchObject({ kind: "hangup", callId: c.id });
     await deviceEvent(db, d, { type: "outgoing_ended", callId: c.id, endedAt: new Date().toISOString(), durationSeconds: 42 });
     expect(await callStatus(db, toPublic(ana), c.id)).toMatchObject({ durationSeconds: 42, answered: true, via: "app" });
   });

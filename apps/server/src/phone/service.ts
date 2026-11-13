@@ -72,6 +72,15 @@ export async function queueDial(db: Db, userId: string, callId: string, number: 
   return true;
 }
 
+/** «Desligar» no CRM: se a chamada foi marcada pelo telemóvel, pede-lhe que a desligue. */
+export async function queueHangup(db: Db, userId: string, callId: string) {
+  const sent = await db.query.phoneCommands.findFirst({ where: and(eq(phoneCommands.callId, callId), eq(phoneCommands.kind, "dial")) });
+  if (!sent || sent.status === "expired") return false;
+  await db.update(phoneCommands).set({ status: "expired" }).where(and(eq(phoneCommands.callId, callId), eq(phoneCommands.status, "pending")));
+  await db.insert(phoneCommands).values({ deviceId: sent.deviceId, callId, number: "", kind: "hangup" });
+  return true;
+}
+
 /** O telemóvel pergunta «há alguma chamada para fazer?» e espera até 25 s pela resposta (long polling). */
 export async function nextCommand(db: Db, deviceId: string, waitMs = 25_000) {
   const until = Date.now() + waitMs;
@@ -79,9 +88,9 @@ export async function nextCommand(db: Db, deviceId: string, waitMs = 25_000) {
     await db.update(phoneCommands).set({ status: "expired" }).where(and(eq(phoneCommands.deviceId, deviceId), eq(phoneCommands.status, "pending"), lt(phoneCommands.createdAt, new Date(Date.now() - COMMAND_TTL_MS))));
     const r = await db.execute(sql`update phone_commands set status = 'sent', sent_at = now()
       where id = (select id from phone_commands where device_id = ${deviceId}::uuid and status = 'pending' order by created_at limit 1 for update skip locked)
-      returning id, number, call_id as "callId"`);
-    const c = r.rows[0] as { id: string; number: string; callId: string | null } | undefined;
-    if (c) return { id: c.id, number: `+351${c.number}`, callId: c.callId };
+      returning id, number, kind, call_id as "callId"`);
+    const c = r.rows[0] as { id: string; number: string; kind: string; callId: string | null } | undefined;
+    if (c) return { id: c.id, kind: c.kind, number: c.number ? `+351${c.number}` : "", callId: c.callId };
     if (Date.now() >= until) return null;
     await new Promise((res) => setTimeout(res, 1000));
   }
