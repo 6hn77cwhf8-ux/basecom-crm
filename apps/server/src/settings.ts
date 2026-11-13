@@ -25,8 +25,11 @@ export const SETTINGS = {
       campaignSwitchMinutes: z.number().int().min(0).max(60),
       trainingMinutes: z.number().int().min(0).max(120),
       breakMinutes: z.number().int().min(0).max(120),
+      /** Horas previstas por dia (ponto): saldo e hora de saída prevista. */
+      dailyMinutes: z.number().int().min(0).max(720).default(480),
+      saturdayMinutes: z.number().int().min(0).max(720).default(255),
     }),
-    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24 },
+    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255 },
   },
   /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
   importBase: {

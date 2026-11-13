@@ -4,7 +4,8 @@ import { createDb } from "../db/client.js";
 import { companies, notifications, timeEntries, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { startCall } from "../dialer/service.js";
-import { closeStale, daySummary, heartbeat, setState } from "./service.js";
+import { closeStale, daySummary, heartbeat, pontoRows, setState } from "./service.js";
+import { lisbonDay } from "@basecom/shared";
 
 const url = process.env.DATABASE_URL;
 
@@ -75,5 +76,15 @@ describe.skipIf(!url)("estados e registo de ponto", () => {
     await heartbeat(db, toPublic(bia));
     const got = await db.select().from(notifications).where(and(eq(notifications.userId, admin.id), eq(notifications.kind, "break_over")));
     expect(got.length).toBe(1);
+  });
+
+  it("ponto do dia (entrada, presença, saldo) e exportação só para quem gere", async () => {
+    const d = await daySummary(db, bia.id);
+    expect(d.ponto.entrada).not.toBeNull();
+    expect(d.ponto.expectedSeconds).toBeGreaterThanOrEqual(0);
+    await expect(pontoRows(db, toPublic(ana), "2026-11-01", "2026-11-02")).rejects.toThrow(/exportam/);
+    const today = lisbonDay(new Date());
+    const rows = await pontoRows(db, toPublic(admin), today, today);
+    expect(rows.some((r) => r.name === `bia ${tag}`)).toBe(true);
   });
 });

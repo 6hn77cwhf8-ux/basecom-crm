@@ -134,3 +134,20 @@ export async function receivedToday(db: Db, userId: string) {
     and (ringing_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date`);
   return (r.rows[0] as { n: number }).n;
 }
+
+/**
+ * Chamadas recebidas de hoje (T7): recebidas, atendidas, por retribuir e retribuídas.
+ * Uma recebida não atendida conta como retribuída se o comercial ligar para esse número depois (até ao fim do dia útil seguinte).
+ */
+export async function incomingStats(db: Db, userId: string) {
+  const r = await db.execute(sql`with i as (
+      select i.*, exists (select 1 from calls k where k.user_id = i.user_id and k.phone = i.number and k.started_at > i.ringing_at
+        and k.started_at < i.ringing_at + interval '3 days') as returned
+      from incoming_calls i where i.user_id = ${userId}::uuid
+        and (i.ringing_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date)
+    select count(*)::int as received, count(*) filter (where answered)::int as answered,
+      count(*) filter (where not coalesce(answered, false) and returned)::int as returned,
+      count(*) filter (where not coalesce(answered, false) and not returned and ended_at is not null)::int as "toReturn"
+    from i`);
+  return r.rows[0] as { received: number; answered: number; returned: number; toReturn: number };
+}

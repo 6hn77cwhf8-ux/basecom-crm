@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { fmtBalance } from "@basecom/shared";
 import { api, ROLE_LABEL, type Role, type TeamMember, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th } from "../ui";
 import { mmss, STATE_LABEL } from "./WorkState";
@@ -102,37 +103,54 @@ function NewUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (wh
   );
 }
 
-/** Ponto · hoje (maqueta «Equipa»): o Administrador vê os tempos individuais de toda a estrutura. */
+/**
+ * Ponto · hoje: o almoço é reconhecido pela saída e reentrada no CRM; presença = manhã + tarde; saldo face às horas previstas
+ * (Configurações → Limites de tempo). O Chefe de Equipa vê a sua equipa; o Administrador toda a estrutura.
+ */
 function Ponto() {
-  const [rows, setRows] = useState<(DaySummary & { id: string; name: string })[] | null>(null);
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof api.teamTime>> | null>(null);
   const [error, setError] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(today.slice(0, 8) + "01");
+  const [to, setTo] = useState(today);
   const load = () => api.teamTime().then(setRows).catch((e) => setError(e.message));
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, []);
   const hm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) : "—");
   const red = (on: boolean) => (on ? { color: "#D70015", fontWeight: 700 } : {});
   return (
     <section style={{ ...card, overflow: "hidden" }}>
-      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${c.line}` }}>
-        <b style={{ fontSize: 16 }}>Ponto · hoje</b>
-        <p style={{ margin: "2px 0 0", fontSize: 13, color: c.muted }}>Horas de login = registo de ponto. Limites: intervalo, formação por iniciativa própria e mudança de campanha (Configurações → Limites de tempo). Validação jurídica pendente.</p>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${c.line}`, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ flex: 1 }}>
+          <b style={{ fontSize: 16 }}>Ponto · hoje</b>
+          <p style={{ margin: "2px 0 0", fontSize: 13, color: c.muted }}>Entrada e saída pelo login. Ao sair para almoço, saia do CRM; ao voltar, entre de novo. Saldo face às horas previstas do dia (Configurações → Limites de tempo).</p>
+        </div>
+        <input type="date" aria-label="De" style={{ ...input, height: 34, width: 150 }} value={from} onChange={(e) => setFrom(e.target.value)} />
+        <input type="date" aria-label="Até" style={{ ...input, height: 34, width: 150 }} value={to} onChange={(e) => setTo(e.target.value)} />
+        <button style={{ ...btn, height: 34 }} onClick={() => api.exportPonto(from, to).catch((e) => setError(e.message))}>Exportar Excel</button>
       </div>
       <ErrorText>{error}</ErrorText>
+      <div style={{ overflow: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída", "A trabalhar", "Formação (própria)", "Intervalo", "Mudança", "Total", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-        <tbody>{rows?.map((r) => (
-          <tr key={r.id}>
-            <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
-            <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
-            <td style={td}>{hm(r.entrada)}</td><td style={td}>{hm(r.saida)}</td>
-            <td style={td}>{mmss(r.seconds.working)}</td>
-            <td style={{ ...td, ...red(r.over.training) }}>{mmss(r.seconds.training)} ({mmss(r.used.ownTraining)})</td>
-            <td style={{ ...td, ...red(r.over.break) }}>{mmss(r.seconds.break)}</td>
-            <td style={{ ...td, ...red(r.over.switch) }}>{mmss(r.seconds.switch)}</td>
-            <td style={{ ...td, fontWeight: 700 }}>{mmss(r.total)}</td>
-            <td style={{ ...td, textAlign: "right" }}>{r.state && r.state !== "training" && <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("training", r.id).then(load).catch((e) => setError(e.message))}>Pôr em formação</button>}</td>
-          </tr>
-        ))}</tbody>
+        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <tbody>{rows?.map((r) => {
+          const p = r.ponto;
+          return (
+            <tr key={r.id}>
+              <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
+              <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
+              <td style={td}>{hm(p.entrada)}</td><td style={td}>{hm(p.saidaAlmoco)}</td><td style={td}>{hm(p.regressoAlmoco)}</td><td style={td}>{hm(p.saida)}</td>
+              <td style={{ ...td, fontWeight: 700 }}>{mmss(p.presenceSeconds)}</td>
+              <td style={{ ...td, fontWeight: 700, color: p.balanceSeconds < 0 ? "#A1000F" : "#1E6F33" }}>{fmtBalance(p.balanceSeconds)}</td>
+              <td style={td}>{hm(p.expectedExit)}</td>
+              <td style={{ ...td, ...red(r.over.break) }}>{mmss(r.seconds.break)}</td>
+              <td style={{ ...td, ...red(r.over.training) }}>{mmss(r.seconds.training)}</td>
+              <td style={td}>{r.incoming.received} · <span style={red(r.incoming.toReturn > 0)}>{r.incoming.toReturn}</span>{r.incoming.returned ? ` (${r.incoming.returned} retribuídas)` : ""}</td>
+              <td style={{ ...td, textAlign: "right" }}>{r.state && r.state !== "training" && <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("training", r.id).then(load).catch((e) => setError(e.message))}>Pôr em formação</button>}</td>
+            </tr>
+          );
+        })}</tbody>
       </table>
+      </div>
     </section>
   );
 }

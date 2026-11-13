@@ -1,11 +1,12 @@
 import { and, inArray, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
-import { lisbonDay } from "@basecom/shared";
+import { lisbonDay, pontoDay } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, timeEntries, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { notify } from "../notifications/service.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
+import { incomingStats } from "../phone/service.js";
 
 /**
  * Estados do comercial e registo de ponto (catálogo, secção 14).
@@ -90,6 +91,7 @@ export async function daySummary(db: Db, userId: string, now = new Date()) {
     used: { break: secs.break, ownTraining, switch: secs.switch },
     over: { break: secs.break > lim.breakMinutes * 60, training: ownTraining > lim.trainingMinutes * 60, switch: secs.switch > lim.campaignSwitchMinutes * 60 },
     periods: today.map((r) => ({ state: r.state, from: r.startedAt, to: r.endedAt, byOther: !!r.setBy })),
+    ponto: pontoDay(today.map((r) => ({ from: r.startedAt, to: r.endedAt })), now, expectedMinutes(day, lim) * 60),
   };
 }
 
@@ -99,5 +101,29 @@ export async function teamToday(db: Db, actor: PublicUser) {
   const v = await visibleUserIds(db, actor);
   const people = await db.select({ id: users.id, name: users.name, role: users.role }).from(users)
     .where(and(eq(users.active, true), sql`${users.role} <> 'admin'`, v === null ? sql`true` : inArray(users.id, v.filter((x) => x !== actor.id)))).orderBy(users.name);
-  return Promise.all(people.map(async (p) => ({ ...p, ...(await daySummary(db, p.id)) })));
+  return Promise.all(people.map(async (p) => ({ ...p, ...(await daySummary(db, p.id)), incoming: await incomingStats(db, p.id) })));
+}
+
+/** Horas previstas do dia (Lisboa): dias úteis e sábado configuráveis; domingo 0. */
+function expectedMinutes(day: string, lim: { dailyMinutes?: number; saturdayMinutes?: number }) {
+  const wd = new Date(`${day}T12:00:00Z`).getUTCDay();
+  return wd === 0 ? 0 : wd === 6 ? lim.saturdayMinutes ?? 255 : lim.dailyMinutes ?? 480;
+}
+
+/** Exportar o ponto: uma linha por pessoa e por dia (entrada, almoço, saída, presença, saldo, intervalo, formação). */
+export async function pontoRows(db: Db, actor: PublicUser, from: string, to: string) {
+  if (actor.role === "sales") throw new AuthError(403, "Só o Chefe de Equipa (a sua equipa) e o Administrador exportam o ponto.");
+  const v = await visibleUserIds(db, actor);
+  const people = await db.select({ id: users.id, name: users.name }).from(users).where(and(sql`${users.role} <> 'admin'`, v === null ? sql`true` : inArray(users.id, v))).orderBy(users.name);
+  const rows: { day: string; name: string; d: Awaited<ReturnType<typeof daySummary>> }[] = [];
+  for (let t = new Date(`${from}T12:00:00Z`); lisbonDay(t) <= to; t = new Date(t.getTime() + 86_400_000)) {
+    const day = lisbonDay(t);
+    const endOfDay = new Date(`${day}T23:59:00Z`);
+    const at = endOfDay > new Date() ? new Date() : endOfDay;
+    for (const p of people) {
+      const d = await daySummary(db, p.id, at);
+      if (d.periods.length) rows.push({ day, name: p.name, d });
+    }
+  }
+  return rows;
 }

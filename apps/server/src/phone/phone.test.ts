@@ -4,7 +4,7 @@ import { createDb } from "../db/client.js";
 import { calls, companies, companyContacts, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { startCall } from "../dialer/service.js";
-import { callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, myDevice, nextCommand, pairDevice, receivedToday } from "./service.js";
+import { incomingStats, callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, myDevice, nextCommand, pairDevice, receivedToday } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -56,5 +56,16 @@ describe.skipIf(!url)("telefonia: app Android", () => {
     expect((await latestIncoming(db, toPublic(ana)))).toMatchObject({ companyId: coId, company: `Tel ${tag}` });
     await deviceEvent(db, d, { type: "incoming_ended", incomingId: r.incomingId, endedAt: new Date().toISOString(), durationSeconds: 0 });
     expect(await receivedToday(db, ana.id)).toBe(before + 1);
+  });
+
+  it("recebidas não atendidas ficam «por retribuir» até o comercial ligar para esse número", async () => {
+    const d = await deviceFromToken(db, (globalThis as Record<string, unknown>).tok as string);
+    const before = await incomingStats(db, ana.id);
+    const r = await deviceEvent(db, d, { type: "incoming_ringing", number: "+351 911 222 333", at: new Date().toISOString() }) as { incomingId: string };
+    await deviceEvent(db, d, { type: "incoming_ended", incomingId: r.incomingId, endedAt: new Date().toISOString(), durationSeconds: 0 });
+    expect((await incomingStats(db, ana.id)).toReturn).toBe(before.toReturn + 1);
+    await db.insert(calls).values({ companyId: coId, userId: ana.id, phone: "911222333", source: "ficha", startedAt: new Date(Date.now() + 1000) });
+    const after = await incomingStats(db, ana.id);
+    expect(after).toMatchObject({ toReturn: before.toReturn, returned: before.returned + 1 });
   });
 });

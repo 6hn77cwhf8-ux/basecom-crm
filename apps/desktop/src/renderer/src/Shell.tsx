@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { fmtBalance } from "@basecom/shared";
 import { c, font } from "./ui";
 import { IncomingBanner, PhoneDialog } from "./pages/Phone";
 import { api, ROLE_LABEL, type Role, type MyDay, type SearchHit, type User } from "./api";
@@ -153,10 +154,13 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
       {!d ? <span style={{ fontSize: 13, color: c.muted }}>A carregar…</span> : <>
         {row("N.º de chamadas", d.calls)}
         {row("Atendidas", d.effective)}
-        {row("Recebidas", d.received ?? <span title="Chega com a app Android" style={{ color: c.muted, fontWeight: 400 }}>—</span>)}
+        {row("Recebidas", d.incoming.received)}
+        {d.incoming.toReturn > 0 && row("Por retribuir", d.incoming.toReturn, true)}
         {row("Propostas", d.proposals)}
         {row("Vendas", d.sales)}
         {row("Tempo de login", `${Math.floor(d.loggedIn / 3600)} h ${String(Math.floor((d.loggedIn % 3600) / 60)).padStart(2, "0")}`)}
+        {row("Saldo do dia", fmtBalance(d.ponto.balanceSeconds), d.ponto.balanceSeconds < 0 && !d.ponto.expectedExit)}
+        {d.ponto.expectedExit && row("Saída prevista", new Date(d.ponto.expectedExit).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }))}
         {row("Intervalo", `${mins(d.breakUsed)} / ${mins(d.breakLimit)} min`, d.breakUsed > d.breakLimit)}
         {(d.oppsLate > 0 || d.oppsWarn > 0) && (
           <button onClick={onOpps} style={{ border: 0, marginTop: 10, background: d.oppsLate ? "#FFE5E7" : "#FFF4E5", color: d.oppsLate ? "#A1000F" : "#8A3D00", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>

@@ -22,6 +22,8 @@ const FIELDS: { [K in keyof S]: { key: keyof S[K]; label: string; unit: string; 
     { key: "campaignSwitchMinutes", label: "Pausa para mudar de campanha", unit: "min/dia" },
     { key: "trainingMinutes", label: "Formação por iniciativa do comercial", unit: "min/dia", note: "O Chefe de Equipa ou o Administrador pode marcar mais" },
     { key: "breakMinutes", label: "Intervalo", unit: "min/dia", note: "Se ultrapassar, o Administrador é avisado" },
+    { key: "dailyMinutes", label: "Horas previstas (segunda a sexta)", unit: "min/dia", note: "Para o saldo do ponto (480 = 8 h). O almoço não conta" },
+    { key: "saturdayMinutes", label: "Horas previstas ao sábado", unit: "min", note: "255 = 4 h 15 (08:45–13:00)" },
   ],
   auth: [
     { key: "maxFailedLogins", label: "Tentativas erradas antes de bloquear", unit: "vezes" },
