@@ -107,6 +107,7 @@ export async function myDay(db: Db, user: PublicUser) {
   const oppsLate = opps.filter((o) => o.alert?.level === "late").length;
   const oppsWarn = opps.filter((o) => o.alert?.level === "warn").length;
   return { oppsLate, oppsWarn, ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
+    clientSeconds: t.seconds.client, officeSeconds: t.seconds.office, officeLimit: t.limits.officeSeconds, supportSeconds: t.seconds.support,
     // Chamadas recebidas: chegam com a app Android (Fase 4), que as devolve ao CRM.
     received: await receivedToday(db, user.id),
     incoming: await incomingStats(db, user.id),

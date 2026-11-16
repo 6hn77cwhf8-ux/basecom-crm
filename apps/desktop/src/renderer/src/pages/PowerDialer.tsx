@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPhone, renderScript, spokenName } from "@basecom/shared";
-import { api, type Campaign, type Catalogs, type DialerEntry, type ResultInput, type User } from "../api";
+import { api, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
 import { PhoneDialog, useCallEnd, usePhone } from "./Phone";
+import { ClientWorkCard } from "./ClientWork";
 
 /** «review»: chamada terminada, a rever o script antes de voltar ao resultado (o tempo e o que já escreveu mantêm-se). */
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "review" | "countdown" | "empty";
@@ -33,6 +34,9 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [skipping, setSkipping] = useState(false);
   const [skipReason, setSkipReason] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
+  // Em cliente (proposta/venda com OP): enquanto dura, não se marca nenhuma chamada.
+  const [client, setClient] = useState<ClientWork | null>(null);
+  const [wsKey, setWsKey] = useState(0);
   const [cur, setCur] = useState<DialerEntry | null>(null);
   const [callId, setCallId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(0);
@@ -123,6 +127,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       const res = await api.saveResult(callId, changed ? { ...r, newDecisor: { salutation: decisor.salutation, name: decisor.name } } : r);
       setCount((x) => x + 1); setLastSummary(`${res.outcome}${res.summary.length ? " · " + res.summary.filter((s) => !s.startsWith("Nova tentativa")).join(" · ") : ""}`);
       loadCampaigns();
+      if (res.clientWork) { const t = await api.today(); setClient(t.client); setWorking(false); setWsKey((k) => k + 1); }
       // Preview: a seguinte aparece logo, mas só liga quando o comercial carregar em «Iniciar chamada».
       if (campaign?.dialMode === "preview") { load(false); return; }
       setPhase("countdown"); setEndedAt(Date.now());
@@ -133,7 +138,13 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   // Encadeamento: 10 s depois de guardar, a empresa seguinte é marcada automaticamente.
   const wait = cat?.timeLimits.nextCallSeconds ?? 10;
   const left = phase === "countdown" ? Math.max(0, wait - Math.floor((Date.now() - endedAt) / 1000)) : 0;
-  useEffect(() => { if (phase === "countdown" && left === 0 && working && campaignId) load(true); }, [phase, left, load, working, campaignId]);
+  useEffect(() => { if (phase === "countdown" && left === 0 && working && !client && campaignId) load(true); }, [phase, left, load, working, client, campaignId]);
+  /** Terminou o trabalho em cliente: volta a A trabalhar e a seguinte é marcada depois dos 10 s habituais. */
+  function clientEnded() {
+    setClient(null); setWorking(true); setWsKey((k) => k + 1);
+    // Vinha de um resultado (proposta/venda): a contagem dos 10 s começa agora. Começado pela barra de estados: fica onde estava.
+    if (phase === "countdown") setEndedAt(Date.now());
+  }
 
   // Teclas 1 a 6: abrem o resultado durante a chamada.
   useEffect(() => {
@@ -180,14 +191,15 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
         </select>
         {campaign && <span style={{ fontSize: 13, color: c.muted }}>{campaign.dialMode === "preview" ? "Preview" : "Power Dialer"} · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}
         <span style={{ flex: 1 }} />
-        <WorkStates disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => setWorking(d.state !== "break" && d.state !== "training")} />
+        <WorkStates key={wsKey} role={me.role} disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => { setWorking(d.state === null || d.state === "working" || d.state === "switch"); setClient(d.client); }} />
       </header>
       <ErrorText>{error}</ErrorText>
 
-      {!campaignId && <Empty text={isAdmin ? (list.length ? "Escolha a campanha para começar." : "Ainda não há campanhas ativas.") : (list.length ? "Escolha a campanha para começar." : "Ainda não tem campanhas. O Administrador atribui em Configurações → Campanhas e scripts.")} />}
-      {phase === "empty" && <Empty text="Não há mais empresas prontas nesta campanha agora. As novas tentativas agendadas voltam a aparecer à hora marcada." action={<button style={btn} onClick={() => load(false)}>Verificar de novo</button>} />}
+      {!client && !campaignId && <Empty text={isAdmin ? (list.length ? "Escolha a campanha para começar." : "Ainda não há campanhas ativas.") : (list.length ? "Escolha a campanha para começar." : "Ainda não tem campanhas. O Administrador atribui em Configurações → Campanhas e scripts.")} />}
+      {client && <ClientWorkCard me={me} work={client} onOpenCompany={onOpenCompany} onEnded={clientEnded} onChanged={(d) => { setClient(d.client); setWsKey((k) => k + 1); }} />}
+      {!client && phase === "empty" && <Empty text="Não há mais empresas prontas nesta campanha agora. As novas tentativas agendadas voltam a aparecer à hora marcada." action={<button style={btn} onClick={() => load(false)}>Verificar de novo</button>} />}
 
-      {cur && cat && (phase === "ready" || phase === "calling" || phase === "loading" || phase === "review") && (
+      {!client && cur && cat && (phase === "ready" || phase === "calling" || phase === "loading" || phase === "review") && (
         /* Script e feedback anterior à esquerda; à direita, o cliente com o telefone em baixo (mais espaço para o cliente). */
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12, flex: 1, minHeight: 0 }}>
           <div style={{ display: "contents" }}>
@@ -323,14 +335,14 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
         </div>
       )}
 
-      {cur && cat && (phase === "result" || phase === "review") && (
+      {!client && cur && cat && (phase === "result" || phase === "review") && (
         <ResultPanel key={resultKey} hidden={phase === "review"} needsKind={cur.company.needsKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
           live={live ? { secs: Math.floor((Date.now() - startedAt) / 1000), queued, onHangUp: () => { hangUpLive(); } } : undefined}
           company={{ name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
           onBack={() => setPhase("review")} onSave={save} />
       )}
 
-      {phase === "countdown" && (
+      {!client && phase === "countdown" && (
         <section style={{ ...card, padding: 32, textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
           <span style={{ fontSize: 14, color: c.muted }}>Resultado guardado: {lastSummary}</span>
           {working ? <>
@@ -341,7 +353,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
         </section>
       )}
 
-      {cur && (phase === "calling") && (
+      {!client && cur && (phase === "calling") && (
         <footer style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
           {GROUPS.map((g) => (
             <button key={g.id} onClick={() => openResult(g.id)} style={{ ...btn, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 15, ...(g.id === "sale" ? { background: c.ink, color: "#FFF", borderColor: c.ink } : {}) }}>

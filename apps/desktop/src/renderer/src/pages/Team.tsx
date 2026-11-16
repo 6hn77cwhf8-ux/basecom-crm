@@ -131,19 +131,22 @@ function Ponto() {
       <ErrorText>{error}</ErrorText>
       <div style={{ overflow: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Em cliente", "Office", "Apoio", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
         <tbody>{rows?.map((r) => {
           const p = r.ponto;
           return (
             <tr key={r.id}>
               <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
-              <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
+              <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}{r.client ? ` · ${r.client.kind === "sale" ? "Venda" : "Proposta"} · NIF ${r.client.nif} · OP ${r.client.opCode}` : ""}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
               <td style={td}>{hm(p.entrada)}</td><td style={td}>{hm(p.saidaAlmoco)}</td><td style={td}>{hm(p.regressoAlmoco)}</td><td style={td}>{hm(p.saida)}</td>
               <td style={{ ...td, fontWeight: 700 }}>{mmss(p.presenceSeconds)}</td>
               <td style={{ ...td, fontWeight: 700, color: p.balanceSeconds < 0 ? "#A1000F" : "#1E6F33" }}>{fmtBalance(p.balanceSeconds)}</td>
               <td style={td}>{hm(p.expectedExit)}</td>
               <td style={{ ...td, ...red(r.over.break) }}>{mmss(r.seconds.break)}</td>
-              <td style={{ ...td, ...red(r.over.training) }}>{mmss(r.seconds.training)}</td>
+              <td style={td}>{mmss(r.seconds.training)}</td>
+              <td style={{ ...td, fontWeight: r.seconds.client ? 700 : 400 }}>{mmss(r.seconds.client ?? 0)}</td>
+              <td style={td}>{mmss(r.seconds.office ?? 0)}</td>
+              <td style={td}>{mmss(r.seconds.support ?? 0)}</td>
               <td style={td}>{r.incoming.received} · <span style={red(r.incoming.toReturn > 0)}>{r.incoming.toReturn}</span>{r.incoming.returned ? ` (${r.incoming.returned} retribuídas)` : ""}</td>
               <td style={{ ...td, textAlign: "right" }}>{r.state && r.state !== "training" && <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("training", r.id).then(load).catch((e) => setError(e.message))}>Pôr em formação</button>}</td>
             </tr>

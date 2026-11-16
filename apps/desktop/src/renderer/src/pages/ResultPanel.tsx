@@ -2,6 +2,7 @@ import { operatorRefusalNote } from "@basecom/shared";
 import { useEffect, useMemo, useState } from "react";
 import type { Catalogs, Outcome, Reason, ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
+import { OpField, opValid } from "./ClientWork";
 
 export const GROUPS = [
   { id: "refuse", label: "Recusa", key: "1" }, { id: "callback", label: "Callback", key: "2" }, { id: "noanswer", label: "Não atende", key: "3" },
@@ -36,6 +37,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [decisorName, setDecisorName] = useState("");
   const [comp, setComp] = useState<{ operator?: string; text?: string }>({});
   const [kind, setKind] = useState<"NC" | "FC" | null>(null);
+  const [op, setOp] = useState("");
   const [now, setNow] = useState(Date.now());
   useEffect(() => { setOutcome(options.length === 1 ? options[0]! : null); setReason(null); }, [group]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -48,7 +50,9 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   // NC/FC só quando houve conversa (num «Não atendeu» não se pede).
   const askKind = needsKind && !!outcome && !["no_answer", "busy", "voicemail", "wrong_number"].includes(outcome.effect);
   const needsAt = eff === "call_later" || eff === "interested" || eff === "proposal_sent" || eff === "negotiating" || reason?.effect === "other";
-  const ready = (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
+  // Proposta enviada e Venda fechada: OP obrigatória e, ao guardar, começa o tempo «Em cliente».
+  const workKind = eff === "proposal_sent" ? "proposal" : eff === "sale" ? "sale" : null;
+  const ready = (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
     && (eff !== "call_later" || !!at) && (!["interested", "proposal_sent", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
 
   const nextContact = useMemo(() => {
@@ -66,6 +70,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       outcomeId: outcome.id, reasonId: reason?.id, comment: comment.trim() || undefined, date: date || undefined, at: toIso(at),
       forMe: eff === "call_later" ? forMe : undefined, nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
       decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
+      opCode: workKind ? op : undefined,
     });
   }
   useEffect(() => {
@@ -132,6 +137,12 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         </div>
       )}
       {(eff === "proposal_sent" || eff === "negotiating") && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
+      {workKind && (
+        <div style={{ border: `2px solid ${c.brand}`, background: c.brandSoft, borderRadius: 14, padding: "14px 16px", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+          <OpField value={op} onChange={setOp} />
+          <span style={{ flex: "1 1 260px", fontSize: 13, lineHeight: "20px" }}>Ao guardar, os 15 s param e começa o tempo «Em cliente», sem limite, para fazer a {workKind === "sale" ? "venda" : "proposta"}. A oportunidade fica com esta OP.</span>
+        </div>
+      )}
       {eff === "sale" && <p style={{ margin: 0, fontSize: 13, padding: "8px 12px", background: "#E8F5EC", borderRadius: 10 }}>A empresa passa para a sua carteira (se ainda não tiver responsável). O registo das linhas e dos serviços vendidos chega com o módulo de Vendas (Arranque B).</p>}
 
       <Field label={reason?.effect === "other" ? "Comentários (obrigatório no motivo «Outro»)" : "Comentários"}>
@@ -160,7 +171,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <button style={btn} onClick={onBack}>← {backLabel ?? "Voltar ao script"}</button>
         <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {live?.queued && <span role="status" style={{ fontSize: 13, color: "#1E6F33", fontWeight: 600 }}>Pronto: grava sozinho quando a chamada acabar.</span>}
-          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? (live.queued ? "Atualizar ⏎" : "Guardar no fim da chamada ⏎") : "Guardar resultado ⏎"}</button>
+          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? (live.queued ? "Atualizar ⏎" : "Guardar no fim da chamada ⏎") : workKind ? `Guardar e começar ${workKind === "sale" ? "venda" : "proposta"} ⏎` : "Guardar resultado ⏎"}</button>
         </span>
       </footer>
     </section>

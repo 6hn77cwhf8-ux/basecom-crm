@@ -94,7 +94,7 @@ function OppCard({ o, showOwner, onOpen, onAction, onWin, onDrag, dragging }: { 
     <article draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", o.id); onDrag(true); }} onDragEnd={() => onDrag(false)}
       title="Arraste para outra etapa" style={{ ...card, padding: 12, display: "flex", flexDirection: "column", gap: 6, cursor: "grab", opacity: dragging ? 0.5 : 1, borderColor: lvl === "late" ? "#D70015" : lvl === "warn" ? "#E8A23A" : c.line }}>
       <button onClick={onOpen} style={{ ...link, fontSize: 13 }}>{o.company}</button>
-      <span style={{ fontSize: 12, color: c.muted }}>{[o.services, o.l2bMonthly ? `L2B ${fmtEur(o.l2bMonthly)}` : null].filter(Boolean).join(" · ") || "—"}</span>
+      <span style={{ fontSize: 12, color: c.muted }}>{[o.nosOp ? `OP ${o.nosOp}` : null, o.services, o.l2bMonthly ? `L2B ${fmtEur(o.l2bMonthly)}` : null].filter(Boolean).join(" · ") || "—"}</span>
       <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         <Chip tone={lvl === "late" ? "bad" : lvl === "warn" ? "warn" : "neutral"}>{lvl === "late" ? "Atrasada · " : lvl === "warn" ? "Alerta · " : ""}{o.alert?.days ?? 0} d sem atividade</Chip>
         {showOwner && <span style={{ fontSize: 12, color: c.muted }}>{o.owner}</span>}

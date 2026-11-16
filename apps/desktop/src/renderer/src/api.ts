@@ -7,7 +7,7 @@ export type TeamMember = { id: string; name: string; email: string; role: Role; 
 export type AuditEntry = { id: string; action: string; userName: string; targetName: string | null; details: string | null; at: string };
 export type Settings = {
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
-  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number };
+  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number };
 };
 export type CompanyRow = {
   id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null; district: string | null; sector: string | null;
@@ -43,18 +43,21 @@ export type DialerEntry = {
   scripts: { opening: string; pitch: string }; vars: Record<string, string>; people: { salutation: string | null; name: string }[];
   history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
 };
-export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string } };
+export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string }; opCode?: string };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
-export type MyDay = { incoming: IncomingStats; ponto: Ponto; oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
-export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
+export type MyDay = { incoming: IncomingStats; ponto: Ponto; oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; clientSeconds: number; officeSeconds: number; officeLimit: number; supportSeconds: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
+export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; nosOp: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
 export type WalletRow = { id: string; name: string; nif: string; walletKind: string; l2bMonthly: string | null; loyaltyEnd: string | null; owner: string; lines: number; decisor: string | null; phone: string | null; lastContact: string | null; openTasks: number; nextAction: { type: string; dueAt: string } | null };
 export type PhoneDevice = { id: string; model: string | null; pairedAt: string; lastSeenAt: string | null; online: boolean };
 export type Incoming = { id: string; number: string; ringingAt: string; endedAt: string | null; companyId: string | null; company: string | null; owner: string | null; openTasks: number };
-export type WorkState = "working" | "training" | "break" | "switch";
+export type WorkState = "working" | "training" | "break" | "switch" | "office" | "client" | "support";
+export type WorkKind = "proposal" | "sale";
+export type ClientWork = { companyId: string | null; company: string | null; nif: string | null; opCode: string | null; kind: WorkKind; since: string };
 export type DaySummary = {
   day: string; state: WorkState | null; entrada: string | null; saida: string | null; total: number;
-  seconds: Record<WorkState, number>; limits: { breakSeconds: number; trainingSeconds: number; switchSeconds: number };
+  seconds: Record<WorkState, number>; limits: { breakSeconds: number; trainingSeconds: number; switchSeconds: number; officeSeconds: number };
+  client: ClientWork | null;
   used: { break: number; ownTraining: number; switch: number }; over: { break: boolean; training: boolean; switch: boolean };
   periods: { state: WorkState; from: string; to: string | null; byOther: boolean }[];
   ponto: Ponto;
@@ -69,6 +72,10 @@ export type Upload = { id: string; number: number; fileName: string; sheets: She
 export type PreviewSummary = { total: number; byResult: Record<string, number>; clients: number; prospects: number; withOwner: number };
 export type ImportRow = { id: string; sheet: string; rowNumber: number; nif: string | null; name: string | null; result: string; detail: string | null; accountType: string | null; owner: string | null };
 export type Batch = { id: string; number: number; kind: string; fileName: string; status: string; summary: { preview?: PreviewSummary; committed?: { created: number; updated: number } }; createdAt: string; committedAt: string | null; revertedAt: string | null; createdBy: string | null };
+
+/** Avisa os ecrãs abertos (faixa «Em cliente», barra de estados) de que o estado mudou. */
+export const WORK_EVENT = "bc-work-changed";
+function workChanged<T>(x: T): T { try { window.dispatchEvent(new Event(WORK_EVENT)); } catch { /* fora do navegador */ } return x; }
 
 const qs = (o: Record<string, unknown>) => {
   const p = new URLSearchParams();
@@ -159,7 +166,7 @@ export const api = {
   dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
   startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean }) => call<{ id: string; startedAt: string; viaPhone: boolean }>("/calls", { method: "POST", body: JSON.stringify(b) }),
   endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
-  saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[] }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }),
+  saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[]; clientWork: boolean }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }).then(workChanged),
   agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
   notifications: () => call<{ unread: number; items: { id: string; kind: string; text: string; companyId: string | null; createdAt: string; read: boolean }[] }>("/notifications"),
   readNotifications: () => call("/notifications/read", { method: "POST", body: "{}" }),
@@ -192,6 +199,8 @@ export const api = {
 
   heartbeat: () => call<{ state: WorkState }>("/time/heartbeat", { method: "POST", body: "{}" }),
   setWorkState: (state: WorkState, userId?: string) => call<DaySummary>("/time/state", { method: "POST", body: JSON.stringify({ state, userId }) }),
+  startClient: (b: { companyId: string; kind: WorkKind; opCode: string }) => call<DaySummary>("/time/client", { method: "POST", body: JSON.stringify(b) }).then(workChanged),
+  endClient: () => call<DaySummary>("/time/client/end", { method: "POST", body: "{}" }).then(workChanged),
   today: (userId?: string) => call<DaySummary>(`/time/today${userId ? `?userId=${userId}` : ""}`),
   teamTime: () => call<{ people: (DaySummary & { id: string; name: string; role: Role; incoming: IncomingStats })[] }>("/time/team").then((r) => r.people),
   /** Descarrega o Excel do ponto (o pedido leva a sessão; o ficheiro é guardado pelo navegador). */

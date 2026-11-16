@@ -20,7 +20,7 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
   if (opts.ownerId && visible && !visible.includes(opts.ownerId)) throw new AuthError(403, "Só vê as oportunidades da sua equipa.");
   const owners = opts.ownerId ? [opts.ownerId] : visible;
   const rules = (await getSetting(db, "catalogs")).opportunities as OpportunityRules;
-  const r = await db.execute(sql`select o.id, o.stage, o.services, o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
+  const r = await db.execute(sql`select o.id, o.stage, o.services, o.nos_op as "nosOp", o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
       o.lost_reason_id as "lostReasonId", o.company_id as "companyId", c.name as company, c.nif, c.l2b_monthly as "l2bMonthly", u.name as owner, o.owner_id as "ownerId",
       (select min(t.due_at) from tasks t where t.opportunity_id = o.id and t.status = 'open') as "nextTaskAt"
     from opportunities o join companies c on c.id = o.company_id join users u on u.id = o.owner_id
@@ -29,7 +29,7 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
     order by o.last_activity_at asc limit 1000`);
   const now = new Date();
   return (r.rows as Record<string, unknown>[]).map((o) => ({
-    ...(o as { id: string; stage: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null }),
+    ...(o as { id: string; stage: string; services: string | null; nosOp: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null }),
     stageLabel: LABEL[o.stage as string] ?? (o.stage as string),
     alert: OPEN.includes(o.stage as string) ? opportunityAlert(new Date(o.lastActivityAt as string), now, rules) : null,
   }));

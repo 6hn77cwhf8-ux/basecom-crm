@@ -38,7 +38,7 @@ function Rgu({ rgu }: { rgu: Record<string, number> | null }) {
   );
 }
 
-const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota", wallet: "Carteira" };
+const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota", wallet: "Carteira", client_work: "Em cliente" };
 
 /** Ficha da empresa em gaveta (maqueta «Ficha»): abre por cima do ecrã atual; «Voltar» fecha. */
 export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClose: () => void }) {

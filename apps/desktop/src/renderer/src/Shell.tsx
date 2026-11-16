@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { fmtBalance } from "@basecom/shared";
 import { c, font } from "./ui";
 import { IncomingBanner, PhoneDialog } from "./pages/Phone";
+import { ClientBanner } from "./pages/ClientWork";
 import { api, ROLE_LABEL, type Role, type MyDay, type SearchHit, type User } from "./api";
 import logo from "./assets/logo-horizontal.webp";
 import simbolo from "./assets/simbolo.webp";
@@ -76,6 +77,7 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
       {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
       {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpps={() => onNavigate("oportunidades")} onOpenCompany={onOpenCompany} />}
       <IncomingBanner onOpenCompany={onOpenCompany} />
+      <ClientBanner hidden={page === "novos"} onOpenCompany={onOpenCompany} />
       {phoneOpen && <PhoneDialog onClose={() => setPhoneOpen(false)} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
     </div>
@@ -162,6 +164,9 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
         {row("Saldo do dia", fmtBalance(d.ponto.balanceSeconds), d.ponto.balanceSeconds < 0 && !d.ponto.expectedExit)}
         {d.ponto.expectedExit && row("Saída prevista", new Date(d.ponto.expectedExit).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }))}
         {row("Intervalo", `${mins(d.breakUsed)} / ${mins(d.breakLimit)} min`, d.breakUsed > d.breakLimit)}
+        {d.clientSeconds > 0 && row("Em cliente", `${mins(d.clientSeconds)} min`)}
+        {d.officeSeconds > 0 && row("Office", `${mins(d.officeSeconds)} / ${mins(d.officeLimit)} min`)}
+        {d.supportSeconds > 0 && row("Apoio", `${mins(d.supportSeconds)} min`)}
         {(d.oppsLate > 0 || d.oppsWarn > 0) && (
           <button onClick={onOpps} style={{ border: 0, marginTop: 10, background: d.oppsLate ? "#FFE5E7" : "#FFF4E5", color: d.oppsLate ? "#A1000F" : "#8A3D00", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
             Oportunidades: {d.oppsLate > 0 ? `${d.oppsLate} atrasada${d.oppsLate === 1 ? "" : "s"}` : ""}{d.oppsLate > 0 && d.oppsWarn > 0 ? " · " : ""}{d.oppsWarn > 0 ? `${d.oppsWarn} em alerta` : ""} →
