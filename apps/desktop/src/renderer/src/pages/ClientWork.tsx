@@ -127,10 +127,6 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
           <span>Não é marcada nenhuma chamada. A seguinte só começa depois de «Terminar».</span>
           <span>O tempo conta como trabalho no ponto, nunca como tempo morto.</span>
         </section>
-        <section style={{ ...card, background: "#FFF4E5", padding: 20, display: "flex", flexDirection: "column", gap: 8, fontSize: 14, lineHeight: "20px" }}>
-          <span style={{ alignSelf: "flex-start", height: 24, display: "inline-flex", alignItems: "center", padding: "0 8px", borderRadius: 6, background: "#FFF", color: "#B25000", fontSize: 12, fontWeight: 600 }}>Alerta ao Chefe de Equipa</span>
-          <span>A cada 10 min o Chefe de Equipa recebe um aviso com o NIF e a OP. O comercial não é interrompido.</span>
-        </section>
       </aside>
     </div>
   );
