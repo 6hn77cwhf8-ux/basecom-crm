@@ -4,7 +4,7 @@ import { notifications, users } from "../db/schema.js";
 import type { PublicUser } from "../auth/service.js";
 import { leadsOf } from "../teams/service.js";
 
-type Kind = "result_late" | "break_over" | "training_over" | "switch_over";
+type Kind = "result_late" | "break_over" | "training_over" | "switch_over" | "client_long";
 
 /**
  * Envia um aviso às pessoas com estes perfis. Enquanto não houver equipas, os avisos do Chefe de Equipa

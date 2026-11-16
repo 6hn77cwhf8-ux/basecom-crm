@@ -28,8 +28,12 @@ export const SETTINGS = {
       /** Horas previstas por dia (ponto): saldo e hora de saída prevista. */
       dailyMinutes: z.number().int().min(0).max(720).default(480),
       saturdayMinutes: z.number().int().min(0).max(720).default(255),
+      /** Office (WhatsApp, SMS, emails, contratos): limite por dia; ao chegar, passa sozinho a «A trabalhar». */
+      officeMinutes: z.number().int().min(0).max(240).default(15),
+      /** Em cliente: alerta ao Chefe de Equipa a cada X minutos (o tempo não tem limite). */
+      clientAlertMinutes: z.number().int().min(1).max(240).default(10),
     }),
-    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255 },
+    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10 },
   },
   /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
   importBase: {

@@ -4,7 +4,7 @@ import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
-import { currentState, setState } from "../time/service.js";
+import { currentState, OP_CODE, setState, startClient, type WorkKind } from "../time/service.js";
 import { notifyLeadOrAdmin } from "../notifications/service.js";
 import { queueDial, queueHangup } from "../phone/service.js";
 
@@ -152,7 +152,10 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
   // Fora de «A trabalhar» não se marcam chamadas de campanha; depois de mudar de campanha, a chamada volta a pôr a trabalhar.
   if (input.entryId) {
     const st = await currentState(db, user.id);
-    if (st === "break" || st === "training") throw new AuthError(409, st === "break" ? "Está em intervalo. Volte a «A trabalhar» para ligar." : "Está em formação. Volte a «A trabalhar» para ligar.");
+    if (st === "break" || st === "training" || st === "office" || st === "client") throw new AuthError(409, {
+      break: "Está em intervalo. Volte a «A trabalhar» para ligar.", training: "Está em formação. Volte a «A trabalhar» para ligar.",
+      office: "Está em Office. Volte a «A trabalhar» para ligar.", client: "Está em cliente. Carregue em «Terminar» para voltar a ligar.",
+    }[st]);
     if (st !== "working") await setState(db, user, user.id, "working");
   }
   let phone: string | null = null;
@@ -195,7 +198,11 @@ export type ResultInput = {
   walletKind?: "NC" | "FC";
   /** «Mudar de decisor» na abertura: fica nos Contactos como decisor principal. */
   newDecisor?: { salutation?: string | null; name: string };
+  /** Proposta enviada e Venda fechada: código da oportunidade na NOS (7 algarismos); a seguir começa o tempo «Em cliente». */
+  opCode?: string;
 };
+/** Resultados que pedem a OP e abrem o trabalho em cliente. */
+export const CLIENT_WORK: Record<string, WorkKind> = { proposal_sent: "proposal", sale: "sale" };
 
 /** Recusas por outro operador (fidelizado ou renovou): a nova abordagem é na data que o cliente sugerir, não automática. */
 const OPERATOR_REASONS = ["loyalty_end", "new_contract"];
@@ -215,6 +222,8 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   if (reason?.effect === "other" && !input.comment?.trim()) throw new AuthError(400, "No motivo «Outro», a descrição é obrigatória.");
   if (outcome.effect === "call_later" && !input.at) throw new AuthError(400, "Indique a data e a hora para voltar a ligar.");
   if (["interested", "proposal_sent", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
+  const workKind = CLIENT_WORK[outcome.effect];
+  if (workKind && !OP_CODE.test(input.opCode?.trim() ?? "")) throw new AuthError(400, "Indique a OP (7 algarismos), como no programa da NOS.");
   if (reason && OPERATOR_REASONS.includes(reason.effect)) {
     if (!input.competitor?.operator) throw new AuthError(400, "Indique a operadora atual do cliente.");
     if (!input.date) throw new AuthError(400, "Indique a data de fim da fidelização.");
@@ -290,8 +299,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       tx.insert(tasks).values({ companyId: co.id, type, assignedTo, dueAt, description, origin: "call", callId, opportunityId: opportunityId ?? null, createdBy: user.id });
     const opportunity = async (stage: string) => {
       const open = (await tx.select().from(opportunities).where(and(eq(opportunities.companyId, co.id), sql`${opportunities.stage} not in ('won','lost')`)).orderBy(desc(opportunities.createdAt)))[0];
-      if (open) { await tx.update(opportunities).set({ stage, services: input.services ?? open.services, lastActivityAt: now }).where(eq(opportunities.id, open.id)); return open.id; }
-      const [o] = await tx.insert(opportunities).values({ companyId: co.id, ownerId: co.ownerId ?? user.id, stage, services: input.services ?? null }).returning({ id: opportunities.id });
+      const nosOp = workKind ? input.opCode!.trim() : undefined;
+      if (open) { await tx.update(opportunities).set({ stage, services: input.services ?? open.services, lastActivityAt: now, ...(nosOp ? { nosOp } : {}) }).where(eq(opportunities.id, open.id)); return open.id; }
+      const [o] = await tx.insert(opportunities).values({ companyId: co.id, ownerId: co.ownerId ?? user.id, stage, services: input.services ?? null, nosOp: nosOp ?? null }).returning({ id: opportunities.id });
       return o!.id;
     };
 
@@ -379,7 +389,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   // Excesso no registo do resultado: avisa o Chefe de Equipa (e o Administrador, enquanto não há equipas).
   const limit = (await getSetting(db, "timeLimits")).resultSeconds;
   if (resultSeconds > limit) await notifyLeadOrAdmin(db, user.id, { kind: "result_late", companyId: co.id, text: `${user.name} registou o resultado de ${co.name} em ${resultSeconds} s (limite ${limit} s).` });
-  return { outcome: outcome.label, resultSeconds, summary };
+  // Proposta ou venda: começa logo o tempo «Em cliente» (sem limite; alertas ao Chefe de Equipa).
+  if (workKind) { await startClient(db, user, { companyId: co.id, kind: workKind, opCode: input.opCode! }); summary.push(`Em cliente · OP ${input.opCode!.trim()}`); }
+  return { outcome: outcome.label, resultSeconds, summary, clientWork: !!workKind };
 }
 
 /** Tarefas abertas do comercial (Agenda): atrasadas primeiro. */

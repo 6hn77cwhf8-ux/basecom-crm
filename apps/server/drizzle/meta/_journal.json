@@ -134,6 +134,13 @@
       "when": 1794583528061,
       "tag": "0018_desligar_no_telemovel",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794847061120,
+      "tag": "0019_em_cliente_office_apoio",
+      "breakpoints": true
     }
   ]
 }

@@ -306,6 +306,8 @@ export const opportunities = pgTable("opportunities", {
   stage: text("stage").notNull(),
   services: text("services"),
   lostReasonId: text("lost_reason_id"),
+  /** Código da oportunidade no programa da NOS (7 algarismos). */
+  nosOp: text("nos_op"),
   lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
@@ -345,6 +347,10 @@ export const timeEntries = pgTable("time_entries", {
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   /** Quem pôs neste estado, se não foi o próprio (formação marcada pelo Chefe de Equipa ou Administrador). */
   setBy: uuid("set_by").references(() => users.id),
+  /** «Em cliente»: empresa, código da oportunidade na NOS (7 algarismos) e tipo de trabalho (proposal | sale). */
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  opCode: text("op_code"),
+  workKind: text("work_kind"),
 }, (t) => [index("time_entries_user_idx").on(t.userId, t.startedAt)]);
 
 /**

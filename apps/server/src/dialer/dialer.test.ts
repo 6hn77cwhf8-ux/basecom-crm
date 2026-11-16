@@ -1,3 +1,4 @@
+import { daySummary, endClient } from "../time/service.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
@@ -114,8 +115,14 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n2.company.id)))[0]).toMatchObject({ stage: "interest", ownerId: ana.id });
 
     await (await nextEntry(db, toPublic(ana), campaignId)); // garante a fila
-    const { n: n3, r } = await call(ana, { outcomeId: "sale" });
+    await expect(call(ana, { outcomeId: "sale" })).rejects.toThrow(/OP/);
+    await (await nextEntry(db, toPublic(ana), campaignId));
+    const { n: n3, r } = await call(ana, { outcomeId: "sale", opCode: "7590457" });
     expect(r.summary).toContain("Empresa conquistada para a sua carteira");
+    // Venda: a OP fica na oportunidade e começa o tempo «Em cliente».
+    expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n3.company.id)))[0]).toMatchObject({ stage: "won", nosOp: "7590457" });
+    expect((await daySummary(db, ana.id)).client).toMatchObject({ kind: "sale", opCode: "7590457" });
+    await endClient(db, toPublic(ana));
     expect((await db.query.companies.findFirst({ where: eq(companies.id, n3.company.id) }))!.ownerId).toBe(ana.id);
     expect((await db.select().from(walletChanges).where(eq(walletChanges.companyId, n3.company.id)))[0]!.kind).toBe("conquest");
   });

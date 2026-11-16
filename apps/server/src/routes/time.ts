@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { AuthError } from "../auth/service.js";
-import { daySummary, heartbeat, pontoRows, setState, teamToday } from "../time/service.js";
+import { daySummary, endClient, heartbeat, pontoRows, setState, startClient, teamToday } from "../time/service.js";
 import ExcelJS from "exceljs";
 import { fmtBalance } from "@basecom/shared";
 import { canSee } from "../teams/service.js";
@@ -14,10 +14,16 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
   const any = { preHandler: requireAuth(db) };
   app.post("/time/heartbeat", any, async (req) => ({ state: await heartbeat(db, req.user!) }));
   app.post("/time/state", any, async (req) => {
-    const b = z.object({ state: z.enum(["working", "training", "break", "switch"]), userId: z.string().uuid().optional() }).parse(req.body);
+    const b = z.object({ state: z.enum(["working", "training", "break", "switch", "office", "support"]), userId: z.string().uuid().optional() }).parse(req.body);
     await setState(db, req.user!, b.userId ?? req.user!.id, b.state);
     return daySummary(db, b.userId ?? req.user!.id);
   });
+  // Em cliente (proposta ou venda) sem chamada: empresa, tipo e OP; a oportunidade fica com a OP.
+  app.post("/time/client", any, async (req) => {
+    const b = z.object({ companyId: z.string().uuid(), kind: z.enum(["proposal", "sale"]), opCode: z.string() }).parse(req.body);
+    return startClient(db, req.user!, { ...b, withOpportunity: true });
+  });
+  app.post("/time/client/end", any, async (req) => endClient(db, req.user!));
   app.get("/time/today", any, async (req) => {
     const { userId } = z.object({ userId: z.string().uuid().optional() }).parse(req.query);
     if (userId && !(await canSee(db, req.user!, userId))) throw new AuthError(403, "Só vê os tempos da sua equipa.");
@@ -38,12 +44,14 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
       { header: "Entrada", key: "in", width: 10 }, { header: "Saída almoço", key: "lo", width: 13 }, { header: "Regresso almoço", key: "li", width: 15 },
       { header: "Saída", key: "out", width: 10 }, { header: "Presença", key: "pres", width: 10 }, { header: "Previsto", key: "exp", width: 10 },
       { header: "Saldo", key: "bal", width: 10 }, { header: "Intervalo", key: "brk", width: 10 }, { header: "Formação", key: "trn", width: 10 },
+      { header: "Em cliente", key: "cli", width: 11 }, { header: "Office", key: "off", width: 10 }, { header: "Apoio", key: "sup", width: 10 },
     ];
     ws.getRow(1).font = { bold: true };
     for (const r of rows) {
       const p = r.d.ponto;
       ws.addRow({ day: r.day.split("-").reverse().join("/"), name: r.name, in: hm(p.entrada), lo: hm(p.saidaAlmoco), li: hm(p.regressoAlmoco), out: hm(p.saida),
-        pres: hhmm(p.presenceSeconds), exp: hhmm(p.expectedSeconds), bal: fmtBalance(p.balanceSeconds), brk: hhmm(r.d.seconds.break), trn: hhmm(r.d.seconds.training) });
+        pres: hhmm(p.presenceSeconds), exp: hhmm(p.expectedSeconds), bal: fmtBalance(p.balanceSeconds), brk: hhmm(r.d.seconds.break), trn: hhmm(r.d.seconds.training),
+        cli: hhmm(r.d.seconds.client), off: hhmm(r.d.seconds.office), sup: hhmm(r.d.seconds.support) });
     }
     const buf = await wb.xlsx.writeBuffer();
     reply.header("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

@@ -36,6 +36,7 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
       competitor: z.object({ operator: z.string().max(40).optional(), renewalDate: day.optional(), text: z.string().max(1000).optional() }).optional(),
       walletKind: z.enum(["NC", "FC"]).optional(),
       newDecisor: z.object({ salutation: z.string().max(20).nullable().optional(), name: z.string().trim().min(2).max(120) }).optional(),
+      opCode: z.string().trim().max(20).optional(),
     }).parse(req.body);
     return saveResult(db, req.user!, id.parse(req.params).id, b);
   });
