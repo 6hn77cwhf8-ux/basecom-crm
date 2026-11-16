@@ -11,5 +11,4 @@ Não é para hoje nem para amanhã: fica para quando se juntarem as alterações
 2. **Soma do tempo diário de login**: o tempo do ponto conta só pelo login (entrada até saída, sem o almoço). Não se separa nem se soma Formação, Apoio, Office, Em cliente, Intervalo, etc.
 3. **Só o Administrador exporta**, e apenas quando entra com o login de Administrador. Hoje o Chefe de Equipa também pode exportar a sua equipa; isto deixa de ser possível.
 
-Por confirmar quando se fizer:
-- Além da soma de cada dia, a folha leva também o total do período no fim?
+4. **No fim de cada folha, os totais do período**: número de dias de trabalho e total de horas de login.
