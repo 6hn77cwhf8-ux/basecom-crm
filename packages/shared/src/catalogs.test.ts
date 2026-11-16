@@ -25,6 +25,11 @@ describe("catálogos aprovados", () => {
     expect(iso(nextContactFor(r("chose_other"), today, d("2027-09-30")).at)).toBe("2027-05-30");
     expect(iso(nextContactFor(r("loyal_other"), today, d("2028-01-31")).at)).toBe("2027-09-30"); // fim de mês
     expect(operatorRefusalNote("MEO", "2027-09-30", 4)).toBe("Cliente da MEO até 30/09/2027, agendado contacto para 4 meses antes.");
+    // NS/NR (decisão de 16 nov): sem data, contacto daqui a 6 meses; a operadora também pode ser NS/NR.
+    expect(iso(nextContactFor(r("loyal_other"), today, null).at)).toBe(iso(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 6, today.getUTCDate()))));
+    expect(operatorRefusalNote("MEO", "NS/NR", 4)).toBe("Cliente da MEO, fim da fidelização NS/NR, agendado contacto para daqui a 6 meses.");
+    expect(operatorRefusalNote("NS/NR", "2027-09-30", 4)).toBe("Cliente de outra operadora (operadora NS/NR) até 30/09/2027, agendado contacto para 4 meses antes.");
+    expect(operatorRefusalNote("NS/NR", null, 4)).toBe("Cliente de outra operadora (operadora NS/NR), fim da fidelização NS/NR, agendado contacto para daqui a 6 meses.");
   });
 });
 

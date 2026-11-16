@@ -166,9 +166,12 @@ function Lose({ o, reasons, onClose, onDone }: { o: Opportunity; reasons: Reason
         </Field>
         {byOperator && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
-            <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra"].map((op) => <button key={op} onClick={() => setOperator(op)} style={{ ...btn, height: 30, fontSize: 12, background: operator === op ? c.ink : c.card, color: operator === op ? "#FFF" : c.ink }}>{op}</button>)}</div></Field>
-            <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-            {operator && date && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(operator, date, reason!.monthsBefore ?? 4)}</span>}
+            <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra", "NS/NR"].map((op) => <button key={op} onClick={() => setOperator(op)} style={{ ...btn, height: 30, fontSize: 12, background: operator === op ? c.ink : c.card, color: operator === op ? "#FFF" : c.ink }}>{op}</button>)}</div></Field>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" disabled={date === "NS/NR"} value={date === "NS/NR" ? "" : date} onChange={(e) => setDate(e.target.value)} /></Field>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600, alignSelf: "flex-end", height: 40 }}><input type="checkbox" checked={date === "NS/NR"} onChange={(e) => setDate(e.target.checked ? "NS/NR" : "")} /> Cliente não refere (NS/NR)</label>
+            </div>
+            {operator && date && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(operator, date, reason!.monthsBefore ?? 4, reason!.unknownMonths ?? 6)}</span>}
           </div>
         )}
         <Field label={reason?.effect === "other" ? "Descrição (obrigatória)" : "Comentário"}><input style={input} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>

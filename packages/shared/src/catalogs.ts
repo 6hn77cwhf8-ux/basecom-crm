@@ -59,12 +59,16 @@ export const DEFAULT_ATTEMPT_RULES: AttemptRules = { noAnswerRetryMinutes: 120, 
  * - other: descrição obrigatória; o comercial define a tarefa e o prazo.
  */
 export type ReasonEffect = "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other";
-export type Reason = { id: string; label: string; effect: ReasonEffect; days?: number; monthsBefore?: number; contractMonths?: number; active: boolean };
+export type Reason = { id: string; label: string; effect: ReasonEffect; days?: number; monthsBefore?: number; contractMonths?: number;
+  /** Outra operadora sem data (cliente não refere, «NS/NR»): novo contacto daqui a X meses (6 por omissão, decisão de 16 nov). */
+  unknownMonths?: number; active: boolean };
+/** Não sabe / não responde: o cliente não refere a operadora ou o fim da fidelização. */
+export const NSNR = "NS/NR";
 
 export const DEFAULT_REASONS: Reason[] = [
   // Outra operadora (decisão de 13 nov): só a operadora e a data de fim; contacto 4 meses antes dessa data.
-  { id: "loyal_other", label: "Fidelizado a outra operadora", effect: "loyalty_end", monthsBefore: 4, active: true },
-  { id: "chose_other", label: "Escolheu outra proposta ou renovou com outro operador", effect: "new_contract", monthsBefore: 4, active: true },
+  { id: "loyal_other", label: "Fidelizado a outra operadora", effect: "loyalty_end", monthsBefore: 4, unknownMonths: 6, active: true },
+  { id: "chose_other", label: "Escolheu outra proposta ou renovou com outro operador", effect: "new_contract", monthsBefore: 4, unknownMonths: 6, active: true },
   { id: "satisfied", label: "Satisfeito com a solução atual", effect: "cooldown", days: 90, active: true },
   { id: "price", label: "Preço", effect: "cooldown", days: 90, active: true },
   { id: "no_need", label: "Sem necessidade", effect: "cooldown", days: 180, active: true },
@@ -102,7 +106,8 @@ export function nextContactFor(reason: Reason, today: Date, date?: Date | null):
     // Outra operadora (fidelizado ou renovou): a data é o fim da fidelização; contacto X meses antes (4 por omissão).
     case "loyalty_end":
     case "new_contract": {
-      if (!date) return { at: null, eligibleAt: null };
+      // Sem data (NS/NR): contacto daqui a X meses.
+      if (!date) { const at = addMonths(today, reason.unknownMonths ?? 6); return { at, eligibleAt: at }; }
       const at = addMonths(date, -(reason.monthsBefore ?? 4));
       return { at: at > today ? at : today, eligibleAt: at };
     }
@@ -132,7 +137,10 @@ export function opportunityAlert(lastActivityAt: Date, now: Date, rules: Opportu
 }
 
 /** Nota automática da recusa por outra operadora: «Cliente da MEO até 30/09/2027, agendado contacto para 4 meses antes.» */
-export function operatorRefusalNote(operator: string, endDate: string, monthsBefore: number): string {
+export function operatorRefusalNote(operator: string, endDate: string | null, monthsBefore: number, unknownMonths = 6): string {
+  const who = operator === NSNR ? "Cliente de outra operadora (operadora NS/NR)" : `Cliente da ${operator}`;
+  const months = (n: number) => `${n} ${n === 1 ? "mês" : "meses"}`;
+  if (!endDate || endDate === NSNR) return `${who}, fim da fidelização NS/NR, agendado contacto para daqui a ${months(unknownMonths)}.`;
   const [y, m, d] = endDate.slice(0, 10).split("-");
-  return `Cliente da ${operator} até ${d}/${m}/${y}, agendado contacto para ${monthsBefore} ${monthsBefore === 1 ? "mês" : "meses"} antes.`;
+  return `${who} até ${d}/${m}/${y}, agendado contacto para ${months(monthsBefore)} antes.`;
 }

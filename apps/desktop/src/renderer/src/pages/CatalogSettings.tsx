@@ -71,7 +71,11 @@ export function CatalogSettings() {
               <select style={{ ...input, height: 34 }} value={r.effect} onChange={(e) => upd({ effect: e.target.value as Reason["effect"] })}>
                 {Object.entries(EFFECT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
-              <span>{(r.effect === "cooldown" || r.effect === "followup_task") ? <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>{num(r.days ?? 0, (n) => upd({ days: n }))} dias</span> : null}</span>
+              <span>{(r.effect === "cooldown" || r.effect === "followup_task") ? <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>{num(r.days ?? 0, (n) => upd({ days: n }))} dias</span>
+                : (r.effect === "loyalty_end" || r.effect === "new_contract") ? <span title="Contacto X meses antes do fim da fidelização; se o cliente não referir (NS/NR), daqui a Y meses" style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center" }}>{num(r.monthsBefore ?? 4, (n) => upd({ monthsBefore: n }))} meses antes</span>
+                  <span style={{ display: "flex", gap: 6, alignItems: "center" }}>{num(r.unknownMonths ?? 6, (n) => upd({ unknownMonths: n }))} meses se NS/NR</span>
+                </span> : null}</span>
               <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={r.active} onChange={(e) => upd({ active: e.target.checked })} /> Ativo</label>
             </div>
           );

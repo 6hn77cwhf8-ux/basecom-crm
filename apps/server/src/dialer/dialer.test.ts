@@ -153,6 +153,21 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     expect(notes.map((x) => x.text)).toContain("Cliente da MEO até 30/09/2027, agendado contacto para 4 meses antes.");
   });
 
+  it("Recusa com NS/NR (cliente não refere a data nem a operadora): contacto daqui a 6 meses, sem apagar o que a ficha já tinha", async () => {
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
+    const { n } = await call(ana, { outcomeId: "not_interested", reasonId: "loyal_other", date: "NS/NR", competitor: { operator: "NS/NR" } });
+    const co = (await db.query.companies.findFirst({ where: eq(companies.id, n.company.id) }))!;
+    const six = new Date(); six.setUTCMonth(six.getUTCMonth() + 6);
+    expect(co.campaignEligibleFrom).toBe(six.toISOString().slice(0, 10));
+    expect(co.loyaltyEnd).toBeNull();
+    expect(co.operator).not.toBe("NS/NR");
+    const notes = await db.select().from(companyNotes).where(eq(companyNotes.companyId, n.company.id));
+    expect(notes.map((x) => x.text)).toContain("Cliente de outra operadora (operadora NS/NR), fim da fidelização NS/NR, agendado contacto para daqui a 6 meses.");
+    // Devolve a empresa à fila para os testes seguintes.
+    await db.update(companies).set({ campaignEligibleFrom: null }).where(eq(companies.id, n.company.id));
+    await db.update(campaignEntries).set({ status: "pending", nextAt: null, lockedBy: null, lockedUntil: null }).where(eq(campaignEntries.companyId, n.company.id));
+  });
+
 
   it("Cliente NOS sem carteira: o resultado obriga a identificar NC ou FC", async () => {
     await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));

@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { DEFAULT_SCRIPTS, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { DEFAULT_SCRIPTS, NSNR, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -337,14 +337,16 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       case "not_interested": {
         await setEntry({ status: "done" });
         const r = reason!;
-        const base = input.date ? new Date(`${input.date}T00:00:00Z`) : null;
+        // NS/NR (cliente não refere o fim da fidelização): sem data; o contacto fica para daqui a X meses (6 por omissão).
+        const known = input.date && input.date !== NSNR ? input.date : null;
+        const base = known ? new Date(`${known}T00:00:00Z`) : null;
         const byOperator = OPERATOR_REASONS.includes(r.effect);
         // Por outra operadora: só a data de fim; o contacto fica marcado X meses antes (4 por omissão, configurável).
         const nc = nextContactFor(r, now, base);
-        if (byOperator) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: operatorRefusalNote(input.competitor!.operator!, input.date!, r.monthsBefore ?? 4) });
+        if (byOperator) await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: operatorRefusalNote(input.competitor!.operator!, known, r.monthsBefore ?? 4, r.unknownMonths ?? 6) });
         const patch: Partial<typeof companies.$inferInsert> = {};
-        if (byOperator && input.date) patch.loyaltyEnd = input.date;
-        if (byOperator && input.competitor?.operator) patch.operator = input.competitor.operator;
+        if (byOperator && known) patch.loyaltyEnd = known;
+        if (byOperator && input.competitor?.operator && input.competitor.operator !== NSNR) patch.operator = input.competitor.operator;
         if (nc.eligibleAt) patch.campaignEligibleFrom = nc.eligibleAt.toISOString().slice(0, 10);
         if (r.effect === "company_closed") { patch.inactive = true; await leaveAllCampaigns(); }
         if (Object.keys(patch).length) await tx.update(companies).set({ ...patch, updatedAt: now }).where(eq(companies.id, co.id));

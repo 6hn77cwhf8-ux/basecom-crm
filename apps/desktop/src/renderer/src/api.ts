@@ -31,7 +31,7 @@ export type CompanyDetail = {
   wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };
 export type Outcome = { id: string; label: string; group: "refuse" | "callback" | "noanswer" | "proposal" | "sale" | "other"; effect: string; active: boolean };
-export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other"; days?: number; monthsBefore?: number; contractMonths?: number; active: boolean };
+export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other"; days?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; active: boolean };
 export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[] }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
 export type DialerEntry = {
   entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };

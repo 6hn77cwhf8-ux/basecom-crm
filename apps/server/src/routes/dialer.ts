@@ -31,7 +31,7 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.post("/calls/:id/result", any, async (req) => {
     const b = z.object({
       outcomeId: z.string().min(1), reasonId: z.string().optional(), comment: z.string().max(2000).optional(),
-      date: day.optional(), at: instant.optional(), forMe: z.boolean().optional(), nextAction: z.string().max(300).optional(),
+      date: z.union([day, z.literal("NS/NR")]).optional(), at: instant.optional(), forMe: z.boolean().optional(), nextAction: z.string().max(300).optional(),
       services: z.string().max(500).optional(), decisorName: z.string().max(120).optional(),
       competitor: z.object({ operator: z.string().max(40).optional(), renewalDate: day.optional(), text: z.string().max(1000).optional() }).optional(),
       walletKind: z.enum(["NC", "FC"]).optional(),

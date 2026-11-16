@@ -9,7 +9,7 @@ export const GROUPS = [
   { id: "proposal", label: "Proposta", key: "4" }, { id: "sale", label: "Venda", key: "5" }, { id: "other", label: "Outro", key: "6" },
 ] as const;
 export type Group = (typeof GROUPS)[number]["id"];
-const OPERATORS = ["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra"];
+const OPERATORS = ["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra", "NS/NR"];
 
 /** Data local «AAAA-MM-DDTHH:MM» → instante ISO. */
 const toIso = (local: string) => (local ? new Date(local).toISOString() : undefined);
@@ -121,9 +121,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
           <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: o })}>{o}</button>)}</div></Field>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+            <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" disabled={date === "NS/NR"} value={date === "NS/NR" ? "" : date} onChange={(e) => setDate(e.target.value)} /></Field>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600, alignSelf: "flex-end", height: 40 }}><input type="checkbox" checked={date === "NS/NR"} onChange={(e) => setDate(e.target.checked ? "NS/NR" : "")} /> Cliente não refere (NS/NR)</label>
           </div>
-          {comp.operator && date && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(comp.operator, date, reason?.monthsBefore ?? 4)}</div>}
+          {comp.operator && date && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(comp.operator, date, reason?.monthsBefore ?? 4, reason?.unknownMonths ?? 6)}</div>}
         </div>
       )}
       {nextContact && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}><b>Próximo contacto (automático):</b> {nextContact}</div>}

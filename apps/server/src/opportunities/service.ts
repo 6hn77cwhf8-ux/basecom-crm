@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { OPPORTUNITY_STAGES, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
+import { NSNR, OPPORTUNITY_STAGES, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, companies, companyNotes, opportunities, tasks, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -97,7 +97,8 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
   // Outra operadora (igual à recusa): operadora e fim de fidelização; contacto X meses antes do fim.
   const byOperator = reason.effect === "loyalty_end" || reason.effect === "new_contract";
   if (byOperator && (!operatorInfo?.operator || !operatorInfo.date)) throw new AuthError(400, "Indique a operadora e a data de fim da fidelização.");
-  const nc = byOperator ? nextContactFor(reason, now, new Date(`${operatorInfo!.date}T00:00:00Z`)) : null;
+  const known = byOperator && operatorInfo!.date !== NSNR ? operatorInfo!.date! : null;
+  const nc = byOperator ? nextContactFor(reason, now, known ? new Date(`${known}T00:00:00Z`) : null) : null;
   const days = reason.effect === "cooldown" ? reason.days ?? 0 : (cat.opportunities as OpportunityRules).lostReopenDays;
   const eligible = (nc?.eligibleAt ?? new Date(now.getTime() + days * 86_400_000)).toISOString().slice(0, 10);
   await db.transaction(async (tx) => {
@@ -105,9 +106,9 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
     if (reason.effect === "company_closed") {
       await tx.update(companies).set({ inactive: true, updatedAt: now }).where(eq(companies.id, o.companyId));
       await tx.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.companyId, o.companyId), eq(campaignEntries.status, "pending")));
-    } else await tx.update(companies).set({ campaignEligibleFrom: eligible, ...(byOperator ? { loyaltyEnd: operatorInfo!.date, operator: operatorInfo!.operator } : {}), updatedAt: now }).where(eq(companies.id, o.companyId));
+    } else await tx.update(companies).set({ campaignEligibleFrom: eligible, ...(byOperator && known ? { loyaltyEnd: known } : {}), ...(byOperator && operatorInfo!.operator !== NSNR ? { operator: operatorInfo!.operator } : {}), updatedAt: now }).where(eq(companies.id, o.companyId));
     if (byOperator) {
-      await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: operatorRefusalNote(operatorInfo!.operator!, operatorInfo!.date!, reason.monthsBefore ?? 4) });
+      await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: operatorRefusalNote(operatorInfo!.operator!, known, reason.monthsBefore ?? 4, reason.unknownMonths ?? 6) });
       if (nc?.at) await tx.insert(tasks).values({ companyId: o.companyId, type: "Ligar", assignedTo: o.ownerId, dueAt: nextWorkingMoment(nc.at), description: `Primeiro contacto após «${reason.label}»`, origin: "opportunity", opportunityId: o.id, createdBy: user.id });
     }
     await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: `Oportunidade perdida: ${reason.label}${comment?.trim() ? ` · ${comment.trim()}` : ""}${reason.effect !== "company_closed" ? ` · volta às campanhas a ${eligible.split("-").reverse().join("/")}` : ""}` });
