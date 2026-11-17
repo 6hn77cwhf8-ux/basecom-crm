@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES } from "@basecom/shared";
+import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES, DEFAULT_PROPOSAL_CHANNELS } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
 import { AuthError } from "./auth/errors.js";
@@ -74,7 +74,7 @@ export const SETTINGS = {
         effect: z.enum(["cooldown", "loyalty_end", "new_contract", "followup_task", "company_closed", "other"]),
         days: z.number().int().min(0).max(3650).optional(), monthsBefore: z.number().int().min(0).max(60).optional(), unknownMonths: z.number().int().min(0).max(60).optional(), contractMonths: z.number().int().min(1).max(120).optional(),
       })).min(1),
-      opportunities: z.object({ warnDays: z.number().int().min(1).max(60), lateDays: z.number().int().min(1).max(90), lostReopenDays: z.number().int().min(0).max(3650), docsTaskDays: z.number().int().min(1).max(60).default(2) }),
+      opportunities: z.object({ warnDays: z.number().int().min(1).max(60), lateDays: z.number().int().min(1).max(90), lostReopenDays: z.number().int().min(0).max(3650), docsTaskDays: z.number().int().min(1).max(60).default(2), channels: z.array(z.string().min(1).max(40)).min(1).max(12).default(DEFAULT_PROPOSAL_CHANNELS) }),
       taskTypes: z.array(z.string().min(1).max(60)).min(1),
     }),
     defaults: { outcomes: DEFAULT_OUTCOMES, attempts: DEFAULT_ATTEMPT_RULES, reasons: DEFAULT_REASONS, opportunities: DEFAULT_OPPORTUNITY_RULES, taskTypes: DEFAULT_TASK_TYPES },

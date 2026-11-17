@@ -1,7 +1,7 @@
 import { and, inArray, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
-import { lisbonDay, pontoDay } from "@basecom/shared";
+import { DEFAULT_PROPOSAL_CHANNELS, lisbonDay, nextWorkingMoment, pontoDay, proposalValue, saleTypesError, type SaleTypes } from "@basecom/shared";
 import type { Db } from "../db/client.js";
-import { auditLog, companies, companyNotes, opportunities, timeEntries, users } from "../db/schema.js";
+import { auditLog, companies, companyNotes, opportunities, tasks, timeEntries, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { notify, notifyLeadOrAdmin } from "../notifications/service.js";
@@ -112,9 +112,40 @@ export async function startClient(db: Db, user: PublicUser, input: { companyId: 
   return daySummary(db, user.id);
 }
 
-/** Terminar o trabalho em cliente: volta a «A trabalhar» (o histórico da empresa fica com o tempo). */
-export async function endClient(db: Db, user: PublicUser) {
-  if ((await currentState(db, user.id)) === "client") await setState(db, user, user.id, "working");
+export type CloseClientInput = { saleTypes: SaleTypes; channel?: string; nextAction?: string; at?: string; comment?: string };
+
+/**
+ * «Guardar e fechar» (17 nov 2026): fecha o trabalho em cliente com os dados da proposta ou venda
+ * (tipos e valor obrigatórios; na proposta também o canal de envio, a próxima ação e a data) e volta a «A trabalhar».
+ */
+export async function endClient(db: Db, user: PublicUser, input?: CloseClientInput) {
+  const cur = await openEntry(db, user.id);
+  if (cur?.state !== "client") return daySummary(db, user.id);
+  if (cur.companyId && cur.opCode) {
+    if (!input) throw new AuthError(400, "Preencha os dados da proposta para guardar e fechar.");
+    const err = saleTypesError(input.saleTypes ?? {});
+    if (err) throw new AuthError(400, err);
+    const isProposal = cur.workKind !== "sale";
+    const rules = (await getSetting(db, "catalogs")).opportunities;
+    const channels = rules.channels ?? DEFAULT_PROPOSAL_CHANNELS;
+    if (isProposal && !channels.includes(input.channel ?? "")) throw new AuthError(400, "Indique o canal por onde enviou a proposta.");
+    if (isProposal && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
+    const now = new Date();
+    const value = proposalValue(input.saleTypes);
+    const companyId = cur.companyId, op = cur.opCode;
+    await db.transaction(async (tx) => {
+      const co = await tx.query.companies.findFirst({ where: eq(companies.id, companyId) });
+      let opp = (await tx.select().from(opportunities).where(and(eq(opportunities.companyId, companyId), eq(opportunities.nosOp, op))).orderBy(sql`${opportunities.createdAt} desc`))[0];
+      if (!opp) [opp] = await tx.insert(opportunities).values({ companyId, ownerId: co?.ownerId ?? user.id, stage: isProposal ? "proposal" : "won", nosOp: op, ...(isProposal ? {} : { closedAt: now }) }).returning();
+      await tx.update(opportunities).set({ saleTypes: input.saleTypes, proposedValue: String(value), ...(input.channel ? { sentChannel: input.channel } : {}), lastActivityAt: now }).where(eq(opportunities.id, opp!.id));
+      const eur = value.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const types = Object.keys(input.saleTypes).join(" + ");
+      await tx.insert(companyNotes).values({ companyId, kind: "note", userId: user.id, at: now,
+        text: `${isProposal ? "Proposta enviada" : "Venda"} · OP ${op} · ${types} · ${eur} €/mês${input.channel ? ` · por ${input.channel}` : ""}${input.comment?.trim() ? ` · ${input.comment.trim()}` : ""}` });
+      if (input.at && input.nextAction?.trim()) await tx.insert(tasks).values({ companyId, type: "Ligar", assignedTo: co?.ownerId ?? user.id, dueAt: nextWorkingMoment(new Date(input.at)), description: input.nextAction.trim(), origin: "call", opportunityId: opp!.id, createdBy: user.id });
+    });
+  }
+  await setState(db, user, user.id, "working");
   return daySummary(db, user.id);
 }
 

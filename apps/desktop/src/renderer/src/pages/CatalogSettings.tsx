@@ -1,3 +1,4 @@
+import { DEFAULT_PROPOSAL_CHANNELS } from "@basecom/shared";
 import { useEffect, useState } from "react";
 import { api, type Outcome, type Reason } from "../api";
 import { btn, btnDark, c, card, ErrorText, input } from "../ui";
@@ -5,7 +6,7 @@ import { btn, btnDark, c, card, ErrorText, input } from "../ui";
 type Cat = {
   outcomes: Outcome[]; reasons: Reason[]; taskTypes: string[];
   attempts: { noAnswerRetryMinutes: number; busyRetryMinutes: number; maxAttemptsPerDay: number; maxAttemptsTotal: number; maxVoicemailsPerNumber: number };
-  opportunities: { warnDays: number; lateDays: number; lostReopenDays: number };
+  opportunities: { warnDays: number; lateDays: number; lostReopenDays: number; docsTaskDays?: number; channels?: string[] };
 };
 
 const GROUP: Record<string, string> = { refuse: "Recusa", callback: "Callback", noanswer: "Não atende", proposal: "Proposta", sale: "Venda", other: "Outro" };
@@ -18,7 +19,7 @@ const ATTEMPTS: [keyof Cat["attempts"], string, string][] = [
   ["maxAttemptsPerDay", "Máximo de tentativas por dia", "vezes"], ["maxAttemptsTotal", "Máximo de tentativas na campanha", "vezes"],
   ["maxVoicemailsPerNumber", "Voicemails até o número ficar esgotado", "vezes"],
 ];
-const OPPS: [keyof Cat["opportunities"], string, string][] = [
+const OPPS: ["warnDays" | "lateDays" | "lostReopenDays", string, string][] = [
   ["warnDays", "Alerta preventivo ao fim de", "dias"], ["lateDays", "Atrasada ao fim de", "dias"], ["lostReopenDays", "Perdida: volta às campanhas após", "dias"],
 ];
 const slug = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "motivo";
@@ -34,6 +35,7 @@ export function CatalogSettings() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [newType, setNewType] = useState("");
+  const [newCh, setNewCh] = useState("");
   useEffect(() => { api.catalogs().then((r) => setCat(r.catalogs as unknown as Cat)).catch((e) => setError(e.message)); }, []);
   if (!cat) return <section style={{ ...card, padding: 24 }}>{error ? <ErrorText>{error}</ErrorText> : "A carregar…"}</section>;
 
@@ -106,6 +108,19 @@ export function CatalogSettings() {
         <div style={{ display: "flex", gap: 6 }}>
           <input style={{ ...input, height: 34, width: 260 }} placeholder="Novo tipo de tarefa" value={newType} onChange={(e) => setNewType(e.target.value)} />
           <button style={{ ...btn, height: 34, fontSize: 13 }} disabled={!newType.trim() || cat.taskTypes.includes(newType.trim())} onClick={() => { set({ taskTypes: [...cat.taskTypes, newType.trim()] }); setNewType(""); }}>Acrescentar</button>
+        </div>
+      </section>
+
+      <section style={box}>
+        <h2 style={h}>Canais de envio da proposta</h2>
+        <span style={{ fontSize: 13, color: c.muted }}>Escolhidos no «Guardar e fechar» da proposta (obrigatório).</span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(cat.opportunities.channels ?? DEFAULT_PROPOSAL_CHANNELS).map((t, _i, all) => <span key={t} style={{ display: "inline-flex", gap: 6, alignItems: "center", border: `1px solid ${c.line}`, borderRadius: 10, padding: "4px 6px 4px 10px", fontSize: 13 }}>{t}
+            <button aria-label={`Retirar ${t}`} style={{ border: 0, background: "none", cursor: "pointer", color: c.muted }} disabled={all.length === 1} onClick={() => set({ opportunities: { ...cat.opportunities, channels: all.filter((x) => x !== t) } })}>×</button></span>)}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input style={{ ...input, height: 34, width: 260 }} placeholder="Novo canal" value={newCh} onChange={(e) => setNewCh(e.target.value)} />
+          <button style={{ ...btn, height: 34, fontSize: 13 }} disabled={!newCh.trim() || (cat.opportunities.channels ?? DEFAULT_PROPOSAL_CHANNELS).includes(newCh.trim())} onClick={() => { set({ opportunities: { ...cat.opportunities, channels: [...(cat.opportunities.channels ?? DEFAULT_PROPOSAL_CHANNELS), newCh.trim()] } }); setNewCh(""); }}>Acrescentar</button>
         </div>
       </section>
 

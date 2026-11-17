@@ -316,6 +316,8 @@ export const opportunities = pgTable("opportunities", {
   saleTypes: jsonb("sale_types").$type<Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>>(),
   /** Valor proposto (€/mês) para o Pipeline: soma dos valores por tipo. */
   proposedValue: numeric("proposed_value", { precision: 12, scale: 2 }),
+  /** Canal por onde a proposta foi enviada (Email, WhatsApp, SMS, Em chamada, Presencial — configurável). */
+  sentChannel: text("sent_channel"),
   /** Quando entrou na etapa atual (lembrete automático em «Aguarda docs»). */
   stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
   lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { companies, companyNotes, notifications, opportunities, timeEntries, users } from "../db/schema.js";
+import { companies, companyNotes, notifications, opportunities, tasks, timeEntries, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { daySummary, endClient, heartbeat, setState, startClient } from "./service.js";
 
@@ -54,8 +54,18 @@ describe.skipIf(!url)("em cliente, office, apoio e formação", () => {
     expect(alerts.length).toBe(1);
     expect(alerts[0]!.text).toMatch(/há 20 min .* OP 7590457/);
 
-    await endClient(db, toPublic(ana));
+    // «Guardar e fechar»: tipos e valor, canal, próxima ação e data obrigatórios na proposta.
+    await expect(endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 } })).rejects.toThrow(/canal/);
+    await expect(endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 }, channel: "WhatsApp" })).rejects.toThrow(/próxima ação/);
+    const at = new Date(Date.now() + 2 * 86400_000).toISOString();
+    await endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 }, channel: "WhatsApp", nextAction: "Confirmar receção", at, comment: "Compara com a MEO" });
     expect((await daySummary(db, ana.id)).state).toBe("working");
+    const [o2] = await db.select().from(opportunities).where(eq(opportunities.companyId, coId));
+    expect(o2).toMatchObject({ sentChannel: "WhatsApp", proposedValue: "165.00" });
+    const t = await db.select().from(tasks).where(eq(tasks.opportunityId, o2!.id));
+    expect(t[0]).toMatchObject({ type: "Ligar", description: "Confirmar receção" });
+    const sent = await db.select().from(companyNotes).where(and(eq(companyNotes.companyId, coId), eq(companyNotes.kind, "note")));
+    expect(sent.map((x) => x.text)).toContain("Proposta enviada · OP 7590457 · FID + XSell · 165,00 €/mês · por WhatsApp · Compara com a MEO");
     const notes = await db.select().from(companyNotes).where(and(eq(companyNotes.companyId, coId), eq(companyNotes.kind, "client_work")));
     expect(notes[0]!.text).toBe(`Proposta elaborada · 23 min · OP 7590457 · ana ${tag}`);
   });

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { DEFAULT_PROPOSAL_CHANNELS, proposalPoints, saleTypesError, SALE_KINDS, type SaleKind } from "@basecom/shared";
 import { api, WORK_EVENT, type ClientWork, type DaySummary, type SearchHit, type User, type WorkKind } from "../api";
-import { btn, btnDark, c, card, CopyButton, ErrorText, input } from "../ui";
+import { btn, btnDark, c, card, CopyButton, ErrorText, Field, input } from "../ui";
+import { DatePicker } from "./DatePicker";
 import { Modal } from "./Wallet";
 import { MessageDialog } from "./MessageDialog";
 
@@ -91,6 +93,7 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(false);
+  const [closing, setClosing] = useState(false);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
   const secs = Math.max(0, Math.floor((Date.now() - new Date(work.since).getTime()) / 1000));
   const since = new Date(work.since).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -118,17 +121,18 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
         <span style={{ fontSize: 16, fontWeight: 600 }}>{work.company}</span>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: "auto" }}>
-          <button style={{ ...btnDark, height: 52, padding: "0 28px", fontSize: 15 }} disabled={busy} onClick={() => { setBusy(true); api.endClient().then(onEnded).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>Terminar e voltar a ligar</button>
+          <button style={{ ...btnDark, height: 52, padding: "0 28px", fontSize: 15 }} disabled={busy} onClick={() => setClosing(true)}>Guardar e fechar</button>
           {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => onOpenCompany(work.companyId!)}>Abrir ficha</button>}
           {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => setMsg(true)}>Mensagem</button>}
           {work.companyId && work.opCode && <button style={{ ...btn, height: 52 }} disabled={busy} onClick={() => api.startClient({ companyId: work.companyId!, kind: other, opCode: work.opCode! }).then(onChanged).catch((e) => setErr(e.message))}>Mudar para {KIND_LABEL[other]}</button>}
         </div>
+        {closing && <CloseClientDialog work={work} onClose={() => setClosing(false)} onDone={(d) => { setClosing(false); onEnded(d); }} />}
         {msg && work.companyId && <MessageDialog companyId={work.companyId} me={me} initialTemplate={work.kind === "sale" ? "docs" : "proposal"} onClose={() => setMsg(false)} />}
       </section>
       <aside style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: 12 }}>
         <section style={{ ...card, padding: 20, display: "flex", flexDirection: "column", gap: 10, fontSize: 14, lineHeight: "20px" }}>
           <b style={{ fontSize: 16, fontWeight: 600 }}>Enquanto está em cliente</b>
-          <span>Não é marcada nenhuma chamada. A seguinte só começa depois de «Terminar».</span>
+          <span>Não é marcada nenhuma chamada. No fim, carregue em «Guardar e fechar» e preencha os dados da proposta; depois volta ao Ligar.</span>
           <span>O tempo conta como trabalho no ponto, nunca como tempo morto.</span>
         </section>
       </aside>
@@ -139,6 +143,7 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
 /** Faixa no topo, fora do ecrã Ligar: lembra que está em cliente e permite terminar. */
 export function ClientBanner({ hidden, onOpenCompany }: { hidden: boolean; onOpenCompany: (id: string) => void }) {
   const [d, setD] = useState<DaySummary | null>(null);
+  const [closing, setClosing] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => {
     const load = () => api.today().then(setD).catch(() => undefined);
@@ -155,7 +160,88 @@ export function ClientBanner({ hidden, onOpenCompany }: { hidden: boolean; onOpe
       <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{clock(secs)}</span>
       <span style={{ color: c.muted }}>NIF {w.nif} · OP {w.opCode}</span>
       {w.companyId && <button style={{ ...btn, height: 30, fontSize: 12 }} onClick={() => onOpenCompany(w.companyId!)}>Ficha</button>}
-      <button style={{ ...btnDark, height: 30, fontSize: 12 }} onClick={() => api.endClient().then(setD).catch(() => undefined)}>Terminar</button>
+      <button style={{ ...btnDark, height: 30, fontSize: 12 }} onClick={() => setClosing(true)}>Guardar e fechar</button>
+      {closing && <CloseClientDialog work={w} onClose={() => setClosing(false)} onDone={(x) => { setClosing(false); setD(x); }} />}
     </div>
+  );
+}
+
+/** Tipos de venda (até 2: FID + XSell ou FID + Upsell; NN sozinho) com o valor de cada um (€/mês). */
+export type TypesDraft = Partial<Record<SaleKind, string>>;
+export const typesToNumbers = (t: TypesDraft) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Number(String(v).replace(",", ".")) || 0])) as Partial<Record<SaleKind, number>>;
+export function SaleTypesPicker({ types, setTypes, walletKind = "NC" }: { types: TypesDraft; setTypes: (f: (t: TypesDraft) => TypesDraft) => void; walletKind?: "NC" | "FC" }) {
+  const nums = typesToNumbers(types);
+  const err = saleTypesError(nums);
+  const points = err ? 0 : proposalPoints(nums, walletKind);
+  return (
+    <div role="group" aria-label="Tipo de venda" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ fontSize: 13, fontWeight: 600 }}>Tipo de venda e valor · até 2 (FID + XSell ou FID + Upsell) · obrigatório</span>
+      {SALE_KINDS.map((k) => {
+        const on = types[k] !== undefined;
+        const chosen = Object.keys(types) as SaleKind[];
+        const blocked = !on && (chosen.length >= 2 || (k === "NN" && chosen.length > 0) || chosen.includes("NN") || (k === "XSell" && chosen.includes("Upsell")) || (k === "Upsell" && chosen.includes("XSell")) || (chosen.length === 1 && k !== "FID" && chosen[0] !== "FID"));
+        const hint = k === "NN" ? "Cliente novo · sozinho" : k === "FID" ? "Renovação · mensalidade (€/mês)" : "Só o aumento da mensalidade (€/mês)";
+        return (
+          <div key={k} style={{ display: "grid", gridTemplateColumns: "110px 1fr 120px", gap: 10, alignItems: "center", padding: "5px 10px", borderRadius: 10, border: `1px solid ${on ? c.ink : c.line}`, background: on ? c.surface : c.card }}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 700, color: blocked ? c.muted : c.ink }}>
+              <input type="checkbox" checked={on} disabled={blocked} onChange={(e) => setTypes((t) => { const n = { ...t }; if (e.target.checked) n[k] = ""; else delete n[k]; return n; })} /> {k}
+            </label>
+            <span style={{ fontSize: 12, color: c.muted }}>{hint}</span>
+            {on ? <input aria-label={`Valor ${k}`} inputMode="decimal" value={types[k]} onChange={(e) => setTypes((t) => ({ ...t, [k]: e.target.value.replace(/[^0-9,.]/g, "") }))} placeholder="0,00 €" style={{ ...input, height: 34, textAlign: "right", fontWeight: 700 }} /> : <span />}
+          </div>
+        );
+      })}
+      {points > 0 && <span role="status" style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, height: 30, padding: "0 12px", borderRadius: 999, background: c.okSoft, fontSize: 13, fontWeight: 800 }}>+ {points.toLocaleString("pt-PT")} pontos com esta proposta</span>}
+    </div>
+  );
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const toLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+/** «Guardar e fechar» (desenho 16): os dados da proposta pedem-se só no fim. Ao guardar, volta ao Ligar normalmente. */
+export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork; onClose: () => void; onDone: (d: DaySummary) => void }) {
+  const isProposal = work.kind !== "sale";
+  const [channels, setChannels] = useState<string[]>(DEFAULT_PROPOSAL_CHANNELS);
+  const [types, setTypes] = useState<TypesDraft>({});
+  const [channel, setChannel] = useState("");
+  const [nextAction, setNextAction] = useState("");
+  const [at, setAt] = useState("");
+  const [comment, setComment] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.catalogs().then((x) => x.catalogs.opportunities?.channels?.length && setChannels(x.catalogs.opportunities.channels)).catch(() => undefined); }, []);
+  const nums = typesToNumbers(types);
+  const typesErr = saleTypesError(nums);
+  const ready = !typesErr && (!isProposal || (!!channel && !!at && nextAction.trim().length > 0));
+  const mins = Math.max(1, Math.round((Date.now() - new Date(work.since).getTime()) / 60_000));
+  const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
+  function save() {
+    if (!ready || busy) return;
+    setBusy(true); setErr("");
+    api.endClient({ saleTypes: nums, channel: isProposal ? channel : undefined, nextAction: nextAction.trim() || undefined, at: at ? new Date(at).toISOString() : undefined, comment: comment.trim() || undefined })
+      .then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false));
+  }
+  return (
+    <Modal title={`Guardar ${isProposal ? "a proposta" : "a venda"} · OP ${work.opCode ?? ""}`} onClose={onClose} width={640}>
+      <span style={{ fontSize: 13, color: c.muted }}>{work.company} · em cliente há {mins} min</span>
+      <SaleTypesPicker types={types} setTypes={setTypes} />
+      {Object.keys(types).length > 0 && typesErr && <span style={{ fontSize: 12, color: c.muted }}>{typesErr}</span>}
+      {isProposal && (
+        <Field label="Canal de envio · obrigatório">
+          <div role="radiogroup" aria-label="Canal de envio" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{channels.map((ch) => <button key={ch} role="radio" aria-checked={channel === ch} style={pill(channel === ch)} onClick={() => setChannel(ch)}>{ch}</button>)}</div>
+        </Field>
+      )}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label={`Próxima ação${isProposal ? " · obrigatório" : ""}`}><input style={{ ...input, width: 300 }} value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="Ex.: confirmar receção da proposta" /></Field>
+        <Field label={`Data${isProposal ? " · obrigatório" : ""}`}><DatePicker withTime workdaysOnly value={at} onChange={setAt} width={240} ariaLabel="Data da próxima ação" min={toLocal(new Date()).slice(0, 10)} /></Field>
+      </div>
+      <Field label="Comentários"><textarea style={{ ...input, height: 60, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
+      <ErrorText>{err}</ErrorText>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button style={btn} onClick={onClose}>Cancelar</button>
+        <button style={{ ...btnDark, height: 44, padding: "0 20px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : "Guardar e voltar a Ligar"}</button>
+      </div>
+    </Modal>
   );
 }

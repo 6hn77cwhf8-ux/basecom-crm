@@ -22,7 +22,13 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
     const b = z.object({ companyId: z.string().uuid(), kind: z.enum(["proposal", "sale"]), opCode: z.string() }).parse(req.body);
     return startClient(db, req.user!, { ...b, withOpportunity: true });
   });
-  app.post("/time/client/end", any, async (req) => endClient(db, req.user!));
+  app.post("/time/client/end", any, async (req) => {
+    const b = z.object({
+      saleTypes: z.record(z.enum(["NN", "FID", "XSell", "Upsell"]), z.number().min(0).max(100_000)),
+      channel: z.string().max(40).optional(), nextAction: z.string().max(300).optional(), at: z.string().datetime().optional(), comment: z.string().max(2000).optional(),
+    }).optional().parse(req.body ?? undefined);
+    return endClient(db, req.user!, b);
+  });
   app.get("/time/today", any, async (req) => {
     const { userId } = z.object({ userId: z.string().uuid().optional() }).parse(req.query);
     if (userId && !(await canSee(db, req.user!, userId))) throw new AuthError(403, "Só vê os tempos da sua equipa.");

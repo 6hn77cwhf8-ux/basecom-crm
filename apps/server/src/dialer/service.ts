@@ -227,10 +227,12 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     const lim = await getSetting(db, "timeLimits");
     if (new Date(input.at!) > callbackLimit(new Date(), lim.callbackMaxMonths ?? 1)) throw new AuthError(400, `O callback é no máximo a ${lim.callbackMaxMonths ?? 1} mês. Para mais tarde, registe como Recusa.`);
   }
-  if (["interested", "proposal_sent", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
+  // Proposta enviada (17 nov): no resultado só a OP; a próxima ação, os tipos, o valor e o canal pedem-se ao «Guardar e fechar».
+  if (["interested", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
   const workKind = CLIENT_WORK[outcome.effect];
   if (workKind && !OP_CODE.test(input.opCode?.trim() ?? "")) throw new AuthError(400, "Indique a OP (7 algarismos), como no programa da NOS.");
-  if (workKind) { const e = saleTypesError(input.saleTypes ?? {}); if (e) throw new AuthError(400, e); }
+  // Em negociação: o valor da proposta é obrigatório (sem valor não se contabiliza).
+  if (outcome.effect === "negotiating") { const e = saleTypesError(input.saleTypes ?? {}); if (e) throw new AuthError(400, e); }
   if (reason && OPERATOR_REASONS.includes(reason.effect)) {
     if (!input.competitor?.operator) throw new AuthError(400, "Indique a operadora atual do cliente.");
     if (!input.date) throw new AuthError(400, "Indique a data de fim da fidelização.");
@@ -307,7 +309,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     const opportunity = async (stage: string) => {
       const open = (await tx.select().from(opportunities).where(and(eq(opportunities.companyId, co.id), sql`${opportunities.stage} not in ('won','lost')`)).orderBy(desc(opportunities.createdAt)))[0];
       const nosOp = workKind ? input.opCode!.trim() : undefined;
-      const value = workKind && input.saleTypes ? { saleTypes: input.saleTypes, proposedValue: String(proposalValue(input.saleTypes)) } : {};
+      const value = input.saleTypes && !saleTypesError(input.saleTypes) ? { saleTypes: input.saleTypes, proposedValue: String(proposalValue(input.saleTypes)) } : {};
       if (open) { await tx.update(opportunities).set({ stage, services: input.services ?? open.services, lastActivityAt: now, ...(stage !== open.stage ? { stageChangedAt: now } : {}), ...(nosOp ? { nosOp } : {}), ...value }).where(eq(opportunities.id, open.id)); return open.id; }
       const [o] = await tx.insert(opportunities).values({ companyId: co.id, ownerId: co.ownerId ?? user.id, stage, services: input.services ?? null, nosOp: nosOp ?? null, ...value }).returning({ id: opportunities.id });
       return o!.id;
@@ -366,9 +368,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       case "interested": case "proposal_sent": case "negotiating": {
         const stage = outcome.effect === "interested" ? "interest" : outcome.effect === "proposal_sent" ? "proposal" : "negotiation";
         const oppId = await opportunity(stage);
-        await task("Ligar", nextWorkingMoment(new Date(input.at!)), input.nextAction!.trim(), co.ownerId ?? user.id, oppId);
+        if (input.at && input.nextAction?.trim()) await task("Ligar", nextWorkingMoment(new Date(input.at)), input.nextAction.trim(), co.ownerId ?? user.id, oppId);
         await setEntry({ status: "done" });
-        summary.push("Oportunidade e tarefa de seguimento criadas");
+        summary.push(input.at ? "Oportunidade e tarefa de seguimento criadas" : "Oportunidade criada");
         break;
       }
       case "sale": {

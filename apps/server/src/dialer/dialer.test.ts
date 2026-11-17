@@ -120,14 +120,16 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await (await nextEntry(db, toPublic(ana), campaignId)); // garante a fila
     await expect(call(ana, { outcomeId: "sale" })).rejects.toThrow(/OP/);
     await (await nextEntry(db, toPublic(ana), campaignId));
-    await expect(call(ana, { outcomeId: "sale", opCode: "7590457", saleTypes: { XSell: 10, Upsell: 5 } })).rejects.toThrow(/XSell e Upsell/);
-    await (await nextEntry(db, toPublic(ana), campaignId));
-    const { n: n3, r } = await call(ana, { outcomeId: "sale", opCode: "7590457", saleTypes: { NN: 129 } });
+    // Venda (17 nov): no resultado só a OP; os tipos e o valor pedem-se ao «Guardar e fechar».
+    const { n: n3, r } = await call(ana, { outcomeId: "sale", opCode: "7590457" });
     expect(r.summary).toContain("Empresa conquistada para a sua carteira");
     // Venda: a OP fica na oportunidade e começa o tempo «Em cliente».
     expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n3.company.id)))[0]).toMatchObject({ stage: "won", nosOp: "7590457" });
     expect((await daySummary(db, ana.id)).client).toMatchObject({ kind: "sale", opCode: "7590457" });
-    await endClient(db, toPublic(ana));
+    await expect(endClient(db, toPublic(ana))).rejects.toThrow(/dados da proposta/);
+    await expect(endClient(db, toPublic(ana), { saleTypes: { XSell: 10, Upsell: 5 } })).rejects.toThrow(/XSell e Upsell/);
+    await endClient(db, toPublic(ana), { saleTypes: { NN: 129 } });
+    expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n3.company.id)))[0]).toMatchObject({ proposedValue: "129.00", saleTypes: { NN: 129 } });
     expect((await db.query.companies.findFirst({ where: eq(companies.id, n3.company.id) }))!.ownerId).toBe(ana.id);
     expect((await db.select().from(walletChanges).where(eq(walletChanges.companyId, n3.company.id)))[0]!.kind).toBe("conquest");
   });

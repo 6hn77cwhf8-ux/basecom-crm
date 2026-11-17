@@ -1,8 +1,8 @@
-import { callbackLimit, operatorRefusalNote, proposalPoints, quickCallbackAt, saleTypesError, SALE_KINDS, type QuickCallback, type SaleKind } from "@basecom/shared";
+import { callbackLimit, operatorRefusalNote, quickCallbackAt, saleTypesError, type QuickCallback } from "@basecom/shared";
 import { useEffect, useMemo, useState } from "react";
 import type { Catalogs, Outcome, Reason, ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
-import { OpField, opValid } from "./ClientWork";
+import { OpField, opValid, SaleTypesPicker, typesToNumbers, type TypesDraft } from "./ClientWork";
 import { DatePicker } from "./DatePicker";
 
 export const GROUPS = [
@@ -46,7 +46,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [kind, setKind] = useState<"NC" | "FC" | null>(null);
   const [op, setOp] = useState("");
   // Tipos de venda e valor de cada um (€/mês): até 2 (FID + XSell ou FID + Upsell; NN sozinho).
-  const [types, setTypes] = useState<Partial<Record<SaleKind, string>>>({});
+  const [types, setTypes] = useState<TypesDraft>({});
   const [now, setNow] = useState(Date.now());
   useEffect(() => { setOutcome(options.length === 1 ? options[0]! : null); setReason(null); }, [group]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -58,14 +58,16 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
   // NC/FC só quando houve conversa (num «Não atendeu» não se pede).
   const askKind = needsKind && !!outcome && !["no_answer", "busy", "voicemail", "wrong_number"].includes(outcome.effect);
-  const needsAt = eff === "call_later" || eff === "interested" || eff === "proposal_sent" || eff === "negotiating" || reason?.effect === "other";
+  // Proposta enviada e Venda (17 nov): só a OP; o resto pede-se no «Guardar e fechar» do Em cliente.
+  const needsAt = eff === "call_later" || eff === "interested" || eff === "negotiating" || reason?.effect === "other";
   // Proposta enviada e Venda fechada: OP obrigatória e, ao guardar, começa o tempo «Em cliente».
   const workKind = eff === "proposal_sent" ? "proposal" : eff === "sale" ? "sale" : null;
-  const saleTypes = Object.fromEntries(Object.entries(types).map(([k, v]) => [k, Number(String(v).replace(",", ".")) || 0])) as Partial<Record<SaleKind, number>>;
-  const typesErr = workKind ? saleTypesError(saleTypes) : null;
-  const points = workKind && !typesErr ? proposalPoints(saleTypes, kind ?? walletKind ?? "NC") : 0;
+  // Em negociação: tipos e valor obrigatórios (sem valor não se contabiliza).
+  const withTypes = eff === "negotiating";
+  const saleTypes = typesToNumbers(types);
+  const typesErr = withTypes ? saleTypesError(saleTypes) : null;
   const ready = !typesErr && (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
-    && (eff !== "call_later" || !!at) && (!["interested", "proposal_sent", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
+    && (eff !== "call_later" || !!at) && (!["interested", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
 
   const nextContact = useMemo(() => {
     if (!reason) return null;
@@ -83,7 +85,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       forMe: eff === "call_later" ? forMe : undefined, nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
       decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
       opCode: workKind ? op : undefined,
-      saleTypes: workKind ? saleTypes : undefined,
+      saleTypes: withTypes ? saleTypes : undefined,
     });
   }
   useEffect(() => {
@@ -144,7 +146,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       {eff === "decisor_absent" && <Field label="Nome do decisor (se souber)"><input style={input} value={decisorName} onChange={(e) => setDecisorName(e.target.value)} /></Field>}
       {needsAt && (
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          {["interested", "proposal_sent", "negotiating"].includes(eff ?? "") && <Field label="Próxima ação"><input style={{ ...input, width: 300 }} value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="Ex.: enviar proposta 4P" /></Field>}
+          {["interested", "negotiating"].includes(eff ?? "") && <Field label="Próxima ação"><input style={{ ...input, width: 300 }} value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="Ex.: enviar proposta 4P" /></Field>}
           {/* Callback (17 nov): atalhos e calendário só até ao limite (1 mês, configurável). */}
           {eff === "call_later" && (
             <div role="group" aria-label="Atalhos" style={{ display: "flex", gap: 6, flexBasis: "100%" }}>
@@ -164,41 +166,19 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
           {eff === "call_later" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, paddingBottom: 8 }}><input type="checkbox" checked={forMe} onChange={(e) => setForMe(e.target.checked)} /> Agendar para mim</label>}
         </div>
       )}
-      {(eff === "proposal_sent" || eff === "negotiating") && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
-      {workKind && (
-        <div role="group" aria-label="Tipo de venda" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Tipo de venda · até 2 (FID + XSell ou FID + Upsell)</span>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {SALE_KINDS.map((k) => {
-              const on = types[k] !== undefined;
-              const chosen = Object.keys(types) as SaleKind[];
-              const blocked = !on && (chosen.length >= 2 || (k === "NN" && chosen.length > 0) || chosen.includes("NN") || (k === "XSell" && chosen.includes("Upsell")) || (k === "Upsell" && chosen.includes("XSell")) || (chosen.length === 1 && k !== "FID" && chosen[0] !== "FID"));
-              const hint = k === "NN" ? "Cliente novo · sozinho" : k === "FID" ? "Renovação · mensalidade (€/mês)" : "Só o aumento da mensalidade (€/mês)";
-              return (
-                <div key={k} style={{ display: "grid", gridTemplateColumns: "120px 1fr 120px", gap: 10, alignItems: "center", padding: "6px 10px", borderRadius: 10, border: `1px solid ${on ? c.ink : c.line}`, background: on ? c.surface : c.card }}>
-                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 700, color: blocked ? c.muted : c.ink }}>
-                    <input type="checkbox" checked={on} disabled={blocked} onChange={(e) => setTypes((t) => { const n = { ...t }; if (e.target.checked) n[k] = ""; else delete n[k]; return n; })} /> {k}
-                  </label>
-                  <span style={{ fontSize: 12, color: c.muted, fontWeight: 400 }}>{hint}</span>
-                  {on ? <input aria-label={`Valor ${k}`} inputMode="decimal" value={types[k]} onChange={(e) => setTypes((t) => ({ ...t, [k]: e.target.value.replace(/[^0-9,.]/g, "") }))} placeholder="0,00" style={{ ...input, height: 34, textAlign: "right", fontWeight: 700 }} /> : <span />}
-                </div>
-              );
-            })}
-            {points > 0 && <span role="status" style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, height: 34, padding: "0 12px", borderRadius: 999, background: c.brandSoft, fontSize: 14, fontWeight: 800 }}><span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: c.brand }} />+ {points.toLocaleString("pt-PT")} pontos com esta proposta</span>}
-          </div>
-        </div>
-      )}
+      {eff === "negotiating" && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
+      {withTypes && <SaleTypesPicker types={types} setTypes={setTypes} walletKind={kind ?? walletKind ?? "NC"} />}
       {workKind && (
         <div style={{ border: `2px solid ${c.brand}`, background: c.brandSoft, borderRadius: 14, padding: "14px 16px", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
           <OpField value={op} onChange={setOp} />
-          <span style={{ flex: "1 1 260px", fontSize: 13, lineHeight: "20px" }}>Ao guardar, os 15 s param e começa o tempo «Em cliente», sem limite, para fazer a {workKind === "sale" ? "venda" : "proposta"}. A oportunidade fica com esta OP.</span>
+          <span style={{ flex: "1 1 260px", fontSize: 14, lineHeight: "21px" }}>Só precisa da OP agora. Fica logo em pausa («Em cliente»); os tipos, o valor{workKind === "proposal" ? ", o canal e a próxima ação" : ""} preenchem-se no fim, em «Guardar e fechar».</span>
         </div>
       )}
-      {eff === "sale" && <p style={{ margin: 0, fontSize: 13, padding: "8px 12px", background: c.okSoft, borderRadius: 10 }}>A empresa passa para a sua carteira (se ainda não tiver responsável). O registo das linhas e dos serviços vendidos chega com o módulo de Vendas (Arranque B).</p>}
+      {eff === "sale" && <p style={{ margin: 0, fontSize: 13, padding: "8px 12px", background: c.okSoft, borderRadius: 10 }}>A empresa passa para a sua carteira (se ainda não tiver responsável).</p>}
 
-      <Field label={reason?.effect === "other" ? "Comentários (obrigatório no motivo «Outro»)" : "Comentários"}>
+      {!workKind && <Field label={reason?.effect === "other" ? "Comentários (obrigatório no motivo «Outro»)" : "Comentários"}>
         <textarea style={{ ...input, height: 64, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} />
-      </Field>
+      </Field>}
 
       {askKind && (
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 12px", background: c.warnSoft, borderRadius: 10 }}>
@@ -207,7 +187,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         </div>
       )}
 
-      {!byOperator && <details>
+      {!byOperator && !workKind && <details>
         <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Feedback de outra operadora</summary>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
           <Field label="Operadora atual"><div style={{ display: "flex", gap: 4 }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: comp.operator === o ? undefined : o })}>{o}</button>)}</div></Field>
@@ -222,7 +202,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <button style={btn} onClick={onBack}>← {backLabel ?? "Voltar ao script"}</button>
         <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {live && <button style={{ ...btnDark, height: 44, background: "#D70015", borderColor: "#D70015" }} onClick={live.onHangUp}>Desligar</button>}
-          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? "Desligar e guardar ⏎" : workKind ? `Guardar e começar ${workKind === "sale" ? "venda" : "proposta"} ⏎` : "Guardar resultado ⏎"}</button>
+          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? "Desligar e guardar ⏎" : workKind ? `Começar ${workKind === "sale" ? "venda" : "proposta"} · fica em pausa ⏎` : "Guardar resultado ⏎"}</button>
         </span>
       </footer>
     </section>

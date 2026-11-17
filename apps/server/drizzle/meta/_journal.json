@@ -162,6 +162,13 @@
       "when": 1794914426391,
       "tag": "0022_tema_e_foto",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794933848646,
+      "tag": "0023_canal_da_proposta",
+      "breakpoints": true
     }
   ]
 }

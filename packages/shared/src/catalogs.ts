@@ -79,9 +79,11 @@ export const DEFAULT_REASONS: Reason[] = [
 ];
 
 /** Oportunidades (3.2 e 3.3). */
-export type OpportunityRules = { warnDays: number; lateDays: number; lostReopenDays: number; docsTaskDays?: number };
+export type OpportunityRules = { warnDays: number; lateDays: number; lostReopenDays: number; docsTaskDays?: number; channels?: string[] };
 /** docsTaskDays (17 nov): ao fim de X dias em «Aguarda docs», tarefa automática «Pedir documentos». */
-export const DEFAULT_OPPORTUNITY_RULES: OpportunityRules = { warnDays: 5, lateDays: 7, lostReopenDays: 180, docsTaskDays: 2 };
+/** Canais de envio da proposta (17 nov 2026). */
+export const DEFAULT_PROPOSAL_CHANNELS = ["Email", "WhatsApp", "SMS", "Em chamada", "Presencial"];
+export const DEFAULT_OPPORTUNITY_RULES: OpportunityRules = { warnDays: 5, lateDays: 7, lostReopenDays: 180, docsTaskDays: 2, channels: DEFAULT_PROPOSAL_CHANNELS };
 
 /** Tipos de tarefa (7). */
 export const DEFAULT_TASK_TYPES = ["Ligar", "Enviar proposta", "Pedir documentos", "Seguir pendência", "Responder a solicitação", "Reunião", "Outro"];

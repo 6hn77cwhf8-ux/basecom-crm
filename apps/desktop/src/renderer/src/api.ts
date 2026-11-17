@@ -34,7 +34,9 @@ export type CompanyDetail = {
 };
 export type Outcome = { id: string; label: string; group: "refuse" | "callback" | "noanswer" | "proposal" | "sale" | "other"; effect: string; active: boolean };
 export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other"; days?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; active: boolean };
-export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[] }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
+/** «Guardar e fechar» do Em cliente (17 nov): tipos e valor; na proposta, canal, próxima ação e data. */
+export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; nextAction?: string; at?: string; comment?: string };
+export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[]; opportunities?: { channels?: string[] } }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
 export type DialerEntry = {
   entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };
   campaign: { id: string; name: string; mode: "new" | "current"; dialMode: "power" | "preview" };
@@ -206,7 +208,7 @@ export const api = {
   heartbeat: () => call<{ state: WorkState }>("/time/heartbeat", { method: "POST", body: "{}" }),
   setWorkState: (state: WorkState, userId?: string) => call<DaySummary>("/time/state", { method: "POST", body: JSON.stringify({ state, userId }) }),
   startClient: (b: { companyId: string; kind: WorkKind; opCode: string }) => call<DaySummary>("/time/client", { method: "POST", body: JSON.stringify(b) }).then(workChanged),
-  endClient: () => call<DaySummary>("/time/client/end", { method: "POST", body: "{}" }).then(workChanged),
+  endClient: (d: CloseClient) => call<DaySummary>("/time/client/end", { method: "POST", body: JSON.stringify(d) }).then(workChanged),
   today: (userId?: string) => call<DaySummary>(`/time/today${userId ? `?userId=${userId}` : ""}`),
   teamTime: () => call<{ people: (DaySummary & { id: string; name: string; role: Role; incoming: IncomingStats })[] }>("/time/team").then((r) => r.people),
   /** Descarrega o Excel do ponto (o pedido leva a sessão; o ficheiro é guardado pelo navegador). */
