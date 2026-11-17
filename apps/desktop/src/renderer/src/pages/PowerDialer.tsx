@@ -373,7 +373,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
             <span style={{ fontSize: 40, fontWeight: 800 }}>{left}</span>
             <span style={{ fontSize: 14 }}>Próxima empresa em {left} s</span>
             <button style={btnDark} onClick={() => load(true)}>Ligar já</button>
-          </> : <span style={{ fontSize: 16, fontWeight: 600 }}>Em pausa: carregue em «A trabalhar» para continuar.</span>}
+          </> : <span style={{ fontSize: 16, fontWeight: 600 }}>Em pausa: a próxima empresa é marcada quando voltar a «A trabalhar».</span>}
         </section>
       )}
 

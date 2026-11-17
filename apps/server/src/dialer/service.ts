@@ -363,7 +363,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
           await tx.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.campaignId, kId), eq(campaignEntries.companyId, co.id), eq(campaignEntries.status, "pending")));
           await tx.insert(campaignEntries).values({ campaignId: kId, companyId: co.id, assignedTo: user.id, nextAt: at, lastOutcome: "call_later", lastAttemptAt: now });
         }
-        summary.push(`Callback ${at.toISOString()}`);
+        summary.push(`Callback ${at.toLocaleString("pt-PT", { timeZone: "Europe/Lisbon", weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`);
         break;
       }
       case "not_interested": {
