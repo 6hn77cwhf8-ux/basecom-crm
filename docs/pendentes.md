@@ -47,3 +47,26 @@ Aprovado também:
 - **Botão «Copiar» no NIF e na OP** onde aparecem (ficha, Ligar, Em cliente, oportunidades). Sem link para a extranet (o endereço da OP não traz o número).
 
 Fora: lista «Prontos para FID» (já se faz com os filtros de campanha).
+
+## Alterações de 17/11/2026 (tarde) — docx «Alterações ao CRM Basecom»
+
+Desenhos 13 a 17 em https://claude.ai/artifact/U2NSSE9SRcvhQhsumFExEu (por aprovar).
+
+Decidido:
+- Cartão de chamada flutuante em todas as páginas, com **Mute**, Voltar e Desligar (desenho 13).
+- Valor da proposta obrigatório (Proposta enviada, Em negociação, Venda).
+- Proposta em 2 passos: só a OP → «Em cliente»; «Guardar e fechar» pede tipos, valor, canal, próxima ação; depois **volta ao Ligar normalmente** (desenhos 15 e 16).
+- Canal de envio obrigatório: Email, WhatsApp, SMS, Em chamada, Presencial (configurável).
+- Formação: Chefe de Equipa/Administrador põem e **tiram**; o comercial não sai sozinho; ao tirar recomeçam os 10 s.
+- Terminar sessão por cima do nome.
+- Ecrã «Chamadas recebidas» (não atendidas, incluindo durante outra chamada); carregar no número abre a(s) empresa(s) (desenho 14).
+- Chamada recebida atendida abre janela igual à das chamadas da ficha (desenho 17).
+- Números (badges) no menu: Agenda, Ligar (não atendidas), Pendências, Solicitações, Oportunidades.
+- Assinatura do comercial no WhatsApp (à espera das assinaturas).
+- RGPD fica como está.
+- Callbacks saem da Agenda e voltam à fila do mesmo comercial à hora marcada, em qualquer campanha (opção a).
+- iPhone: opção pessoal «Ligar pelo computador» (FaceTime do Mac) só no login do Leonardo.
+- Foto do avatar dava «Não foi possível ler a imagem» (CSP bloqueava blob:) — corrigido.
+
+Por decidir:
+- Chamadas iniciadas e desligadas logo (contam no rating e reiniciam os tempos).
