@@ -82,7 +82,7 @@ describe.skipIf(!url)("estados e registo de ponto", () => {
     const d = await daySummary(db, bia.id);
     expect(d.ponto.entrada).not.toBeNull();
     expect(d.ponto.expectedSeconds).toBeGreaterThanOrEqual(0);
-    await expect(pontoRows(db, toPublic(ana), "2026-11-01", "2026-11-02")).rejects.toThrow(/exportam/);
+    await expect(pontoRows(db, toPublic(ana), "2026-11-01", "2026-11-02")).rejects.toThrow(/Administrador/);
     const today = lisbonDay(new Date());
     const rows = await pontoRows(db, toPublic(admin), today, today);
     expect(rows.some((r) => r.name === `bia ${tag}`)).toBe(true);

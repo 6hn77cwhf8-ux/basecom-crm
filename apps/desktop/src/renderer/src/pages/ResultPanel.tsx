@@ -31,7 +31,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [comment, setComment] = useState("");
   const [date, setDate] = useState("");
   const [at, setAt] = useState("");
-  const [forMe, setForMe] = useState(true);
+  const [forMe, setForMe] = useState(false);
   const [nextAction, setNextAction] = useState("");
   const [services, setServices] = useState("");
   const [decisorName, setDecisorName] = useState("");
@@ -92,7 +92,6 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         {live ? (
           <div style={{ textAlign: "right", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
             <span style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#1E6F33" }}>{String(Math.floor(live.secs / 60)).padStart(2, "0")}:{String(live.secs % 60).padStart(2, "0")}</span>
-            <button style={{ ...btnDark, height: 36, background: "#D70015", borderColor: "#D70015" }} onClick={live.onHangUp}>Desligar</button>
           </div>
         ) : (
           <div role="timer" style={{ textAlign: "right" }}>
@@ -171,8 +170,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       <footer style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
         <button style={btn} onClick={onBack}>← {backLabel ?? "Voltar ao script"}</button>
         <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          {live?.queued && <span role="status" style={{ fontSize: 13, color: "#1E6F33", fontWeight: 600 }}>Pronto: grava sozinho quando a chamada acabar.</span>}
-          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? (live.queued ? "Atualizar ⏎" : "Guardar no fim da chamada ⏎") : workKind ? `Guardar e começar ${workKind === "sale" ? "venda" : "proposta"} ⏎` : "Guardar resultado ⏎"}</button>
+          {live && <button style={{ ...btnDark, height: 44, background: "#D70015", borderColor: "#D70015" }} onClick={live.onHangUp}>Desligar</button>}
+          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? "Desligar e guardar ⏎" : workKind ? `Guardar e começar ${workKind === "sale" ? "venda" : "proposta"} ⏎` : "Guardar resultado ⏎"}</button>
         </span>
       </footer>
     </section>

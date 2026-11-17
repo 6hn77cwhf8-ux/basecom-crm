@@ -119,7 +119,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
 
   async function save(r: ResultInput) {
     if (!callId) return;
-    if (live) { pendingRef.current = r; setQueued(true); return; }
+    if (live) { pendingRef.current = r; setQueued(true); hangUpLive(); return; }
     setBusy(true); setError("");
     try {
       // Decisor mudado na abertura: fica registado no histórico da empresa.

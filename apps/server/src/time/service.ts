@@ -199,9 +199,9 @@ function expectedMinutes(day: string, lim: { dailyMinutes?: number; saturdayMinu
   return wd === 0 ? 0 : wd === 6 ? lim.saturdayMinutes ?? 255 : lim.dailyMinutes ?? 480;
 }
 
-/** Exportar o ponto: uma linha por pessoa e por dia (entrada, almoço, saída, presença, saldo, intervalo, formação). */
+/** Exportar o ponto (decisão de 16 nov): só o Administrador; uma linha por pessoa e por dia. */
 export async function pontoRows(db: Db, actor: PublicUser, from: string, to: string) {
-  if (actor.role === "sales") throw new AuthError(403, "Só o Chefe de Equipa (a sua equipa) e o Administrador exportam o ponto.");
+  if (actor.role !== "admin") throw new AuthError(403, "Só o Administrador exporta o ponto.");
   const v = await visibleUserIds(db, actor);
   const people = await db.select({ id: users.id, name: users.name }).from(users).where(and(sql`${users.role} <> 'admin'`, v === null ? sql`true` : inArray(users.id, v))).orderBy(users.name);
   const rows: { day: string; name: string; d: Awaited<ReturnType<typeof daySummary>> }[] = [];

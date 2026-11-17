@@ -38,7 +38,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
 
   async function save(r: ResultInput) {
     if (!call) return;
-    if (endedAt === null) { pending.current = r; setQueued(true); return; }
+    if (endedAt === null) { pending.current = r; setQueued(true); hangUp(); return; }
     setBusy(true); setError("");
     try { await api.saveResult(call.id, r); onSaved(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }

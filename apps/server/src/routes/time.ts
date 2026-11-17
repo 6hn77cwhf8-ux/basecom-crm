@@ -5,7 +5,6 @@ import { requireAuth } from "./auth.js";
 import { AuthError } from "../auth/service.js";
 import { daySummary, endClient, heartbeat, pontoRows, setState, startClient, teamToday } from "../time/service.js";
 import ExcelJS from "exceljs";
-import { fmtBalance } from "@basecom/shared";
 import { canSee } from "../teams/service.js";
 
 /** Estados (A trabalhar, Formação, Intervalo, Mudança de campanha) e ponto. */
@@ -37,22 +36,32 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
     const rows = await pontoRows(db, req.user!, q.from, q.to);
     const hm = (d: Date | string | null) => (d ? new Date(d).toLocaleTimeString("pt-PT", { timeZone: "Europe/Lisbon", hour: "2-digit", minute: "2-digit" }) : "");
     const hhmm = (s: number) => `${Math.floor(s / 3600)}:${String(Math.round((s % 3600) / 60)).padStart(2, "0")}`;
+    // Uma folha por comercial; só o tempo de login (entrada até saída, sem o almoço); totais de dias e horas no fim.
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet("Ponto");
-    ws.columns = [
-      { header: "Data", key: "day", width: 12 }, { header: "Comercial", key: "name", width: 24 },
-      { header: "Entrada", key: "in", width: 10 }, { header: "Saída almoço", key: "lo", width: 13 }, { header: "Regresso almoço", key: "li", width: 15 },
-      { header: "Saída", key: "out", width: 10 }, { header: "Presença", key: "pres", width: 10 }, { header: "Previsto", key: "exp", width: 10 },
-      { header: "Saldo", key: "bal", width: 10 }, { header: "Intervalo", key: "brk", width: 10 }, { header: "Formação", key: "trn", width: 10 },
-      { header: "Em cliente", key: "cli", width: 11 }, { header: "Office", key: "off", width: 10 }, { header: "Apoio", key: "sup", width: 10 },
-    ];
-    ws.getRow(1).font = { bold: true };
-    for (const r of rows) {
-      const p = r.d.ponto;
-      ws.addRow({ day: r.day.split("-").reverse().join("/"), name: r.name, in: hm(p.entrada), lo: hm(p.saidaAlmoco), li: hm(p.regressoAlmoco), out: hm(p.saida),
-        pres: hhmm(p.presenceSeconds), exp: hhmm(p.expectedSeconds), bal: fmtBalance(p.balanceSeconds), brk: hhmm(r.d.seconds.break), trn: hhmm(r.d.seconds.training),
-        cli: hhmm(r.d.seconds.client), off: hhmm(r.d.seconds.office), sup: hhmm(r.d.seconds.support) });
+    const byName = new Map<string, typeof rows>();
+    for (const r of rows) byName.set(r.name, [...(byName.get(r.name) ?? []), r]);
+    const used = new Set<string>();
+    for (const [name, list] of byName) {
+      let sheetName = name.replace(/[\\/?*[\]:]/g, " ").slice(0, 31).trim() || "Comercial";
+      for (let k = 2; used.has(sheetName); k++) sheetName = `${sheetName.slice(0, 28)} ${k}`;
+      used.add(sheetName);
+      const ws = wb.addWorksheet(sheetName);
+      ws.columns = [
+        { header: "Data", key: "day", width: 12 }, { header: "Entrada", key: "in", width: 10 }, { header: "Saída almoço", key: "lo", width: 13 },
+        { header: "Regresso almoço", key: "li", width: 15 }, { header: "Saída", key: "out", width: 10 }, { header: "Tempo de login", key: "pres", width: 15 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      let total = 0;
+      for (const r of list) {
+        const p = r.d.ponto;
+        total += p.presenceSeconds;
+        ws.addRow({ day: r.day.split("-").reverse().join("/"), in: hm(p.entrada), lo: hm(p.saidaAlmoco), li: hm(p.regressoAlmoco), out: hm(p.saida), pres: hhmm(p.presenceSeconds) });
+      }
+      ws.addRow({});
+      ws.addRow({ day: "Dias de trabalho", pres: list.length }).font = { bold: true };
+      ws.addRow({ day: "Total de horas", pres: hhmm(total) }).font = { bold: true };
     }
+    if (!byName.size) wb.addWorksheet("Ponto").addRow(["Sem registos neste período."]);
     const buf = await wb.xlsx.writeBuffer();
     reply.header("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     reply.header("content-disposition", `attachment; filename="ponto_${q.from}_${q.to}.xlsx"`);

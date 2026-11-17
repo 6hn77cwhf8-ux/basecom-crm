@@ -70,7 +70,7 @@ export function Team({ me }: { me: User }) {
         </table>
       </section>
       <p style={{ margin: 0, fontSize: 12, color: c.muted }}>Desativar não apaga o histórico; termina as sessões abertas. Cada alteração fica na auditoria.</p>
-      {me.role !== "sales" && <Ponto />}
+      {me.role !== "sales" && <Ponto canExport={isAdmin} />}
     </>
   );
 }
@@ -107,7 +107,7 @@ function NewUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (wh
  * Ponto · hoje: o almoço é reconhecido pela saída e reentrada no CRM; presença = manhã + tarde; saldo face às horas previstas
  * (Configurações → Limites de tempo). O Chefe de Equipa vê a sua equipa; o Administrador toda a estrutura.
  */
-function Ponto() {
+function Ponto({ canExport }: { canExport: boolean }) {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof api.teamTime>> | null>(null);
   const [error, setError] = useState("");
   const today = new Date().toISOString().slice(0, 10);
@@ -124,9 +124,12 @@ function Ponto() {
           <b style={{ fontSize: 16 }}>Ponto · hoje</b>
           <p style={{ margin: "2px 0 0", fontSize: 13, color: c.muted }}>Entrada e saída pelo login. Ao sair para almoço, saia do CRM; ao voltar, entre de novo. Saldo face às horas previstas do dia (Configurações → Limites de tempo).</p>
         </div>
+        {/* Exportar o ponto: só o Administrador (uma folha por comercial, tempo de login e totais). */}
+        {canExport && <>
         <input type="date" aria-label="De" style={{ ...input, height: 34, width: 150 }} value={from} onChange={(e) => setFrom(e.target.value)} />
         <input type="date" aria-label="Até" style={{ ...input, height: 34, width: 150 }} value={to} onChange={(e) => setTo(e.target.value)} />
         <button style={{ ...btn, height: 34 }} onClick={() => api.exportPonto(from, to).catch((e) => setError(e.message))}>Exportar Excel</button>
+        </>}
       </div>
       <ErrorText>{error}</ErrorText>
       <div style={{ overflow: "auto" }}>
