@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
-import { companies, opportunities, users, walletChanges } from "../db/schema.js";
+import { companies, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
-import { createOpportunity, listOpportunities, logOpportunityActivity, loseOpportunity, moveOpportunity, winOpportunity } from "./service.js";
+import { createOpportunity, docsReminders, listOpportunities, logOpportunityActivity, loseOpportunity, moveOpportunity, openProposalPoints, winOpportunity } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -60,5 +60,22 @@ describe.skipIf(!url)("Oportunidades", () => {
     await loseOpportunity(db, toPublic(ana), lost2.id, "price");
     const days = (new Date((await db.query.companies.findFirst({ where: eq(companies.id, c3) }))!.campaignEligibleFrom!).getTime() - Date.now()) / 86_400_000;
     expect(Math.round(days)).toBeGreaterThanOrEqual(89); // motivo «Preço»: 90 dias
+  });
+
+  it("«Aguarda docs» há 2 dias cria uma única tarefa «Pedir documentos»; a previsão de pontos soma as propostas abertas", async () => {
+    const c = await co(9);
+    const o = await createOpportunity(db, toPublic(ana), { companyId: c });
+    await moveOpportunity(db, toPublic(ana), o.id, "documents");
+    expect(await docsReminders(db, ana.id)).toBe(0); // ainda não passaram 2 dias
+    await db.update(opportunities).set({ stageChangedAt: new Date(Date.now() - 2 * 86_400_000 - 60_000) }).where(eq(opportunities.id, o.id));
+    expect(await docsReminders(db, ana.id)).toBe(1);
+    expect(await docsReminders(db, ana.id)).toBe(0); // não repete
+    const [t] = await db.select().from(tasks).where(eq(tasks.opportunityId, o.id));
+    expect(t).toMatchObject({ type: "Pedir documentos", assignedTo: ana.id });
+
+    const before = await openProposalPoints(db, ana.id);
+    await db.update(opportunities).set({ saleTypes: { FID: 129.9, XSell: 35.5 } }).where(eq(opportunities.id, o.id));
+    expect(await openProposalPoints(db, ana.id)).toBe(before + 236);
+    await db.delete(tasks).where(eq(tasks.opportunityId, o.id));
   });
 });

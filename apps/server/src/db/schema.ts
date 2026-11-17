@@ -308,6 +308,12 @@ export const opportunities = pgTable("opportunities", {
   lostReasonId: text("lost_reason_id"),
   /** Código da oportunidade no programa da NOS (7 algarismos). */
   nosOp: text("nos_op"),
+  /** Tipos de venda e valor de cada um em €/mês (até 2: FID + XSell ou FID + Upsell; NN sozinho). */
+  saleTypes: jsonb("sale_types").$type<Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>>(),
+  /** Valor proposto (€/mês) para o Pipeline: soma dos valores por tipo. */
+  proposedValue: numeric("proposed_value", { precision: 12, scale: 2 }),
+  /** Quando entrou na etapa atual (lembrete automático em «Aguarda docs»). */
+  stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
   lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   closedAt: timestamp("closed_at", { withTimezone: true }),

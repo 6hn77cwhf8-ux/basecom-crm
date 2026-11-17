@@ -1,4 +1,4 @@
-import { callbackLimit, operatorRefusalNote, quickCallbackAt, type QuickCallback } from "@basecom/shared";
+import { callbackLimit, operatorRefusalNote, proposalPoints, quickCallbackAt, saleTypesError, SALE_KINDS, type QuickCallback, type SaleKind } from "@basecom/shared";
 import { useEffect, useMemo, useState } from "react";
 import type { Catalogs, Outcome, Reason, ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
@@ -23,7 +23,9 @@ const QUICK: [QuickCallback, string][] = [["1h", "1 hora"], ["1d", "1 dia"], ["1
  * Ecrã do resultado (maquetas «Resultado»): botões do grupo, opções, motivo, comentários e feedback de outra operadora.
  * Mostra o tempo que falta para registar (15 s por omissão); ultrapassar não bloqueia, mas fica registado.
  */
-export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, live, backLabel, onGroup, onBack, onSave }: {
+export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, walletKind, live, backLabel, onGroup, onBack, onSave }: {
+  /** NC/FC da empresa (FC conta 50 % na previsão de pontos). */
+  walletKind?: "NC" | "FC";
   backLabel?: string;
   /** Resultado aberto com a chamada ainda a decorrer no telemóvel: só grava quando a chamada acabar. */
   live?: { secs: number; queued: boolean; onHangUp: () => void };
@@ -43,6 +45,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [comp, setComp] = useState<{ operator?: string; text?: string }>({});
   const [kind, setKind] = useState<"NC" | "FC" | null>(null);
   const [op, setOp] = useState("");
+  // Tipos de venda e valor de cada um (€/mês): até 2 (FID + XSell ou FID + Upsell; NN sozinho).
+  const [types, setTypes] = useState<Partial<Record<SaleKind, string>>>({});
   const [now, setNow] = useState(Date.now());
   useEffect(() => { setOutcome(options.length === 1 ? options[0]! : null); setReason(null); }, [group]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -57,7 +61,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const needsAt = eff === "call_later" || eff === "interested" || eff === "proposal_sent" || eff === "negotiating" || reason?.effect === "other";
   // Proposta enviada e Venda fechada: OP obrigatória e, ao guardar, começa o tempo «Em cliente».
   const workKind = eff === "proposal_sent" ? "proposal" : eff === "sale" ? "sale" : null;
-  const ready = (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
+  const saleTypes = Object.fromEntries(Object.entries(types).map(([k, v]) => [k, Number(String(v).replace(",", ".")) || 0])) as Partial<Record<SaleKind, number>>;
+  const typesErr = workKind ? saleTypesError(saleTypes) : null;
+  const points = workKind && !typesErr ? proposalPoints(saleTypes, kind ?? walletKind ?? "NC") : 0;
+  const ready = !typesErr && (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
     && (eff !== "call_later" || !!at) && (!["interested", "proposal_sent", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
 
   const nextContact = useMemo(() => {
@@ -76,6 +83,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       forMe: eff === "call_later" ? forMe : undefined, nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
       decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
       opCode: workKind ? op : undefined,
+      saleTypes: workKind ? saleTypes : undefined,
     });
   }
   useEffect(() => {
@@ -157,6 +165,28 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         </div>
       )}
       {(eff === "proposal_sent" || eff === "negotiating") && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
+      {workKind && (
+        <Field label="Tipo de venda · até 2 (FID + XSell ou FID + Upsell)">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+            {SALE_KINDS.map((k) => {
+              const on = types[k] !== undefined;
+              const chosen = Object.keys(types) as SaleKind[];
+              const blocked = !on && (chosen.length >= 2 || (k === "NN" && chosen.length > 0) || chosen.includes("NN") || (k === "XSell" && chosen.includes("Upsell")) || (k === "Upsell" && chosen.includes("XSell")) || (chosen.length === 1 && k !== "FID" && chosen[0] !== "FID"));
+              const hint = k === "NN" ? "Cliente novo · sozinho" : k === "FID" ? "Renovação · mensalidade (€/mês)" : "Só o aumento da mensalidade (€/mês)";
+              return (
+                <div key={k} style={{ display: "grid", gridTemplateColumns: "120px 1fr 120px", gap: 10, alignItems: "center", padding: "6px 10px", borderRadius: 10, border: `1px solid ${on ? c.ink : c.line}`, background: on ? c.surface : c.card }}>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 700, color: blocked ? c.muted : c.ink }}>
+                    <input type="checkbox" checked={on} disabled={blocked} onChange={(e) => setTypes((t) => { const n = { ...t }; if (e.target.checked) n[k] = ""; else delete n[k]; return n; })} /> {k}
+                  </label>
+                  <span style={{ fontSize: 12, color: c.muted, fontWeight: 400 }}>{hint}</span>
+                  {on ? <input aria-label={`Valor ${k}`} inputMode="decimal" value={types[k]} onChange={(e) => setTypes((t) => ({ ...t, [k]: e.target.value.replace(/[^0-9,.]/g, "") }))} placeholder="0,00" style={{ ...input, height: 34, textAlign: "right", fontWeight: 700 }} /> : <span />}
+                </div>
+              );
+            })}
+            {points > 0 && <span role="status" style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, height: 34, padding: "0 12px", borderRadius: 999, background: c.brandSoft, fontSize: 14, fontWeight: 800 }}><span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: c.brand }} />+ {points.toLocaleString("pt-PT")} pontos com esta proposta</span>}
+          </div>
+        </Field>
+      )}
       {workKind && (
         <div style={{ border: `2px solid ${c.brand}`, background: c.brandSoft, borderRadius: 14, padding: "14px 16px", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
           <OpField value={op} onChange={setOp} />

@@ -12,7 +12,7 @@ const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${St
  * O resultado pode abrir durante a chamada sem desligar; só grava quando a chamada acabar.
  */
 export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
-  company: { id: string; name: string; nif: string }; contact: { id: string; value: string }; needsKind: boolean;
+  company: { id: string; name: string; nif: string; walletKind?: "NC" | "FC" }; contact: { id: string; value: string }; needsKind: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
   const [cat, setCat] = useState<Catalogs | null>(null);
@@ -92,7 +92,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
           </section>
         )}
         {resultOpen && cat && call && (
-          <ResultPanel cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt ?? Date.now()} needsKind={needsKind}
+          <ResultPanel walletKind={company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt ?? Date.now()} needsKind={needsKind}
             live={live ? { secs, queued, onHangUp: () => { hangUp(); } } : undefined}
             company={{ name: company.name, nif: company.nif, phone: formatPhone(contact.value) }}
             backLabel="Voltar à chamada" onBack={() => setResultOpen(false)} onSave={save} />

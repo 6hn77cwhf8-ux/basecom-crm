@@ -120,7 +120,9 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await (await nextEntry(db, toPublic(ana), campaignId)); // garante a fila
     await expect(call(ana, { outcomeId: "sale" })).rejects.toThrow(/OP/);
     await (await nextEntry(db, toPublic(ana), campaignId));
-    const { n: n3, r } = await call(ana, { outcomeId: "sale", opCode: "7590457" });
+    await expect(call(ana, { outcomeId: "sale", opCode: "7590457", saleTypes: { XSell: 10, Upsell: 5 } })).rejects.toThrow(/XSell e Upsell/);
+    await (await nextEntry(db, toPublic(ana), campaignId));
+    const { n: n3, r } = await call(ana, { outcomeId: "sale", opCode: "7590457", saleTypes: { NN: 129 } });
     expect(r.summary).toContain("Empresa conquistada para a sua carteira");
     // Venda: a OP fica na oportunidade e começa o tempo «Em cliente».
     expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n3.company.id)))[0]).toMatchObject({ stage: "won", nosOp: "7590457" });

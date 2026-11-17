@@ -79,8 +79,9 @@ export const DEFAULT_REASONS: Reason[] = [
 ];
 
 /** Oportunidades (3.2 e 3.3). */
-export type OpportunityRules = { warnDays: number; lateDays: number; lostReopenDays: number };
-export const DEFAULT_OPPORTUNITY_RULES: OpportunityRules = { warnDays: 5, lateDays: 7, lostReopenDays: 180 };
+export type OpportunityRules = { warnDays: number; lateDays: number; lostReopenDays: number; docsTaskDays?: number };
+/** docsTaskDays (17 nov): ao fim de X dias em «Aguarda docs», tarefa automática «Pedir documentos». */
+export const DEFAULT_OPPORTUNITY_RULES: OpportunityRules = { warnDays: 5, lateDays: 7, lostReopenDays: 180, docsTaskDays: 2 };
 
 /** Tipos de tarefa (7). */
 export const DEFAULT_TASK_TYPES = ["Ligar", "Enviar proposta", "Pedir documentos", "Seguir pendência", "Responder a solicitação", "Reunião", "Outro"];

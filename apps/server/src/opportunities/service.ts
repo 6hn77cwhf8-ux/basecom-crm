@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { NSNR, OPPORTUNITY_STAGES, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
+import { NSNR, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, companies, companyNotes, opportunities, tasks, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -20,7 +20,7 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
   if (opts.ownerId && visible && !visible.includes(opts.ownerId)) throw new AuthError(403, "Só vê as oportunidades da sua equipa.");
   const owners = opts.ownerId ? [opts.ownerId] : visible;
   const rules = (await getSetting(db, "catalogs")).opportunities as OpportunityRules;
-  const r = await db.execute(sql`select o.id, o.stage, o.services, o.nos_op as "nosOp", o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
+  const r = await db.execute(sql`select o.id, o.stage, o.services, o.nos_op as "nosOp", o.sale_types as "saleTypes", o.proposed_value as "proposedValue", o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
       o.lost_reason_id as "lostReasonId", o.company_id as "companyId", c.name as company, c.nif, c.l2b_monthly as "l2bMonthly", u.name as owner, o.owner_id as "ownerId",
       (select min(t.due_at) from tasks t where t.opportunity_id = o.id and t.status = 'open') as "nextTaskAt"
     from opportunities o join companies c on c.id = o.company_id join users u on u.id = o.owner_id
@@ -29,7 +29,7 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
     order by o.last_activity_at asc limit 1000`);
   const now = new Date();
   return (r.rows as Record<string, unknown>[]).map((o) => ({
-    ...(o as { id: string; stage: string; services: string | null; nosOp: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null }),
+    ...(o as { id: string; stage: string; services: string | null; nosOp: string | null; saleTypes: Record<string, number> | null; proposedValue: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null }),
     stageLabel: LABEL[o.stage as string] ?? (o.stage as string),
     alert: OPEN.includes(o.stage as string) ? opportunityAlert(new Date(o.lastActivityAt as string), now, rules) : null,
   }));
@@ -59,7 +59,7 @@ export async function createOpportunity(db: Db, user: PublicUser, input: { compa
 export async function moveOpportunity(db: Db, user: PublicUser, id: string, stage: string, comment?: string) {
   const o = await load(db, user, id);
   if (!OPEN.includes(stage)) throw new AuthError(400, "Para fechar, use «Ganha» ou «Perdida».");
-  await db.update(opportunities).set({ stage, lastActivityAt: new Date() }).where(eq(opportunities.id, id));
+  await db.update(opportunities).set({ stage, lastActivityAt: new Date(), ...(stage !== o.stage ? { stageChangedAt: new Date() } : {}) }).where(eq(opportunities.id, id));
   await note(db, o.companyId, user.id, `Oportunidade: ${LABEL[o.stage]} → ${LABEL[stage]}${comment?.trim() ? ` · ${comment.trim()}` : ""}`);
 }
 
@@ -120,4 +120,29 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
 export async function companyOpportunities(db: Db, companyId: string) {
   const rows = await db.select().from(opportunities).where(eq(opportunities.companyId, companyId)).orderBy(desc(opportunities.createdAt));
   return rows.map((o) => ({ ...o, stageLabel: LABEL[o.stage] ?? o.stage }));
+}
+
+/**
+ * «Aguarda docs» (17 nov): ao fim de X dias (2 por omissão) nessa etapa, cria uma única tarefa «Pedir documentos»
+ * para o responsável, com a indicação de enviar o lembrete ao cliente. Corre no sinal de vida de cada pessoa.
+ */
+export async function docsReminders(db: Db, userId: string, now = new Date()) {
+  const cat = await getSetting(db, "catalogs");
+  const days = (cat.opportunities as OpportunityRules).docsTaskDays ?? 2;
+  const since = new Date(now.getTime() - days * 86_400_000);
+  const due = await db.execute(sql`select o.id, o.company_id as "companyId", o.owner_id as "ownerId" from opportunities o
+    where o.owner_id = ${userId}::uuid and o.stage = 'documents' and o.stage_changed_at <= ${since}
+      and not exists (select 1 from tasks t where t.opportunity_id = o.id and t.type = 'Pedir documentos' and t.created_at >= o.stage_changed_at)`);
+  for (const o of due.rows as { id: string; companyId: string; ownerId: string }[]) {
+    await db.insert(tasks).values({ companyId: o.companyId, type: "Pedir documentos", assignedTo: o.ownerId, dueAt: nextWorkingMoment(now), origin: "opportunity", opportunityId: o.id,
+      description: `Automático: ${days} dias em «Aguarda docs». Enviar lembrete ao cliente (Mensagem › Lembrete de documentos).` });
+  }
+  return due.rows.length;
+}
+
+/** Previsão de pontos das propostas abertas de uma pessoa (tipos e valores indicados; FC a 50 %). */
+export async function openProposalPoints(db: Db, userId: string) {
+  const r = await db.execute(sql`select o.sale_types as "saleTypes", c.wallet_kind as "walletKind" from opportunities o join companies c on c.id = o.company_id
+    where o.owner_id = ${userId}::uuid and o.stage not in ('won', 'lost') and o.sale_types is not null`);
+  return (r.rows as { saleTypes: SaleTypes; walletKind: "NC" | "FC" }[]).reduce((a, x) => a + proposalPoints(x.saleTypes, x.walletKind), 0);
 }

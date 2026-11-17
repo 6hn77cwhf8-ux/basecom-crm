@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, WORK_EVENT, type ClientWork, type DaySummary, type SearchHit, type User, type WorkKind } from "../api";
-import { btn, btnDark, c, card, ErrorText, input } from "../ui";
+import { btn, btnDark, c, card, CopyButton, ErrorText, input } from "../ui";
 import { Modal } from "./Wallet";
 
 /**
@@ -109,8 +109,8 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
           </div>
         </div>
         <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16, borderTop: `1px solid ${c.line}`, paddingTop: 20 }}>
-          <div><dt style={eyebrow}>NIF</dt><dd style={big}>{work.nif ?? "—"}</dd></div>
-          <div><dt style={eyebrow}>OP</dt><dd style={{ ...big, letterSpacing: ".08em" }}>{work.opCode ?? "—"}</dd></div>
+          <div><dt style={eyebrow}>NIF</dt><dd style={{ ...big, display: "flex", gap: 8, alignItems: "center" }}>{work.nif ?? "—"}{work.nif && <CopyButton text={work.nif} />}</dd></div>
+          <div><dt style={eyebrow}>OP</dt><dd style={{ ...big, letterSpacing: ".08em", display: "flex", gap: 8, alignItems: "center" }}>{work.opCode ?? "—"}{work.opCode && <CopyButton text={work.opCode} />}</dd></div>
           <div><dt style={eyebrow}>Começou</dt><dd style={big}>{since}</dd></div>
         </dl>
         <span style={{ fontSize: 16, fontWeight: 600 }}>{work.company}</span>

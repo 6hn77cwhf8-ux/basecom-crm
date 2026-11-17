@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { DEFAULT_SCRIPTS, NSNR, callbackLimit, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { DEFAULT_SCRIPTS, NSNR, callbackLimit, proposalValue, saleTypesError, type SaleTypes, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -200,6 +200,8 @@ export type ResultInput = {
   newDecisor?: { salutation?: string | null; name: string };
   /** Proposta enviada e Venda fechada: código da oportunidade na NOS (7 algarismos); a seguir começa o tempo «Em cliente». */
   opCode?: string;
+  /** Proposta enviada e Venda fechada: tipos de venda e valor de cada um (€/mês), para o Pipeline e a previsão de pontos. */
+  saleTypes?: SaleTypes;
 };
 /** Resultados que pedem a OP e abrem o trabalho em cliente. */
 export const CLIENT_WORK: Record<string, WorkKind> = { proposal_sent: "proposal", sale: "sale" };
@@ -228,6 +230,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   if (["interested", "proposal_sent", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
   const workKind = CLIENT_WORK[outcome.effect];
   if (workKind && !OP_CODE.test(input.opCode?.trim() ?? "")) throw new AuthError(400, "Indique a OP (7 algarismos), como no programa da NOS.");
+  if (workKind) { const e = saleTypesError(input.saleTypes ?? {}); if (e) throw new AuthError(400, e); }
   if (reason && OPERATOR_REASONS.includes(reason.effect)) {
     if (!input.competitor?.operator) throw new AuthError(400, "Indique a operadora atual do cliente.");
     if (!input.date) throw new AuthError(400, "Indique a data de fim da fidelização.");
@@ -304,8 +307,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     const opportunity = async (stage: string) => {
       const open = (await tx.select().from(opportunities).where(and(eq(opportunities.companyId, co.id), sql`${opportunities.stage} not in ('won','lost')`)).orderBy(desc(opportunities.createdAt)))[0];
       const nosOp = workKind ? input.opCode!.trim() : undefined;
-      if (open) { await tx.update(opportunities).set({ stage, services: input.services ?? open.services, lastActivityAt: now, ...(nosOp ? { nosOp } : {}) }).where(eq(opportunities.id, open.id)); return open.id; }
-      const [o] = await tx.insert(opportunities).values({ companyId: co.id, ownerId: co.ownerId ?? user.id, stage, services: input.services ?? null, nosOp: nosOp ?? null }).returning({ id: opportunities.id });
+      const value = workKind && input.saleTypes ? { saleTypes: input.saleTypes, proposedValue: String(proposalValue(input.saleTypes)) } : {};
+      if (open) { await tx.update(opportunities).set({ stage, services: input.services ?? open.services, lastActivityAt: now, ...(stage !== open.stage ? { stageChangedAt: now } : {}), ...(nosOp ? { nosOp } : {}), ...value }).where(eq(opportunities.id, open.id)); return open.id; }
+      const [o] = await tx.insert(opportunities).values({ companyId: co.id, ownerId: co.ownerId ?? user.id, stage, services: input.services ?? null, nosOp: nosOp ?? null, ...value }).returning({ id: opportunities.id });
       return o!.id;
     };
 

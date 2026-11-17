@@ -7,6 +7,7 @@ import { getSetting } from "../settings.js";
 import { notify, notifyLeadOrAdmin } from "../notifications/service.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
 import { incomingStats } from "../phone/service.js";
+import { docsReminders } from "../opportunities/service.js";
 
 /**
  * Estados do comercial e registo de ponto (catálogo, secção 14).
@@ -126,6 +127,8 @@ export async function heartbeat(db: Db, user: PublicUser) {
     }
     // Em cliente: alerta ao Chefe de Equipa a cada X minutos (sem limite de tempo).
     if (cur.state === "client") await clientAlert(db, user, cur);
+    // Oportunidades paradas em «Aguarda docs»: tarefa automática «Pedir documentos».
+    await docsReminders(db, user.id).catch(() => undefined);
     return cur.state as State;
   }
   await setState(db, user, user.id, "working");

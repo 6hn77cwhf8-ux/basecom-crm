@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 /** Cores do Design System BASECOM. */
 export const c = { surface: "#F5F5F7", card: "#FFFFFF", line: "#E5E5EA", ink: "#0B0B0B", muted: "#6E6E73", brand: "#FF5A00", brandSoft: "#FFF1E8", danger: "#A1000F", dangerSoft: "#FFE5E7", ok: "#1E6F33", okSoft: "#E8F5EC", warn: "#8A3D00", warnSoft: "#FFF4E5" };
@@ -59,3 +59,15 @@ export function Kpi({ label, value, hint, active, onClick }: { label: string; va
 
 export const th: CSSProperties = { padding: "10px 12px", fontWeight: 600, borderBottom: `1px solid ${c.line}`, textAlign: "left", whiteSpace: "nowrap" };
 export const td: CSSProperties = { padding: "10px 12px", borderBottom: `1px solid ${c.line}`, verticalAlign: "middle" };
+
+/** Botão «Copiar» (NIF, OP…): copia o texto e mostra «Copiado ✓» por momentos. */
+export function CopyButton({ text, label = "Copiar", small = true }: { text: string; label?: string; small?: boolean }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" title={`Copiar ${text}`} aria-label={`Copiar ${text}`}
+      onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1400); }).catch(() => undefined); }}
+      style={{ ...btn, height: small ? 26 : 32, padding: "0 9px", fontSize: 12, transition: "background .2s, color .2s", ...(done ? { background: c.ok, color: "#FFF", borderColor: c.ok } : {}) }}>
+      {done ? "Copiado ✓" : label}
+    </button>
+  );
+}

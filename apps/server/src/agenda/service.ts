@@ -6,7 +6,8 @@ import { getSetting } from "../settings.js";
 import { startCall } from "../dialer/service.js";
 import { daySummary } from "../time/service.js";
 import { incomingStats, receivedToday } from "../phone/service.js";
-import { listOpportunities } from "../opportunities/service.js";
+import { listOpportunities, openProposalPoints } from "../opportunities/service.js";
+import { cycleForDate, nextTier } from "@basecom/shared";
 import { canSee, visibleUserIds, visiblePeople } from "../teams/service.js";
 
 /**
@@ -107,6 +108,8 @@ export async function myDay(db: Db, user: PublicUser) {
   const oppsLate = opps.filter((o) => o.alert?.level === "late").length;
   const oppsWarn = opps.filter((o) => o.alert?.level === "warn").length;
   return { oppsLate, oppsWarn, ...(r.rows[0] as { calls: number; effective: number; proposals: number; sales: number }), breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
+    // Pontos do ciclo (previsão das propostas abertas; os confirmados chegam com o Arranque B).
+    points: await (async () => { const forecast = await openProposalPoints(db, user.id); return { cycle: cycleForDate(new Date()).label, confirmed: 0, forecast, next: nextTier(forecast) }; })(),
     clientSeconds: t.seconds.client, officeSeconds: t.seconds.office, officeLimit: t.limits.officeSeconds, supportSeconds: t.seconds.support,
     // Chamadas recebidas: chegam com a app Android (Fase 4), que as devolve ao CRM.
     received: await receivedToday(db, user.id),

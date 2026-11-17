@@ -336,7 +336,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       )}
 
       {!client && cur && cat && (phase === "result" || phase === "review") && (
-        <ResultPanel key={resultKey} hidden={phase === "review"} needsKind={cur.company.needsKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
+        <ResultPanel key={resultKey} hidden={phase === "review"} needsKind={cur.company.needsKind} walletKind={cur.company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
           live={live ? { secs: Math.floor((Date.now() - startedAt) / 1000), queued, onHangUp: () => { hangUpLive(); } } : undefined}
           company={{ name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
           onBack={() => setPhase("review")} onSave={save} />

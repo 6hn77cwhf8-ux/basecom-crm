@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { formatPhone } from "@basecom/shared";
 import { api, type CompanyDetail, type Contact, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
+import { btn, btnDark, c, card, Chip, CopyButton, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
 import { StatusChips } from "./Companies";
 import { QuickCall } from "./QuickCall";
 import { DeleteDialog, KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
@@ -88,7 +88,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                   <StatusChips r={co} />
                 </span>
                 <h1 style={{ margin: 0, fontSize: 28, lineHeight: "34px", fontWeight: 800 }}>{co.name}</h1>
-                <span style={{ fontSize: 14, color: c.muted }}>NIF {co.nif} · {co.municipality ?? co.locality ?? "—"} · Carteira: {co.owner ?? "sem carteira"}</span>
+                <span style={{ fontSize: 14, color: c.muted, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>NIF {co.nif} <CopyButton text={co.nif} /> · {co.municipality ?? co.locality ?? "—"} · Carteira: {co.owner ?? "sem carteira"}</span>
               </div>
               <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
                 <button style={btn} disabled title={later}>Nova solicitação</button>
@@ -106,7 +106,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             </div>
             {dialog === "address" && <AddressDialog co={co} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
             {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
-            {calling && <QuickCall company={{ id: co.id, name: co.name, nif: co.nif }} contact={calling} needsKind={co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed}
+            {calling && <QuickCall company={{ id: co.id, name: co.name, nif: co.nif, walletKind: co.walletKind }} contact={calling} needsKind={co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed}
               onClose={() => setCalling(null)} onSaved={() => { setCalling(null); setTab("historico"); load(); }} />}
             {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); setOppsKey((k) => k + 1); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
