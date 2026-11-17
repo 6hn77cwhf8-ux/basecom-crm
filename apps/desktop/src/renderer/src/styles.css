@@ -67,3 +67,8 @@ button:disabled {
 main > * {
   flex-shrink: 0;
 }
+
+/* Logótipo: versão normal no tema claro, negativa no escuro. */
+.only-dark { display: none; }
+:root[data-theme="dark"] .only-light { display: none; }
+:root[data-theme="dark"] .only-dark { display: inline; }

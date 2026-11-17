@@ -166,8 +166,9 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       )}
       {(eff === "proposal_sent" || eff === "negotiating") && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
       {workKind && (
-        <Field label="Tipo de venda · até 2 (FID + XSell ou FID + Upsell)">
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+        <div role="group" aria-label="Tipo de venda" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>Tipo de venda · até 2 (FID + XSell ou FID + Upsell)</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {SALE_KINDS.map((k) => {
               const on = types[k] !== undefined;
               const chosen = Object.keys(types) as SaleKind[];
@@ -185,7 +186,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
             })}
             {points > 0 && <span role="status" style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 8, height: 34, padding: "0 12px", borderRadius: 999, background: c.brandSoft, fontSize: 14, fontWeight: 800 }}><span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: c.brand }} />+ {points.toLocaleString("pt-PT")} pontos com esta proposta</span>}
           </div>
-        </Field>
+        </div>
       )}
       {workKind && (
         <div style={{ border: `2px solid ${c.brand}`, background: c.brandSoft, borderRadius: 14, padding: "14px 16px", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>

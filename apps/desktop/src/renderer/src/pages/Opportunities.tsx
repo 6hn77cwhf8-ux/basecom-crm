@@ -103,7 +103,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
         <PorComercial rows={rows ?? []} people={people.filter((p) => p.role !== "admin" || (rows ?? []).some((o) => o.ownerId === p.id))} onOpen={onOpenCompany} />
       ) : (
         <div style={{ overflowX: "auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${OPEN.length}, minmax(220px, 1fr))`, gap: 12, alignItems: "start", minWidth: 1150 }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${OPEN.length}, minmax(190px, 1fr))`, gap: 10, alignItems: "start", minWidth: 1000 }}>
           {OPEN.map((s) => {
             const list = rows?.filter((o) => o.stage === s.id) ?? [];
             const col = STAGE_COLOR[s.id]!;
