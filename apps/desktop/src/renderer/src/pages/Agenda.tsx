@@ -5,6 +5,7 @@ import { btn, btnDark, c, card, Chip, ErrorText, Field, input, PageHeader } from
 import { Modal } from "./Wallet";
 import { ResultPanel, type Group } from "./ResultPanel";
 import { useCallEnd } from "./Phone";
+import { DatePicker } from "./DatePicker";
 
 const ORIGIN: Record<string, string> = { call: "da chamada", manual: "manual" };
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -159,7 +160,7 @@ function Reschedule({ t, onClose, onDone }: { t: AgendaTask; onClose: () => void
   return (
     <Modal title={`Reagendar «${t.type}» · ${t.company}`} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <Field label="Nova data e hora"><input style={input} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
+        <Field label="Nova data e hora"><DatePicker withTime workdaysOnly value={at} onChange={setAt} width={280} ariaLabel="Nova data e hora" /></Field>
         <Field label="Justificação (fica no histórico da empresa)"><input style={input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: cliente pediu para ligar na próxima semana" /></Field>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -235,7 +236,7 @@ export function NewTask({ types, me, people, onClose, onDone }: { types: string[
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Tipo"><select style={input} value={type} onChange={(e) => setType(e.target.value)}>{types.map((t) => <option key={t}>{t}</option>)}</select></Field>
-          <Field label="Data e hora"><input style={input} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
+          <Field label="Data e hora"><DatePicker withTime workdaysOnly value={at} onChange={setAt} width={280} ariaLabel="Data e hora" /></Field>
         </div>
         {me.role === "admin" && people.length > 0 && (
           <Field label="Para"><select style={input} value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>{people.map((p) => <option key={p.id} value={p.id}>{p.id === me.id ? "Mim" : p.name}</option>)}</select></Field>

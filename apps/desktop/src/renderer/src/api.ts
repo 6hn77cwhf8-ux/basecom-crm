@@ -7,7 +7,7 @@ export type TeamMember = { id: string; name: string; email: string; role: Role; 
 export type AuditEntry = { id: string; action: string; userName: string; targetName: string | null; details: string | null; at: string };
 export type Settings = {
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
-  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number };
+  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number };
 };
 export type CompanyRow = {
   id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null; district: string | null; sector: string | null;

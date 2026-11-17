@@ -4,6 +4,7 @@ import { api, ROLE_LABEL, type Role, type TeamMember, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th } from "../ui";
 import { mmss, STATE_LABEL } from "./WorkState";
 import type { DaySummary } from "../api";
+import { DatePicker } from "./DatePicker";
 
 export function Team({ me }: { me: User }) {
   const isAdmin = me.role === "admin";
@@ -93,7 +94,7 @@ function NewUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (wh
       <Field label="Nome"><input style={input} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} autoFocus /></Field>
       <Field label="Email"><input style={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
       <Field label="Perfil"><select style={input} value={role} onChange={(e) => setRole(e.target.value as Role)}>{(Object.keys(ROLE_LABEL) as Role[]).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></Field>
-      <Field label="Data de admissão"><input style={input} type="date" value={hiredAt} onChange={(e) => setHiredAt(e.target.value)} /></Field>
+      <Field label="Data de admissão"><DatePicker value={hiredAt} onChange={setHiredAt} width={200} ariaLabel="Data de admissão" /></Field>
       <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
         <ErrorText>{error}</ErrorText>
         <button type="button" style={btn} onClick={onCancel}>Cancelar</button>
@@ -126,8 +127,8 @@ function Ponto({ canExport }: { canExport: boolean }) {
         </div>
         {/* Exportar o ponto: só o Administrador (uma folha por comercial, tempo de login e totais). */}
         {canExport && <>
-        <input type="date" aria-label="De" style={{ ...input, height: 34, width: 150 }} value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input type="date" aria-label="Até" style={{ ...input, height: 34, width: 150 }} value={to} onChange={(e) => setTo(e.target.value)} />
+        <DatePicker value={from} onChange={setFrom} width={150} ariaLabel="De" />
+        <DatePicker value={to} onChange={setTo} width={150} ariaLabel="Até" />
         <button style={{ ...btn, height: 34 }} onClick={() => api.exportPonto(from, to).catch((e) => setError(e.message))}>Exportar Excel</button>
         </>}
       </div>

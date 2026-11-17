@@ -106,6 +106,9 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
 
   it("Callback «Agendar para mim», Interessado e Venda (conquista da carteira)", async () => {
     const at = new Date(Date.now() + 3 * 86400_000).toISOString();
+    // Callback no máximo a 1 mês (17 nov): mais do que isso é recusa.
+    await expect(call(bia, { outcomeId: "call_later", at: new Date(Date.now() + 40 * 86400_000).toISOString(), forMe: true })).rejects.toThrow(/Recusa/);
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null }).where(eq(campaignEntries.campaignId, campaignId));
     const { n: n1 } = await call(bia, { outcomeId: "call_later", at, forMe: true, comment: "Ligar à tarde" });
     const e1 = await entryOf(n1.company.id);
     expect(e1.assignedTo).toBe(bia.id);

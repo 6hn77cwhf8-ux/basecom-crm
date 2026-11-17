@@ -32,8 +32,10 @@ export const SETTINGS = {
       officeMinutes: z.number().int().min(0).max(240).default(15),
       /** Em cliente: alerta ao Chefe de Equipa a cada X minutos (o tempo não tem limite). */
       clientAlertMinutes: z.number().int().min(1).max(240).default(10),
+      /** Callback («Ligar mais tarde»): no máximo X meses à frente; mais do que isso é recusa (decisão de 17 nov). */
+      callbackMaxMonths: z.number().int().min(1).max(12).default(1),
     }),
-    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10 },
+    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1 },
   },
   /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
   importBase: {

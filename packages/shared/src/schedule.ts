@@ -62,3 +62,39 @@ export function lisbonDay(date: Date): string {
   const l = lisbon(date);
   return `${l.y}-${String(l.m).padStart(2, "0")}-${String(l.d).padStart(2, "0")}`;
 }
+
+/** Horário de um dia da semana (0 = domingo): [abertura, fecho] ou null se fechado. */
+export function workingHoursFor(dow: number, wh: WorkingHours = DEFAULT_WORKING_HOURS): [string, string] | null {
+  return hoursFor(dow, wh);
+}
+
+export type QuickCallback = "1h" | "1d" | "1w" | "1m";
+
+/**
+ * Atalhos do callback (decisão de 17 nov): 1 hora conta só o horário de trabalho; 1 dia, 1 semana e 1 mês mantêm a hora.
+ * Se o dia calhar fechado ou fora de horas, passa para o dia de trabalho seguinte à mesma hora (no «1 mês», para o anterior,
+ * para nunca passar do limite de 1 mês).
+ */
+export function quickCallbackAt(kind: QuickCallback, now: Date, wh: WorkingHours = DEFAULT_WORKING_HOURS): Date {
+  if (kind === "1h") return nextWorkingMoment(new Date(now.getTime() + 3_600_000), wh);
+  const l = lisbon(now);
+  let y = l.y, m = l.m, d = l.d;
+  if (kind === "1d") d += 1;
+  if (kind === "1w") d += 7;
+  if (kind === "1m") { m += 1; const last = new Date(Date.UTC(y, m, 0)).getUTCDate(); d = Math.min(d, last); }
+  const step = kind === "1m" ? -1 : 1;
+  for (let i = 0; i < 10; i++) {
+    const day = new Date(Date.UTC(y, m - 1, d + i * step));
+    const h = hoursFor(day.getUTCDay(), wh);
+    if (h && l.hm >= h[0] && l.hm < h[1]) return atLisbon(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), l.hm);
+  }
+  return nextWorkingMoment(atLisbon(y, m, d, l.hm), wh);
+}
+
+/** Limite do callback: a mesma data daqui a X meses (fim do dia), sem «saltar» o mês. */
+export function callbackLimit(now: Date, months = 1): Date {
+  const l = lisbon(now);
+  const m = l.m + months;
+  const last = new Date(Date.UTC(l.y, m, 0)).getUTCDate();
+  return atLisbon(l.y + Math.floor((m - 1) / 12), ((m - 1) % 12) + 1, Math.min(l.d, last), "23:59");
+}

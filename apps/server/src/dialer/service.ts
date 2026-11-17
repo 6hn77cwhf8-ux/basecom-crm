@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { DEFAULT_SCRIPTS, NSNR, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { DEFAULT_SCRIPTS, NSNR, callbackLimit, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -221,6 +221,10 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   if (outcome.effect === "not_interested" && !reason) throw new AuthError(400, "Escolha o motivo da recusa.");
   if (reason?.effect === "other" && !input.comment?.trim()) throw new AuthError(400, "No motivo «Outro», a descrição é obrigatória.");
   if (outcome.effect === "call_later" && !input.at) throw new AuthError(400, "Indique a data e a hora para voltar a ligar.");
+  if (outcome.effect === "call_later") {
+    const lim = await getSetting(db, "timeLimits");
+    if (new Date(input.at!) > callbackLimit(new Date(), lim.callbackMaxMonths ?? 1)) throw new AuthError(400, `O callback é no máximo a ${lim.callbackMaxMonths ?? 1} mês. Para mais tarde, registe como Recusa.`);
+  }
   if (["interested", "proposal_sent", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
   const workKind = CLIENT_WORK[outcome.effect];
   if (workKind && !OP_CODE.test(input.opCode?.trim() ?? "")) throw new AuthError(400, "Indique a OP (7 algarismos), como no programa da NOS.");

@@ -21,6 +21,7 @@ const FIELDS: { [K in keyof S]: { key: keyof S[K]; label: string; unit: string; 
     { key: "nextCallSeconds", label: "Espera até marcar a empresa seguinte", unit: "s" },
     { key: "campaignSwitchMinutes", label: "Pausa para mudar de campanha", unit: "min/dia" },
     { key: "officeMinutes", label: "Office (WhatsApp, SMS, emails, contratos)", unit: "min/dia", note: "No limite, o tempo fecha e passa sozinho a «A trabalhar»" },
+    { key: "callbackMaxMonths", label: "Callback: no máximo", unit: "mês", note: "Mais do que isso é Recusa; o calendário não deixa escolher depois" },
     { key: "clientAlertMinutes", label: "Em cliente: alerta ao Chefe de Equipa a cada", unit: "min", note: "O tempo em cliente não tem limite" },
     { key: "breakMinutes", label: "Intervalo", unit: "min/dia", note: "Se ultrapassar, o Administrador é avisado" },
     { key: "dailyMinutes", label: "Horas previstas (segunda a sexta)", unit: "min/dia", note: "Para o saldo do ponto (480 = 8 h). O almoço não conta" },

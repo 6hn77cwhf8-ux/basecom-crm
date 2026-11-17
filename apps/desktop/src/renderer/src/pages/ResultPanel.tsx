@@ -1,8 +1,9 @@
-import { operatorRefusalNote } from "@basecom/shared";
+import { callbackLimit, operatorRefusalNote, quickCallbackAt, type QuickCallback } from "@basecom/shared";
 import { useEffect, useMemo, useState } from "react";
 import type { Catalogs, Outcome, Reason, ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
 import { OpField, opValid } from "./ClientWork";
+import { DatePicker } from "./DatePicker";
 
 export const GROUPS = [
   { id: "refuse", label: "Recusa", key: "1" }, { id: "callback", label: "Callback", key: "2" }, { id: "noanswer", label: "Não atende", key: "3" },
@@ -13,6 +14,10 @@ const OPERATORS = ["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "Outra", "NS/NR"];
 
 /** Data local «AAAA-MM-DDTHH:MM» → instante ISO. */
 const toIso = (local: string) => (local ? new Date(local).toISOString() : undefined);
+const pad2 = (n: number) => String(n).padStart(2, "0");
+/** Data no formato do calendário (hora do computador). */
+const toLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const QUICK: [QuickCallback, string][] = [["1h", "1 hora"], ["1d", "1 dia"], ["1w", "1 semana"], ["1m", "1 mês"]];
 
 /**
  * Ecrã do resultado (maquetas «Resultado»): botões do grupo, opções, motivo, comentários e feedback de outra operadora.
@@ -120,7 +125,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
           <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: o })}>{o}</button>)}</div></Field>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Field label="Fim de fidelização (obrigatório)"><input style={{ ...input, width: 200 }} type="date" disabled={date === "NS/NR"} value={date === "NS/NR" ? "" : date} onChange={(e) => setDate(e.target.value)} /></Field>
+            <Field label="Fim de fidelização (obrigatório)"><DatePicker value={date === "NS/NR" ? "" : date} onChange={setDate} disabled={date === "NS/NR"} width={200} ariaLabel="Fim de fidelização" /></Field>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600, alignSelf: "flex-end", height: 40 }}><input type="checkbox" checked={date === "NS/NR"} onChange={(e) => setDate(e.target.checked ? "NS/NR" : "")} /> Cliente não refere (NS/NR)</label>
           </div>
           {comp.operator && date && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(comp.operator, date, reason?.monthsBefore ?? 4, reason?.unknownMonths ?? 6)}</div>}
@@ -132,7 +137,22 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       {needsAt && (
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
           {["interested", "proposal_sent", "negotiating"].includes(eff ?? "") && <Field label="Próxima ação"><input style={{ ...input, width: 300 }} value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="Ex.: enviar proposta 4P" /></Field>}
-          <Field label={eff === "call_later" ? "Voltar a ligar em" : reason?.effect === "other" ? "Nova abordagem em (opcional)" : "Data da próxima ação"}><input style={{ ...input, width: 230 }} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} /></Field>
+          {/* Callback (17 nov): atalhos e calendário só até ao limite (1 mês, configurável). */}
+          {eff === "call_later" && (
+            <div role="group" aria-label="Atalhos" style={{ display: "flex", gap: 6, flexBasis: "100%" }}>
+              {QUICK.map(([k, l]) => {
+                const v = toLocal(quickCallbackAt(k, new Date()));
+                const on = at === v;
+                return <button key={k} type="button" onClick={() => setAt(v)} style={{ ...btn, height: 48, minWidth: 110, flexDirection: "column", display: "flex", alignItems: "center", justifyContent: "center", gap: 0, border: on ? `2px solid ${c.brand}` : `1px solid ${c.line}`, background: on ? c.brandSoft : c.card }}>
+                  <b style={{ fontSize: 14 }}>{l}</b><span style={{ fontSize: 11, color: c.muted, fontWeight: 500 }}>{v.slice(8, 10)}/{v.slice(5, 7)} · {v.slice(11)}</span>
+                </button>;
+              })}
+            </div>
+          )}
+          <Field label={eff === "call_later" ? "Voltar a ligar em" : reason?.effect === "other" ? "Nova abordagem em (opcional)" : "Data da próxima ação"}>
+            <DatePicker withTime workdaysOnly value={at} onChange={setAt} width={260} ariaLabel="Data e hora"
+              min={toLocal(new Date()).slice(0, 10)} max={eff === "call_later" ? toLocal(callbackLimit(new Date(), cat.timeLimits.callbackMaxMonths ?? 1)).slice(0, 10) : undefined} />
+          </Field>
           {eff === "call_later" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, paddingBottom: 8 }}><input type="checkbox" checked={forMe} onChange={(e) => setForMe(e.target.checked)} /> Agendar para mim</label>}
         </div>
       )}
@@ -160,7 +180,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Feedback de outra operadora</summary>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
           <Field label="Operadora atual"><div style={{ display: "flex", gap: 4 }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: comp.operator === o ? undefined : o })}>{o}</button>)}</div></Field>
-          <Field label="Fim de fidelização"><input style={{ ...input, width: 170 }} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+          <Field label="Fim de fidelização"><DatePicker value={date} onChange={setDate} width={180} ariaLabel="Fim de fidelização" /></Field>
         </div>
         <Field label="O que diz da operadora atual"><input style={{ ...input, marginTop: 6 }} value={comp.text ?? ""} onChange={(e) => setComp({ ...comp, text: e.target.value || undefined })} placeholder="Ex.: paga 120 €/mês por 4 linhas e internet" /></Field>
       </details>}

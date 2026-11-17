@@ -3,6 +3,7 @@ import { DEFAULT_SCRIPTS } from "@basecom/shared";
 import { api, type Campaign, type CampaignFilters, type CampaignPreview, type FilterOptions } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtInt, input } from "../ui";
 import { Modal } from "./Wallet";
+import { DatePicker } from "./DatePicker";
 
 const MODE = { new: "Novos clientes", current: "Clientes atuais" } as const;
 const STATUS = { active: ["A decorrer", "ok"], paused: ["Em pausa", "warn"], ended: ["Terminada", "neutral"] } as const;
@@ -170,8 +171,8 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
               <Field label="Tipo de conta"><select style={input} value={f.accountType ?? ""} onChange={(e) => set("accountType", (e.target.value || undefined) as CampaignFilters["accountType"])}>
                 <option value="">Todos</option><option value="prospect">Prospetos (NN)</option><option value="client">Clientes NOS</option></select></Field>
-              <Field label="Fim de fidelização desde"><input style={input} type="date" value={f.loyaltyEndFrom ?? ""} onChange={(e) => set("loyaltyEndFrom", e.target.value || undefined)} /></Field>
-              <Field label="até"><input style={input} type="date" value={f.loyaltyEndTo ?? ""} onChange={(e) => set("loyaltyEndTo", e.target.value || undefined)} /></Field>
+              <Field label="Fim de fidelização desde"><DatePicker value={f.loyaltyEndFrom ?? ""} onChange={(v) => set("loyaltyEndFrom", v || undefined)} width={180} ariaLabel="Fim de fidelização desde" /></Field>
+              <Field label="até"><DatePicker value={f.loyaltyEndTo ?? ""} onChange={(v) => set("loyaltyEndTo", v || undefined)} width={180} ariaLabel="Fim de fidelização até" /></Field>
             </div>
             <Multi label="Distrito" all={opts?.districts} value={f.districts} onChange={(v) => setF((o) => {
               // Ao mudar os distritos, os concelhos que já não pertencem a nenhum deles saem da escolha.
