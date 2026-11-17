@@ -97,7 +97,11 @@ export function resizePhoto(file: File): Promise<string> {
       ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, s, s);
       resolve(cv.toDataURL("image/jpeg", 0.85));
     };
-    img.onerror = () => reject(new Error("Não foi possível ler a imagem."));
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => reject(new Error("Não foi possível ler a imagem (use JPG, PNG ou WEBP)."));
+    // Lida como data: (a política de segurança da página não deixa abrir blob:).
+    const fr = new FileReader();
+    fr.onload = () => { img.src = String(fr.result); };
+    fr.onerror = () => reject(new Error("Não foi possível ler a imagem."));
+    fr.readAsDataURL(file);
   });
 }
