@@ -50,11 +50,15 @@ export function App() {
       {page === "empresas" ? (importing && user.role === "admin"
         ? <ImportWizard onBack={() => setImporting(false)} />
         : <Companies me={user} onOpen={setCompanyId} onImport={() => setImporting(true)} />)
-        : page === "novos" ? <PowerDialer me={user} onOpenCompany={setCompanyId} />
+        : page === "novos" ? null
         : page === "agenda" ? <Agenda me={user} onOpenCompany={setCompanyId} />
         : page === "carteira" ? <Carteira me={user} onOpenCompany={setCompanyId} />
         : page === "oportunidades" ? <Opportunities me={user} onOpenCompany={setCompanyId} />
         : page === "equipa" ? <Team me={user} /> : page === "config" ? <Settings /> : <Placeholder title={label} phase={PHASE[page] ?? "Fase seguinte"} />}
+      {/* O Ligar fica sempre montado: ao mudar de página a chamada continua e aparece o cartão flutuante. */}
+      <div style={{ display: page === "novos" ? "contents" : "none" }}>
+        <PowerDialer me={user} onOpenCompany={setCompanyId} active={page === "novos"} onShow={() => { setPage("novos"); setImporting(false); }} />
+      </div>
       {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
     </Shell>
   );

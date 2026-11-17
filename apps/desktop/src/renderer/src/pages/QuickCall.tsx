@@ -4,6 +4,7 @@ import { api, type Catalogs, type ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, dialOnComputer } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { useCallEnd } from "./Phone";
+import { MuteButton } from "./FloatingCall";
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
@@ -11,10 +12,13 @@ const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${St
  * Ligar a partir da ficha (ou de um número da ficha): marca no telemóvel BASECOM emparelhado, como no ecrã Ligar.
  * O resultado pode abrir durante a chamada sem desligar; só grava quando a chamada acabar.
  */
-export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
-  company: { id: string; name: string; nif: string; walletKind?: "NC" | "FC" }; contact: { id: string; value: string }; needsKind: boolean;
+export function QuickCall({ company, contact, needsKind, onClose, onSaved, received }: {
+  company: { id: string; name: string; nif: string; walletKind?: "NC" | "FC" }; contact: { id?: string; value: string }; needsKind: boolean;
   onClose: () => void; onSaved: () => void;
+  /** Chamada recebida já atendida no telemóvel (desenho 17): não marca, só regista. */
+  received?: boolean;
 }) {
+  const [muted, setMuted] = useState(false);
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [call, setCall] = useState<{ id: string; startedAt: number; viaPhone: boolean } | null>(null);
   const [endedAt, setEndedAt] = useState<number | null>(null);
@@ -30,8 +34,8 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
   useEffect(() => {
     if (started.current) return; started.current = true;
     api.catalogs().then(setCat).catch((e) => setError(e.message));
-    api.startCall({ companyId: company.id, contactId: contact.id, source: "ficha" })
-      .then((r) => { if (!r.viaPhone) dialOnComputer(contact.value); setCall({ id: r.id, startedAt: Date.now(), viaPhone: r.viaPhone }); })
+    api.startCall(received ? { companyId: company.id, source: "recebida", phone: contact.value } : { companyId: company.id, contactId: contact.id, source: "ficha" })
+      .then((r) => { if (!r.viaPhone && !received) dialOnComputer(contact.value); setCall({ id: r.id, startedAt: Date.now(), viaPhone: r.viaPhone }); })
       .catch((e) => setError((e as Error).message));
   }, []);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
@@ -72,14 +76,15 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
           <section style={{ ...card, padding: 24, display: "flex", flexDirection: "column", gap: 16, boxShadow: "0 8px 32px rgba(0,0,0,.18)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Chamada · {company.name}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>{received ? "Chamada recebida" : "Chamada"} · {company.name}</span>
                 <span style={{ fontSize: 30, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{formatPhone(contact.value)}</span>
                 <span style={{ fontSize: 13, color: call?.viaPhone ? c.ok : c.muted }}>
-                  {!call ? "A preparar…" : call.viaPhone ? "O telemóvel está a marcar. Pode abrir o resultado sem desligar." : "Telemóvel BASECOM sem ligação: marque o número no telemóvel."}
+                  {!call ? "A preparar…" : received ? "Atendida no telemóvel. Pode registar o resultado sem desligar." : call.viaPhone ? "O telemóvel está a marcar. Pode abrir o resultado sem desligar." : "Telemóvel BASECOM sem ligação: marque o número no telemóvel."}
                 </span>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {!call && error && <button style={btn} onClick={onClose}>Fechar</button>}
+                {call && call.viaPhone && live && <MuteButton muted={muted} onClick={() => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message))} />}
                 {call && <button style={{ ...btnDark, height: 48, padding: "0 24px", background: "#D70015", borderColor: "#D70015" }} onClick={hangUp}>Desligar · {mmss(secs)}</button>}
               </div>
             </div>

@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -29,7 +30,9 @@ import java.util.concurrent.Executors
  * Trabalha em segundo plano (com uma notificação fixa, como o Android exige):
  * 1. pergunta ao CRM se há uma chamada para fazer e marca-a;
  * 2. quando a chamada acaba, lê a duração no registo de chamadas e informa o CRM (duração > 0 = atendida);
- * 3. nas chamadas recebidas, informa o CRM do número (o CRM mostra «Chamada a entrar» com a ficha).
+ * 3. nas chamadas recebidas, informa o CRM do número (o CRM mostra «Chamada a entrar» com a ficha) e quando é atendida;
+ * 4. no fim de cada chamada, lê no registo as que entraram e não foram atendidas entretanto (chamada em espera);
+ * 5. Mute e Desligar pedidos no CRM.
  */
 class PhoneService : Service() {
     companion object {
@@ -53,6 +56,9 @@ class PhoneService : Service() {
     @Volatile private var inId: String? = null
     @Volatile private var inNumber: String? = null
     @Volatile private var inRinging = false
+    @Volatile private var inAnswered = false
+    // Início da chamada em curso (para ler as não atendidas que entraram durante ela).
+    @Volatile private var busySince = 0L
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -131,6 +137,7 @@ class PhoneService : Service() {
                 if (cmd != null) main.post {
                     when (cmd.optString("kind")) {
                         "hangup" -> hangUp()
+                        "mute" -> mute(cmd.optString("text") == "1")
                         "sms" -> openSms(cmd.getString("number"), cmd.optString("text"))
                         else -> dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
                     }
@@ -184,6 +191,32 @@ class PhoneService : Service() {
         try { getSystemService(TelecomManager::class.java).endCall() } catch (_: Exception) {}
     }
 
+    /** Mute pedido no CRM (desenho 13): desliga ou volta a ligar o microfone durante a chamada. */
+    private fun mute(on: Boolean) {
+        try { getSystemService(AudioManager::class.java).isMicrophoneMute = on } catch (_: Exception) {}
+    }
+
+    /** Chamadas que entraram durante a chamada que acabou e não foram atendidas: o CRM mostra-as em «Chamadas recebidas». */
+    private fun reportMissedSince(since: Long) {
+        if (since <= 0 || checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) return
+        val found = mutableListOf<Pair<String, Long>>()
+        try {
+            contentResolver.query(CallLog.Calls.CONTENT_URI, arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE),
+                CallLog.Calls.DATE + " >= ?", arrayOf((since - 5_000).toString()), CallLog.Calls.DATE + " DESC")?.use { c ->
+                while (c.moveToNext()) {
+                    val t = c.getInt(1)
+                    if (t == CallLog.Calls.MISSED_TYPE || t == CallLog.Calls.REJECTED_TYPE) found.add((c.getString(0) ?: "") to c.getLong(2))
+                }
+            }
+        } catch (_: Exception) {}
+        if (found.isEmpty()) return
+        events.execute {
+            for ((n, at) in found) if (n.isNotBlank()) try {
+                api.event(JSONObject().put("type", "incoming_missed").put("number", n).put("at", Instant.ofEpochMilli(at).toString()))
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun onState(state: String, number: String?) {
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
@@ -196,12 +229,28 @@ class PhoneService : Service() {
                     } catch (_: Exception) {}
                 }
             }
-            TelephonyManager.EXTRA_STATE_OFFHOOK -> if (outCallId != null) outOffhook = true
+            TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                if (busySince == 0L) busySince = System.currentTimeMillis()
+                if (outCallId != null) outOffhook = true
+                // Chamada recebida atendida: o CRM abre a janela da chamada com a empresa.
+                if (inRinging && !inAnswered) {
+                    inAnswered = true
+                    events.execute {
+                        var tries = 0
+                        while (inId == null && tries++ < 6) Thread.sleep(500)
+                        val id = inId ?: return@execute
+                        try { api.event(JSONObject().put("type", "incoming_answered").put("incomingId", id).put("at", Instant.now().toString())) } catch (_: Exception) {}
+                    }
+                }
+            }
             TelephonyManager.EXTRA_STATE_IDLE -> {
+                val since = busySince
+                busySince = 0L
+                if (since > 0) main.postDelayed({ reportMissedSince(since) }, 3_000)
                 if (outCallId != null && outOffhook) main.postDelayed({ finishOutgoing(null) }, 2_000)
                 if (inRinging) {
                     val n = inNumber
-                    inRinging = false
+                    inRinging = false; inAnswered = false
                     main.postDelayed({ finishIncoming(n) }, 2_000)
                 }
             }

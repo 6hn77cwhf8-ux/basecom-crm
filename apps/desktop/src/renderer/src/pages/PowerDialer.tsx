@@ -6,6 +6,7 @@ import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
 import { PhoneDialog, useCallEnd, usePhone } from "./Phone";
 import { ClientWorkCard } from "./ClientWork";
+import { FloatingCall, MuteButton } from "./FloatingCall";
 
 /** «review»: chamada terminada, a rever o script antes de voltar ao resultado (o tempo e o que já escreveu mantêm-se). */
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "review" | "countdown" | "empty";
@@ -15,7 +16,11 @@ const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${St
  * Novos clientes — Power Dialer (maqueta 4). A campanha está sempre a correr: o comercial não a pausa.
  * Até existir o canal telefónico (Fase 4), o comercial marca no telemóvel e indica aqui o início e o fim da chamada.
  */
-export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (id: string) => void }) {
+/**
+ * O Ligar fica sempre montado (escondido nas outras páginas): a chamada não se perde ao mudar de página
+ * e aparece o cartão flutuante (desenho 13).
+ */
+export function PowerDialer({ me, onOpenCompany, active = true, onShow }: { me: User; onOpenCompany: (id: string) => void; active?: boolean; onShow?: () => void }) {
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [list, setList] = useState<Campaign[]>([]);
   const isAdmin = me.role === "admin";
@@ -58,6 +63,9 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   const [queued, setQueued] = useState(false);
   const pendingRef = useRef<ResultInput | null>(null);
   const [phoneDialog, setPhoneDialog] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const toggleMute = () => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message));
+  useEffect(() => { setMuted(false); }, [callId]);
 
   const loadCampaigns = () => api.campaigns().then((l) => setList(l.filter((k) => k.status === "active" && (me.role === "admin" || k.members.some((m) => m.id === me.id))))).catch((e) => setError(e.message));
   useEffect(() => {
@@ -139,7 +147,8 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   // Encadeamento: 10 s depois de guardar, a empresa seguinte é marcada automaticamente.
   const wait = cat?.timeLimits.nextCallSeconds ?? 10;
   const left = phase === "countdown" ? Math.max(0, wait - Math.floor((Date.now() - endedAt) / 1000)) : 0;
-  useEffect(() => { if (phase === "countdown" && left === 0 && working && !client && campaignId) load(true); }, [phase, left, load, working, client, campaignId]);
+  // Fora do Ligar (noutra página) não marca a seguinte: espera que o comercial volte.
+  useEffect(() => { if (active && phase === "countdown" && left === 0 && working && !client && campaignId) load(true); }, [active, phase, left, load, working, client, campaignId]);
   /** Terminou o trabalho em cliente: volta a A trabalhar e a seguinte é marcada depois dos 10 s habituais. */
   function clientEnded() {
     setClient(null); setWorking(true); setWsKey((k) => k + 1);
@@ -150,6 +159,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
   // Teclas 1 a 6: abrem o resultado durante a chamada.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
+      if (!active) return;
       if ((phase !== "calling" && phase !== "review") || ["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName) || e.metaKey || e.ctrlKey) return;
       const g = GROUPS.find((x) => x.key === e.key);
       if (!g) return;
@@ -163,14 +173,14 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
 
   // Durante a chamada e o resultado, atalhos como ⌘Z / Ctrl+Z, ⌘[ ou Esc não fazem nada (não podem tirar o comercial da chamada).
   useEffect(() => {
-    if (phase !== "calling" && phase !== "result" && phase !== "review") return;
+    if (!active || (phase !== "calling" && phase !== "result" && phase !== "review")) return;
     const k = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (e.key === "Escape" || (mod && ["z", "y", "[", "]", "ArrowLeft", "ArrowRight", "r", "w"].includes(e.key.toLowerCase()))) { e.preventDefault(); e.stopImmediatePropagation(); }
     };
     window.addEventListener("keydown", k, true);
     return () => window.removeEventListener("keydown", k, true);
-  }, [phase]);
+  }, [phase, active]);
 
   const copy = (key: string, t: string) => {
     navigator.clipboard?.writeText(t).then(() => { setCopied(key); setTimeout(() => setCopied((x) => (x === key ? "" : x)), 1500); }).catch(() => undefined);
@@ -195,6 +205,14 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
         <WorkStates key={wsKey} role={me.role} disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => { setWorking(d.state === null || d.state === "working" || d.state === "switch"); setClient(d.client); }} />
       </header>
       <ErrorText>{error}</ErrorText>
+      {!active && cur && (phase === "calling" || (phase === "result" && live)) && (
+        <FloatingCall company={cur.company.name} phone={cur.phone ? formatPhone(cur.phone.value) : undefined} secs={Math.floor((Date.now() - startedAt) / 1000)}
+          muted={muted} canMute={viaPhone} onMute={toggleMute} onBack={() => onShow?.()} onHangUp={() => (live ? hangUpLive() : hangUp())} />
+      )}
+      {!active && cur && (phase === "review" || (phase === "result" && !live)) && (
+        <FloatingCall company={cur.company.name} secs={0} muted={false} canMute={false} onMute={() => undefined} onHangUp={() => undefined}
+          onBack={() => { if (phase === "review") setPhase("result"); onShow?.(); }} pending={{ left: (cat?.timeLimits.resultSeconds ?? 15) - Math.floor((Date.now() - endedAt) / 1000) }} />
+      )}
 
       {!client && !campaignId && <Empty text={isAdmin ? (list.length ? "Escolha a campanha para começar." : "Ainda não há campanhas ativas.") : (list.length ? "Escolha a campanha para começar." : "Ainda não tem campanhas. O Administrador atribui em Configurações → Campanhas e scripts.")} />}
       {client && <ClientWorkCard me={me} work={client} onOpenCompany={onOpenCompany} onEnded={clientEnded} onChanged={(d) => { setClient(d.client); setWsKey((k) => k + 1); }} />}
@@ -327,7 +345,10 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
                     </div>
                   )}
                   <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button></>
-                : <button style={{ ...btnDark, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>}
+                : <div style={{ display: "flex", gap: 8 }}>
+                    {viaPhone && <MuteButton muted={muted} onClick={toggleMute} />}
+                    <button style={{ ...btnDark, flex: 1, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>
+                  </div>}
               {phone.device?.online
                 ? <span style={{ fontSize: 12, color: c.ok }}>{phase === "calling" && viaPhone ? "O telemóvel está a marcar. Quando a chamada acabar, o resultado abre sozinho." : "Telemóvel ligado: «Iniciar chamada» marca no telemóvel."} <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.muted, textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Telemóvel</button></span>
                 : <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»). <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.brand, textDecoration: "underline", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{phone.device ? "Telemóvel sem sinal" : "Emparelhar telemóvel"}</button></span>}
@@ -337,7 +358,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       )}
 
       {!client && cur && cat && (phase === "result" || phase === "review") && (
-        <ResultPanel key={resultKey} hidden={phase === "review"} needsKind={cur.company.needsKind} walletKind={cur.company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
+        <ResultPanel key={resultKey} hidden={phase === "review" || !active} needsKind={cur.company.needsKind} walletKind={cur.company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
           live={live ? { secs: Math.floor((Date.now() - startedAt) / 1000), queued, onHangUp: () => { hangUpLive(); } } : undefined}
           company={{ name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
           onBack={() => setPhase("review")} onSave={save} />

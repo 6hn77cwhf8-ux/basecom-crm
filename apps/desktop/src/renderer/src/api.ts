@@ -36,6 +36,7 @@ export type Outcome = { id: string; label: string; group: "refuse" | "callback" 
 export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other"; days?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; active: boolean };
 /** «Guardar e fechar» do Em cliente (17 nov): tipos e valor; na proposta, canal, próxima ação e data. */
 export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; nextAction?: string; at?: string; comment?: string };
+export type ReceivedCall = { id: string; number: string; ringingAt: string; answered: boolean | null; durationSeconds: number | null; endedAt: string | null; returned: boolean; missed: boolean; companies: { id: string; name: string; nif: string }[] };
 export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[]; opportunities?: { channels?: string[] } }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
 export type DialerEntry = {
   entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };
@@ -54,7 +55,7 @@ export type MyDay = { incoming: IncomingStats; ponto: Ponto; oppsLate: number; o
 export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; nosOp: string | null; proposedValue: string | null; saleTypes: Record<string, number> | null; ownerPhoto: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
 export type WalletRow = { id: string; name: string; nif: string; walletKind: string; l2bMonthly: string | null; loyaltyEnd: string | null; owner: string; lines: number; decisor: string | null; phone: string | null; lastContact: string | null; openTasks: number; nextAction: { type: string; dueAt: string } | null };
 export type PhoneDevice = { id: string; model: string | null; pairedAt: string; lastSeenAt: string | null; online: boolean };
-export type Incoming = { id: string; number: string; ringingAt: string; endedAt: string | null; companyId: string | null; company: string | null; owner: string | null; openTasks: number };
+export type Incoming = { id: string; number: string; ringingAt: string; answeredAt: string | null; endedAt: string | null; companyId: string | null; company: string | null; nif: string | null; owner: string | null; openTasks: number; companies: { id: string; name: string; nif: string }[] };
 export type WorkState = "working" | "training" | "break" | "switch" | "office" | "client" | "support";
 export type WorkKind = "proposal" | "sale";
 export type ClientWork = { companyId: string | null; company: string | null; nif: string | null; opCode: string | null; kind: WorkKind; since: string };
@@ -172,7 +173,7 @@ export const api = {
   dialerNext: (campaignId: string) => call<{ next: DialerEntry | null }>("/dialer/next", { method: "POST", body: JSON.stringify({ campaignId }) }).then((r) => r.next),
   dialerSkip: (entryId: string, reason: string) => call(`/dialer/entries/${entryId}/skip`, { method: "POST", body: JSON.stringify({ reason }) }),
   dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
-  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean }) => call<{ id: string; startedAt: string; viaPhone: boolean }>("/calls", { method: "POST", body: JSON.stringify(b) }),
+  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean; phone?: string }) => call<{ id: string; startedAt: string; viaPhone: boolean }>("/calls", { method: "POST", body: JSON.stringify(b) }),
   endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[]; clientWork: boolean }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }).then(workChanged),
   agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
@@ -208,6 +209,9 @@ export const api = {
   heartbeat: () => call<{ state: WorkState }>("/time/heartbeat", { method: "POST", body: "{}" }),
   setWorkState: (state: WorkState, userId?: string) => call<DaySummary>("/time/state", { method: "POST", body: JSON.stringify({ state, userId }) }),
   startClient: (b: { companyId: string; kind: WorkKind; opCode: string }) => call<DaySummary>("/time/client", { method: "POST", body: JSON.stringify(b) }).then(workChanged),
+  phoneMute: (on: boolean) => call<{ ok: boolean; on: boolean }>("/phone/mute", { method: "POST", body: JSON.stringify({ on }) }),
+  receivedCalls: () => call<{ calls: ReceivedCall[] }>("/phone/received").then((r) => r.calls),
+  missedCount: () => call<{ n: number }>("/phone/missed-count").then((r) => r.n),
   endClient: (d: CloseClient) => call<DaySummary>("/time/client/end", { method: "POST", body: JSON.stringify(d) }).then(workChanged),
   today: (userId?: string) => call<DaySummary>(`/time/today${userId ? `?userId=${userId}` : ""}`),
   teamTime: () => call<{ people: (DaySummary & { id: string; name: string; role: Role; incoming: IncomingStats })[] }>("/time/team").then((r) => r.people),
