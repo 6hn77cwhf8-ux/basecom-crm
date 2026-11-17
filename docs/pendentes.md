@@ -39,8 +39,7 @@ Aprovado:
 Por testar pelo Leonardo depois de construído:
 - SMS pelo telemóvel BASECOM.
 
-Por confirmar:
-- XSell + Upsell nunca vão juntos na mesma proposta (assumido no desenho).
+Confirmado (17/11): XSell e Upsell nunca vão juntos na mesma proposta (ou um ou outro, cada um pode juntar-se à FID).
 
 Aprovado também:
 - **Previsão de pontos** (desenho 11 aprovado): tipos de venda com até 2 por proposta (FID + XSell ou FID + Upsell; NN sozinho), valor por tipo, etiqueta «+X pontos» e caixa «Pontos do ciclo» com barra. Sem tabela de escalões.
