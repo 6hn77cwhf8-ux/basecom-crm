@@ -114,3 +114,15 @@ export const dialPref = {
 export function dialOnComputer(phone: string | null | undefined) {
   if (phone && dialPref.get()) window.open(`tel:+351${phone.replace(/\D/g, "")}`);
 }
+
+/**
+ * Cores sóbrias (desenho 18 «Cor com calma», aprovado a 17 nov): tons suaves da mesma família, em pequenos apontamentos
+ * (ícones do menu, caixas do painel do dia, ponto nos estados, linha nas etapas). Os botões ficam neutros.
+ */
+export const tone = {
+  indigo: "#6B72A8", blue: "#5B7DB1", slate: "#7A8494", sage: "#5E9C76", teal: "#4F9493",
+  sand: "#B8924A", rose: "#B07282", plum: "#8A72AE", orange: "#D9773F",
+} as const;
+/** Fundo suave de um tom (funciona no claro e no escuro). */
+export const tint = (hex: string, a = 0.12) => `${hex}${Math.round(a * 255).toString(16).padStart(2, "0")}`;
+export const Dot = ({ color, size = 7 }: { color: string; size?: number }) => <span aria-hidden="true" style={{ width: size, height: size, borderRadius: 999, background: color, flex: `0 0 ${size}px`, display: "inline-block" }} />;

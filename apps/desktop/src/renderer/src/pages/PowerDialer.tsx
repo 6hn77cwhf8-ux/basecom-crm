@@ -20,7 +20,7 @@ const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${St
  * O Ligar fica sempre montado (escondido nas outras páginas): a chamada não se perde ao mudar de página
  * e aparece o cartão flutuante (desenho 13).
  */
-export function PowerDialer({ me, onOpenCompany, active = true, onShow }: { me: User; onOpenCompany: (id: string) => void; active?: boolean; onShow?: () => void }) {
+export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceived }: { me: User; onOpenCompany: (id: string) => void; active?: boolean; onShow?: () => void; onReceived?: () => void }) {
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [list, setList] = useState<Campaign[]>([]);
   const isAdmin = me.role === "admin";
@@ -201,6 +201,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow }: { me: 
           {list.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
         </select>
         {campaign && <span style={{ fontSize: 13, color: c.muted }}>{campaign.dialMode === "preview" ? "Preview" : "Power Dialer"} · {count} feitas nesta sessão · {campaign.ready} prontas de {campaign.pending}</span>}
+        {onReceived && <button onClick={onReceived} style={{ border: 0, background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: c.muted, textDecoration: "underline" }}>Chamadas recebidas</button>}
         <span style={{ flex: 1 }} />
         <WorkStates key={wsKey} role={me.role} disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => { setWorking(d.state === null || d.state === "working" || d.state === "switch"); setClient(d.client); }} />
       </header>

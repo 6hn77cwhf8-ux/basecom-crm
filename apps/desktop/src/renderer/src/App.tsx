@@ -10,6 +10,7 @@ import { Companies } from "./pages/Companies";
 import { CompanyDrawer } from "./pages/CompanyDrawer";
 import { ImportWizard } from "./pages/ImportWizard";
 import { PowerDialer } from "./pages/PowerDialer";
+import { Received } from "./pages/Received";
 import { Agenda } from "./pages/Agenda";
 import { Opportunities } from "./pages/Opportunities";
 import { Carteira } from "./pages/Carteira";
@@ -51,13 +52,14 @@ export function App() {
         ? <ImportWizard onBack={() => setImporting(false)} />
         : <Companies me={user} onOpen={setCompanyId} onImport={() => setImporting(true)} />)
         : page === "novos" ? null
+        : page === "recebidas" ? <Received me={user} onOpenCompany={setCompanyId} />
         : page === "agenda" ? <Agenda me={user} onOpenCompany={setCompanyId} />
         : page === "carteira" ? <Carteira me={user} onOpenCompany={setCompanyId} />
         : page === "oportunidades" ? <Opportunities me={user} onOpenCompany={setCompanyId} />
         : page === "equipa" ? <Team me={user} /> : page === "config" ? <Settings /> : <Placeholder title={label} phase={PHASE[page] ?? "Fase seguinte"} />}
       {/* O Ligar fica sempre montado: ao mudar de página a chamada continua e aparece o cartão flutuante. */}
       <div style={{ display: page === "novos" ? "contents" : "none" }}>
-        <PowerDialer me={user} onOpenCompany={setCompanyId} active={page === "novos"} onShow={() => { setPage("novos"); setImporting(false); }} />
+        <PowerDialer me={user} onOpenCompany={setCompanyId} active={page === "novos"} onShow={() => { setPage("novos"); setImporting(false); }} onReceived={() => setPage("recebidas")} />
       </div>
       {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
     </Shell>

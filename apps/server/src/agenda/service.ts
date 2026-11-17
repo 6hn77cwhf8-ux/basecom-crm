@@ -1,3 +1,4 @@
+import { missedCount } from "../phone/service.js";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, campaigns, companies, companyContacts, companyNotes, tasks, users } from "../db/schema.js";
@@ -115,4 +116,14 @@ export async function myDay(db: Db, user: PublicUser) {
     received: await receivedToday(db, user.id),
     incoming: await incomingStats(db, user.id),
     ponto: t.ponto, late, next };
+}
+
+/** Números no menu lateral (desenho 14): Agenda (hoje e atrasadas), Ligar (não atendidas por devolver), Oportunidades (paradas). */
+export async function menuBadges(db: Db, user: PublicUser) {
+  const mine = await listAgenda(db, { ...user, role: "sales" });
+  const end = new Date(); end.setHours(23, 59, 59, 999);
+  const agenda = mine.filter((x) => new Date(x.dueAt) <= end).length;
+  const opps = await listOpportunities(db, { ...user, role: "sales" }, { ownerId: user.id });
+  const oportunidades = opps.filter((o) => o.alert?.level === "late" || o.alert?.level === "warn").length;
+  return { agenda, novos: await missedCount(db, user.id), oportunidades };
 }

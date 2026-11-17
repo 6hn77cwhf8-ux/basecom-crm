@@ -211,6 +211,7 @@ export const api = {
   startClient: (b: { companyId: string; kind: WorkKind; opCode: string }) => call<DaySummary>("/time/client", { method: "POST", body: JSON.stringify(b) }).then(workChanged),
   phoneMute: (on: boolean) => call<{ ok: boolean; on: boolean }>("/phone/mute", { method: "POST", body: JSON.stringify({ on }) }),
   receivedCalls: () => call<{ calls: ReceivedCall[] }>("/phone/received").then((r) => r.calls),
+  badges: () => call<{ agenda: number; novos: number; oportunidades: number }>("/me/badges"),
   missedCount: () => call<{ n: number }>("/phone/missed-count").then((r) => r.n),
   endClient: (d: CloseClient) => call<DaySummary>("/time/client/end", { method: "POST", body: JSON.stringify(d) }).then(workChanged),
   today: (userId?: string) => call<DaySummary>(`/time/today${userId ? `?userId=${userId}` : ""}`),

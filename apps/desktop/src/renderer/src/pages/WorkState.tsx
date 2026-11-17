@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, WORK_EVENT, type DaySummary, type Role, type WorkState } from "../api";
-import { c } from "../ui";
+import { c, Dot, tone } from "../ui";
 import { StartClientDialog } from "./ClientWork";
 
 export const STATE_LABEL: Record<WorkState, string> = {
@@ -9,6 +9,8 @@ export const STATE_LABEL: Record<WorkState, string> = {
 };
 export const mmss = (s: number) => `${s < 0 ? "-" : ""}${Math.floor(Math.abs(s) / 60)}:${String(Math.abs(s) % 60).padStart(2, "0")}`;
 const LEADS: Role[] = ["admin", "team_lead"];
+/** Ponto de cor de cada estado (desenho 18). */
+export const STATE_DOT: Record<WorkState, string> = { working: tone.sage, office: tone.blue, break: tone.sand, training: tone.plum, support: tone.teal, switch: tone.slate, client: tone.orange };
 
 /**
  * Estados (decisões de 16 nov 2026).
@@ -43,7 +45,7 @@ export function WorkStates({ role, onChange, disabled }: { role: Role; onChange?
   // Formação marcada pelo responsável: o comercial não sai sozinho (o responsável termina em Equipa comercial).
   if (!lead && d.state === "training") return (
     <div role="group" aria-label="Estado" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-      <span style={{ height: 32, display: "inline-flex", alignItems: "center", padding: "0 12px", borderRadius: 999, border: `1px solid ${c.line}`, background: c.card, fontSize: 13, fontWeight: 700 }}>Em formação</span>
+      <span style={{ height: 32, display: "inline-flex", alignItems: "center", gap: 6, padding: "0 12px", borderRadius: 999, border: `1px solid ${c.ink}`, background: c.ink, color: c.onInk, fontSize: 13, fontWeight: 700 }}><Dot color={STATE_DOT.training} />Em formação</span>
       <span style={{ fontSize: 12, color: c.muted }}>O responsável termina a formação.</span>
     </div>
   );
@@ -51,8 +53,8 @@ export function WorkStates({ role, onChange, disabled }: { role: Role; onChange?
     const on = d.state === s;
     return (
       <button key={s} disabled={(disabled && !on) || inClient || off} onClick={() => !on && set(s)} aria-pressed={on}
-        style={{ height: 32, padding: "0 12px", borderRadius: 999, border: `1px solid ${on ? (s === "working" ? c.ok : c.brand) : c.line}`, background: on ? (s === "working" ? c.okSoft : c.brandSoft) : c.card, color: warn ? "#D70015" : off ? c.muted : c.ink, fontWeight: on ? 700 : 500, fontSize: 13, cursor: on ? "default" : "pointer", fontVariantNumeric: "tabular-nums" }}>
-        {text}
+        style={{ height: 32, padding: "0 12px", borderRadius: 999, border: `1px solid ${on ? c.ink : c.line}`, background: on ? c.ink : c.card, color: on ? c.onInk : warn ? "#D70015" : off ? c.muted : c.ink, fontWeight: on ? 700 : 500, fontSize: 13, cursor: on ? "default" : "pointer", fontVariantNumeric: "tabular-nums", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Dot color={STATE_DOT[s]} />{text}
       </button>
     );
   };
@@ -65,7 +67,7 @@ export function WorkStates({ role, onChange, disabled }: { role: Role; onChange?
       </> : chip("office", `Office · ${mmss(Math.max(0, officeLeft))}`, false, officeLeft <= 0 && d.state !== "office")}
       {chip("break", breakLeft < 0 ? `Intervalo · +${mmss(-breakLeft)} a mais` : `Intervalo · ${mmss(breakLeft)}`, breakLeft < 0)}
       {inClient
-        ? <span style={{ height: 32, display: "inline-flex", alignItems: "center", padding: "0 12px", borderRadius: 999, border: `1px solid ${c.brand}`, background: c.brandSoft, fontSize: 13, fontWeight: 700 }}>Em cliente · {d.client?.kind === "sale" ? "Venda" : "Proposta"}</span>
+        ? <span style={{ height: 32, display: "inline-flex", alignItems: "center", gap: 6, padding: "0 12px", borderRadius: 999, border: `1px solid ${c.ink}`, background: c.ink, color: c.onInk, fontSize: 13, fontWeight: 700 }}><Dot color={STATE_DOT.client} />Em cliente · {d.client?.kind === "sale" ? "Venda" : "Proposta"}</span>
         : <button disabled={disabled} onClick={() => setStarting(true)} style={{ height: 32, padding: "0 12px", borderRadius: 999, border: `1px solid ${c.ink}`, background: c.card, color: c.ink, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>+ Em cliente</button>}
       {starting && <StartClientDialog onClose={() => setStarting(false)} onStarted={(x) => { setStarting(false); apply(x); }} />}
     </div>
