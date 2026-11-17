@@ -27,6 +27,19 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
     if (!member) throw new AuthError(403, "Não está atribuído a esta campanha.");
   }
 
+  // Callbacks (17 nov, opção a): à hora marcada, o callback do comercial vem à frente de tudo, seja qual for a campanha.
+  const cb = await db.execute(sql`update campaign_entries set locked_by = ${user.id}::uuid, locked_until = ${minutes(LOCK_MINUTES)}
+    where id = (
+      select e.id from campaign_entries e join campaigns k on k.id = e.campaign_id join companies c on c.id = e.company_id
+      where e.assigned_to = ${user.id}::uuid and e.status = 'pending' and e.next_at <= now() and k.status = 'active' and e.last_outcome = 'call_later'
+        and (e.locked_until is null or e.locked_until < now() or e.locked_by = ${user.id}::uuid)
+        and not c.do_not_contact and not c.inactive
+        and not exists (select 1 from campaign_entries o where o.company_id = e.company_id and o.id <> e.id and o.locked_by <> ${user.id}::uuid and o.locked_until > now())
+      order by e.next_at, e.id limit 1 for update of e skip locked)
+    returning id`);
+  const cbId = (cb.rows[0] as { id?: string } | undefined)?.id;
+  if (cbId) return entryView(db, user, cbId);
+
   // Primeiro as agendadas que já chegaram (as minhas antes das do conjunto comum), depois as novas.
   const r = await db.execute(sql`update campaign_entries set locked_by = ${user.id}::uuid, locked_until = ${minutes(LOCK_MINUTES)}
     where id = (
@@ -341,10 +354,16 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
         else { await setEntry({ status: "exhausted" }); summary.push("Sem contacto válido"); }
         break;
       case "call_later": {
+        // Callbacks (17 nov): não vão para a Agenda; voltam à fila do mesmo comercial à hora marcada, à frente de tudo.
+        // Sem campanha (ficha, chamada recebida): entram na campanha automática «Callbacks».
         const at = nextWorkingMoment(new Date(input.at!));
-        if (input.forMe) { await task("Ligar", at, input.comment?.trim() || "Ligar mais tarde (pedido do cliente)", user.id); await setEntry({ assignedTo: user.id, nextAt: at }); }
-        else await setEntry({ nextAt: at });
-        summary.push(`Ligar ${at.toISOString()}${input.forMe ? " (agendado para mim)" : ""}`);
+        if (entry) await setEntry({ assignedTo: user.id, nextAt: at });
+        else {
+          const kId = await callbacksCampaign(t, user.id);
+          await tx.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.campaignId, kId), eq(campaignEntries.companyId, co.id), eq(campaignEntries.status, "pending")));
+          await tx.insert(campaignEntries).values({ campaignId: kId, companyId: co.id, assignedTo: user.id, nextAt: at, lastOutcome: "call_later", lastAttemptAt: now });
+        }
+        summary.push(`Callback ${at.toISOString()}`);
         break;
       }
       case "not_interested": {
@@ -421,3 +440,11 @@ export async function completeTask(db: Db, user: PublicUser, id: string, status:
   await db.update(tasks).set({ status, doneAt: new Date() }).where(eq(tasks.id, id));
 }
 
+/** Campanha automática «Callbacks» (escondida nas listas): recebe os callbacks feitos fora de uma campanha. */
+export async function callbacksCampaign(db: Db, byUserId: string) {
+  const r = await db.execute(sql`select id from campaigns where filters->>'system' = 'callbacks' limit 1`);
+  const id = (r.rows[0] as { id?: string } | undefined)?.id;
+  if (id) return id;
+  const [k] = await db.insert(campaigns).values({ name: "Callbacks (automática)", mode: "new", status: "active", filters: { system: "callbacks" }, createdBy: byUserId }).returning({ id: campaigns.id });
+  return k!.id;
+}

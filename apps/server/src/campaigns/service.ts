@@ -168,6 +168,6 @@ export async function listCampaigns(db: Db, by: PublicUser) {
       (select count(*)::int from campaign_entries e where e.campaign_id = k.id and e.status = 'pending' and (e.next_at is null or e.next_at <= now())) as ready,
       (select count(*)::int from campaign_entries e where e.campaign_id = k.id and e.status = 'done') as done,
       (select count(*)::int from campaign_entries e where e.campaign_id = k.id and e.status = 'exhausted') as exhausted
-    from campaigns k where ${mine} order by (k.status = 'ended'), k.created_at desc`);
+    from campaigns k where ${mine} and k.filters->>'system' is null order by (k.status = 'ended'), k.created_at desc`);
   return r.rows;
 }

@@ -226,6 +226,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow }: { me: 
               <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
+                {cur.entry.assignedToMe && cur.entry.lastOutcome === "call_later" && phase !== "calling" && <Chip tone="brand">Callback{cur.campaign.id !== campaignId ? ` · ${cur.campaign.name}` : ""}</Chip>}
                 {phase === "calling" && <Chip tone="brand">Em chamada · {mmss(callSecs)}</Chip>}
                 {phase === "review" && <Chip tone="warn">Chamada terminada · resultado por registar</Chip>}
               </div>

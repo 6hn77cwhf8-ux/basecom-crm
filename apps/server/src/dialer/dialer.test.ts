@@ -104,7 +104,7 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await expect(call(ana, { outcomeId: "not_interested" })).rejects.toThrow(/motivo/);
   });
 
-  it("Callback «Agendar para mim», Interessado e Venda (conquista da carteira)", async () => {
+  it("Callback (volta à fila da mesma pessoa), Interessado e Venda (conquista da carteira)", async () => {
     const at = new Date(Date.now() + 3 * 86400_000).toISOString();
     // Callback no máximo a 1 mês (17 nov): mais do que isso é recusa.
     await expect(call(bia, { outcomeId: "call_later", at: new Date(Date.now() + 40 * 86400_000).toISOString(), forMe: true })).rejects.toThrow(/Recusa/);
@@ -112,7 +112,12 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     const { n: n1 } = await call(bia, { outcomeId: "call_later", at, forMe: true, comment: "Ligar à tarde" });
     const e1 = await entryOf(n1.company.id);
     expect(e1.assignedTo).toBe(bia.id);
-    expect((await db.select().from(tasks).where(eq(tasks.companyId, n1.company.id)))[0]).toMatchObject({ assignedTo: bia.id, type: "Ligar" });
+    // Callbacks (17 nov): não vão para a Agenda; voltam à fila da mesma pessoa à hora marcada, à frente de tudo.
+    expect(await db.select().from(tasks).where(eq(tasks.companyId, n1.company.id))).toHaveLength(0);
+    await db.update(campaignEntries).set({ nextAt: new Date(Date.now() - 60_000) }).where(eq(campaignEntries.id, e1.id));
+    const back = await nextEntry(db, toPublic(bia), campaignId);
+    expect(back!.entry.id).toBe(e1.id);
+    await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: new Date(Date.now() + 86400_000) }).where(eq(campaignEntries.id, e1.id));
 
     const { n: n2 } = await call(ana, { outcomeId: "interested", at, nextAction: "Enviar proposta 4P", services: "4P" });
     expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n2.company.id)))[0]).toMatchObject({ stage: "interest", ownerId: ana.id });

@@ -38,7 +38,6 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [comment, setComment] = useState("");
   const [date, setDate] = useState("");
   const [at, setAt] = useState("");
-  const [forMe, setForMe] = useState(false);
   const [nextAction, setNextAction] = useState("");
   const [services, setServices] = useState("");
   const [decisorName, setDecisorName] = useState("");
@@ -82,7 +81,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
     if (!ready || !outcome) return;
     onSave({
       outcomeId: outcome.id, reasonId: reason?.id, comment: comment.trim() || undefined, date: date || undefined, at: toIso(at),
-      forMe: eff === "call_later" ? forMe : undefined, nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
+      nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
       decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
       opCode: workKind ? op : undefined,
       saleTypes: withTypes ? saleTypes : undefined,
@@ -163,7 +162,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
             <DatePicker withTime workdaysOnly value={at} onChange={setAt} width={260} ariaLabel="Data e hora"
               min={toLocal(new Date()).slice(0, 10)} max={eff === "call_later" ? toLocal(callbackLimit(new Date(), cat.timeLimits.callbackMaxMonths ?? 1)).slice(0, 10) : undefined} />
           </Field>
-          {eff === "call_later" && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, paddingBottom: 8 }}><input type="checkbox" checked={forMe} onChange={(e) => setForMe(e.target.checked)} /> Agendar para mim</label>}
+          {eff === "call_later" && <span style={{ fontSize: 13, color: c.muted, paddingBottom: 10 }}>Volta à sua fila de chamadas à hora marcada (não vai para a Agenda).</span>}
         </div>
       )}
       {eff === "negotiating" && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
