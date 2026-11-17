@@ -74,3 +74,6 @@ Por decidir:
 Aprovado (17/11, fim do dia): desenhos 13 a 18.
 - Cores sóbrias (ecrã 18 «Cor com calma»): ícones do menu com cor suave, painel do dia com caixas de cor, ponto pequeno nos estados e etiquetas, linha fina nas etapas; números do menu a cinzento, só as não atendidas a laranja.
 - **Sem pontos de cor nos botões de resultado** (Recusa, Callback, …): ficam brancos; o escolhido fica preto.
+
+Construído na 0.12.0 (17/11, por publicar): itens acima, exceto assinaturas do WhatsApp (à espera) e chamadas desligadas logo a seguir (por decidir).
+Por testar pelo Leonardo no telemóvel: Mute (depende do modelo), janela ao atender, não atendidas durante outra chamada.
