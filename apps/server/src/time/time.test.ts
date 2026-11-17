@@ -55,6 +55,11 @@ describe.skipIf(!url)("estados e registo de ponto", () => {
     expect(s.state).toBe("training");
     expect(s.used.ownTraining).toBe(0);
     expect(s.over.training).toBe(false);
+    // O comercial não sai sozinho da formação; o responsável termina-a e volta a «A trabalhar».
+    await expect(setState(db, toPublic(ana), ana.id, "working")).rejects.toThrow(/termina a formação/);
+    await setState(db, toPublic(admin), ana.id, "working");
+    expect((await daySummary(db, ana.id)).state).toBe("working");
+    await expect(setState(db, toPublic(admin), ana.id, "working")).rejects.toThrow(/não está em formação/);
   });
 
   it("sem sinal de vida há mais de 3 min, o período fecha no último sinal; sair fecha o dia", async () => {

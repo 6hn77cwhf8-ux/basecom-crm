@@ -153,7 +153,7 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
   if (input.entryId) {
     const st = await currentState(db, user.id);
     if (st === "break" || st === "training" || st === "office" || st === "client") throw new AuthError(409, {
-      break: "Está em intervalo. Volte a «A trabalhar» para ligar.", training: "Está em formação. Volte a «A trabalhar» para ligar.",
+      break: "Está em intervalo. Volte a «A trabalhar» para ligar.", training: "Está em formação. O Chefe de Equipa ou o Administrador termina a formação.",
       office: "Está em Office. Volte a «A trabalhar» para ligar.", client: "Está em cliente. Carregue em «Terminar» para voltar a ligar.",
     }[st]);
     if (st !== "working") await setState(db, user, user.id, "working");

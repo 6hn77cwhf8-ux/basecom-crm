@@ -105,3 +105,12 @@ export function resizePhoto(file: File): Promise<string> {
     fr.readAsDataURL(file);
   });
 }
+
+/** Ligar pelo computador (opção pessoal, guardada neste computador): sem telemóvel BASECOM, abre «tel:» (no Mac, FaceTime/iPhone). */
+export const dialPref = {
+  get(): boolean { try { return localStorage.getItem("bc_dial_computer") === "1"; } catch { return false; } },
+  set(v: boolean) { try { localStorage.setItem("bc_dial_computer", v ? "1" : "0"); } catch { /* sem armazenamento */ } },
+};
+export function dialOnComputer(phone: string | null | undefined) {
+  if (phone && dialPref.get()) window.open(`tel:+351${phone.replace(/\D/g, "")}`);
+}

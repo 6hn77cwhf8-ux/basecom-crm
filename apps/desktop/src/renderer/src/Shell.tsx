@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { fmtBalance } from "@basecom/shared";
-import { Avatar, btn, btnDark, c, ErrorText, font, resizePhoto } from "./ui";
+import { Avatar, btn, btnDark, c, dialPref, ErrorText, font, resizePhoto } from "./ui";
 import { IncomingBanner, PhoneDialog } from "./pages/Phone";
 import { ClientBanner } from "./pages/ClientWork";
 import { api, ROLE_LABEL, type Role, type MyDay, type SearchHit, type User } from "./api";
@@ -65,7 +65,11 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
             </button>
           );
         })}
-        <div style={{ marginTop: "auto", paddingTop: 14, borderTop: `1px solid ${c.line}`, display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={onLogout} title="Terminar sessão" aria-label="Terminar sessão"
+          style={{ marginTop: "auto", marginBottom: 10, height: 32, border: `1px solid ${c.line}`, borderRadius: 8, background: c.card, color: c.ink, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Icon d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />{open && "Terminar sessão"}
+        </button>
+        <div style={{ paddingTop: 14, borderTop: `1px solid ${c.line}`, display: "flex", alignItems: "center", gap: 10 }}>
           {/* Carregar no nome abre «Aparência»: tema Claro/Escuro/Automático e a foto. */}
           <button onClick={() => setLooks(true)} title="Aparência e foto" style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flex: open ? 1 : "0 0 auto", minWidth: 0, textAlign: "left", fontFamily: "inherit", color: c.ink }}>
             <Avatar name={user.name} photo={user.photo} size={28} />
@@ -78,7 +82,6 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
           </button>
           {looks && <Appearance user={user} onClose={() => setLooks(false)} onUser={(u) => onUser?.(u)} />}
           <button onClick={() => setPhoneOpen(true)} title="Telemóvel (app BASECOM)" style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", padding: 4 }}><Icon d="M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2" /></button>
-          {open && <button onClick={onLogout} style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>Sair</button>}
         </div>
       </nav>
       {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
@@ -279,8 +282,21 @@ function Appearance({ user, onClose, onUser }: { user: User; onClose: () => void
           </span>
         </div>
       </div>
+      {user.role === "admin" && <DialPref />}
       <ErrorText>{err}</ErrorText>
       <div style={{ display: "flex", justifyContent: "flex-end" }}><button style={btnDark} onClick={onClose}>Fechar</button></div>
     </Modal>
+  );
+}
+
+/** Opção pessoal do Administrador: sem telemóvel BASECOM, as chamadas saem pelo computador (Mac: FaceTime → iPhone). */
+function DialPref() {
+  const [on, setOn] = useState(dialPref.get());
+  return (
+    <label style={{ display: "flex", gap: 10, alignItems: "flex-start", borderTop: `1px solid ${c.line}`, paddingTop: 14, fontSize: 14, cursor: "pointer" }}>
+      <input type="checkbox" checked={on} onChange={(e) => { setOn(e.target.checked); dialPref.set(e.target.checked); }} style={{ marginTop: 3 }} />
+      <span style={{ display: "flex", flexDirection: "column", gap: 2 }}><b>Ligar pelo computador</b>
+        <span style={{ fontSize: 12, color: c.muted }}>Sem telemóvel BASECOM ligado, «Iniciar chamada» abre a chamada no computador (no Mac, pelo FaceTime e o iPhone). No fim, carregue em «Desligar» no CRM. Fica só neste computador.</span></span>
+    </label>
   );
 }

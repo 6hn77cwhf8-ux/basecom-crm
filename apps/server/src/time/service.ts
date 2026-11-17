@@ -46,9 +46,18 @@ type ClientWork = { companyId: string; opCode: string; kind: WorkKind };
 export async function setState(db: Db, actor: PublicUser, userId: string, state: State | "off", work?: ClientWork) {
   if (actor.id !== userId) {
     if (actor.role === "sales") throw new AuthError(403, "Só o Chefe de Equipa ou o Administrador podem mudar o estado de outra pessoa.");
-    if (state !== "training") throw new AuthError(400, "Pode apenas colocar outra pessoa em formação.");
     if (!(await canSee(db, actor, userId))) throw new AuthError(403, "Esta pessoa não é da sua equipa.");
+    if (state === "working") {
+      // Terminar a formação de alguém da equipa (volta a «A trabalhar»; o Power Dialer recomeça a contar).
+      const cur = await openEntry(db, userId);
+      if (cur?.state !== "training") throw new AuthError(409, "Esta pessoa não está em formação.");
+    } else if (state !== "training") throw new AuthError(400, "Pode apenas pôr ou tirar outra pessoa de formação.");
   } else {
+    // Formação marcada pelo responsável: só o responsável a termina.
+    if (state !== "training" && state !== "off" && !LEADS.includes(actor.role)) {
+      const cur = await openEntry(db, userId);
+      if (cur?.state === "training") throw new AuthError(409, "Está em formação. O Chefe de Equipa ou o Administrador termina a formação.");
+    }
     if (state === "training" && !LEADS.includes(actor.role)) throw new AuthError(403, "A formação é marcada pelo Chefe de Equipa ou pelo Administrador.");
     if (state === "support" && !LEADS.includes(actor.role)) throw new AuthError(403, "O Apoio é só do Chefe de Equipa e do Administrador.");
     if (state === "client" && !work) throw new AuthError(400, "Escolha a empresa e indique a OP.");

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPhone, renderScript, spokenName } from "@basecom/shared";
 import { api, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input } from "../ui";
+import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input, dialOnComputer } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
 import { PhoneDialog, useCallEnd, usePhone } from "./Phone";
@@ -88,6 +88,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     if (!n?.phone) return;
     const preview = n.campaign.dialMode === "preview";
     const r = await api.startCall({ companyId: n.company.id, contactId: n.phone.id, entryId: n.entry.id, source: preview ? "current" : "new", consultedNos: preview ? consultedRef.current : undefined });
+    if (!r.viaPhone) dialOnComputer(n.phone.value);
     setCallId(r.id); setStartedAt(Date.now()); setViaPhone(r.viaPhone); setLive(false); setQueued(false); pendingRef.current = null; setPhase("calling");
   }
   /** Tecla ou botão de resultado durante a chamada. Pelo telemóvel não desliga: o comercial preenche enquanto fala. */

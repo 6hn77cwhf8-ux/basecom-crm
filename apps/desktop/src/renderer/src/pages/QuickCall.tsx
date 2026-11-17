@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatPhone } from "@basecom/shared";
 import { api, type Catalogs, type ResultInput } from "../api";
-import { btn, btnDark, c, card, ErrorText } from "../ui";
+import { btn, btnDark, c, card, ErrorText, dialOnComputer } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { useCallEnd } from "./Phone";
 
@@ -31,7 +31,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
     if (started.current) return; started.current = true;
     api.catalogs().then(setCat).catch((e) => setError(e.message));
     api.startCall({ companyId: company.id, contactId: contact.id, source: "ficha" })
-      .then((r) => setCall({ id: r.id, startedAt: Date.now(), viaPhone: r.viaPhone }))
+      .then((r) => { if (!r.viaPhone) dialOnComputer(contact.value); setCall({ id: r.id, startedAt: Date.now(), viaPhone: r.viaPhone }); })
       .catch((e) => setError((e as Error).message));
   }, []);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);

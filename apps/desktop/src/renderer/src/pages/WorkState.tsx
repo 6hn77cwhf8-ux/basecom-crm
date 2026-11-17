@@ -40,6 +40,13 @@ export function WorkStates({ role, onChange, disabled }: { role: Role; onChange?
   const lead = LEADS.includes(role);
   const inClient = d.state === "client";
   const set = (s: WorkState) => api.setWorkState(s).then(apply).catch(() => undefined);
+  // Formação marcada pelo responsável: o comercial não sai sozinho (o responsável termina em Equipa comercial).
+  if (!lead && d.state === "training") return (
+    <div role="group" aria-label="Estado" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <span style={{ height: 32, display: "inline-flex", alignItems: "center", padding: "0 12px", borderRadius: 999, border: `1px solid ${c.line}`, background: c.card, fontSize: 13, fontWeight: 700 }}>Em formação</span>
+      <span style={{ fontSize: 12, color: c.muted }}>O responsável termina a formação.</span>
+    </div>
+  );
   const chip = (s: WorkState, text: string, warn = false, off = false) => {
     const on = d.state === s;
     return (

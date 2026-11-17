@@ -161,7 +161,9 @@ function Ponto({ canExport }: { canExport: boolean }) {
               <td style={td}>{mmss(r.seconds.office ?? 0)}</td>
               <td style={td}>{mmss(r.seconds.support ?? 0)}</td>
               <td style={td}>{r.incoming.received} · <span style={red(r.incoming.toReturn > 0)}>{r.incoming.toReturn}</span>{r.incoming.returned ? ` (${r.incoming.returned} retribuídas)` : ""}</td>
-              <td style={{ ...td, textAlign: "right" }}>{r.state && r.state !== "training" && <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("training", r.id).then(load).catch((e) => setError(e.message))}>Pôr em formação</button>}</td>
+              <td style={{ ...td, textAlign: "right" }}>{r.state === "training"
+                ? <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("working", r.id).then(load).catch((e) => setError(e.message))}>Terminar formação</button>
+                : r.state && <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("training", r.id).then(load).catch((e) => setError(e.message))}>Pôr em formação</button>}</td>
             </tr>
           );
         })}</tbody>
