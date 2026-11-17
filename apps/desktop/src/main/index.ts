@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { join } from "node:path";
 
 function createWindow() {
@@ -10,11 +10,35 @@ function createWindow() {
     title: "BASECOM CRM",
     webPreferences: { preload: join(__dirname, "../preload/index.cjs"), contextIsolation: true, sandbox: true },
   });
-  // Ligações «tel:» e «mailto:» abrem no programa do sistema (Ligação ao Telemóvel / FaceTime, Outlook).
+  // Ligações «tel:», «mailto:» e páginas de fora (WhatsApp, etc.) abrem no programa do sistema.
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^(tel|mailto|https?):/.test(url)) shell.openExternal(url); return { action: "deny" }; });
-  win.webContents.on("will-navigate", (e, url) => { if (/^(tel|mailto):/.test(url)) { e.preventDefault(); shell.openExternal(url); } });
+  // A janela só navega dentro do CRM; tudo o resto abre fora.
+  win.webContents.on("will-navigate", (e, url) => {
+    if (url.startsWith(CRM_ORIGIN) || url.startsWith("data:") || url.startsWith("file:") || (process.env.ELECTRON_RENDERER_URL && url.startsWith(process.env.ELECTRON_RENDERER_URL))) return;
+    e.preventDefault();
+    if (/^(tel|mailto|https?):/.test(url)) shell.openExternal(url);
+  });
+  // Sem internet ou servidor em baixo: página simples com «Tentar de novo».
+  win.webContents.on("did-fail-load", (_e, code, _desc, url, isMain) => {
+    if (isMain && code !== -3 && !url.startsWith("data:")) win.loadURL(offlinePage());
+  });
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else win.loadFile(join(__dirname, "../renderer/index.html"));
+  else win.loadURL(CRM_URL);
+}
+
+/**
+ * Atualização automática (17 nov 2026): os ecrãs vêm do servidor (crm.basecom.pt/app/). Cada publicação chega a todos
+ * os computadores da próxima vez que o CRM abrir, sem reinstalar. Este programa é só a «moldura».
+ */
+const CRM_URL = process.env.BASECOM_URL ?? "https://crm.basecom.pt/app/";
+const CRM_ORIGIN = new URL(CRM_URL).origin;
+function offlinePage() {
+  const html = `<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>BASECOM CRM</title><style>
+    body{margin:0;height:100vh;display:grid;place-items:center;background:#F5F5F7;color:#0B0B0B;font-family:-apple-system,"Segoe UI",sans-serif}
+    main{background:#fff;border:1px solid #E5E5EA;border-radius:16px;padding:32px 36px;max-width:420px;text-align:center}
+    h1{font-size:22px;margin:0 0 8px}p{color:#6E6E73;font-size:14px;line-height:20px}a{display:inline-block;margin-top:12px;background:#0B0B0B;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600}
+  </style></head><body><main><h1>Sem ligação ao CRM</h1><p>Verifique a internet. O CRM abre assim que a ligação voltar.</p><a href="${CRM_URL}">Tentar de novo</a></main></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 /**
@@ -34,6 +58,9 @@ function setMenu() {
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(tpl));
 }
+
+// Versão deste programa (a «moldura»), para os ecrãs avisarem quando for preciso reinstalar.
+ipcMain.on("shell-version", (e) => { e.returnValue = app.getVersion(); });
 
 app.whenReady().then(() => {
   setMenu();

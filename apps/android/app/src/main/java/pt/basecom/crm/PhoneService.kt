@@ -98,11 +98,34 @@ class PhoneService : Service() {
         super.onDestroy()
     }
 
+    /** Versão nova da app: aviso uma vez por versão (tocar abre a transferência). Vê de 6 em 6 horas. */
+    private var lastUpdateCheck = 0L
+    private fun checkUpdate() {
+        if (System.currentTimeMillis() - lastUpdateCheck < 6 * 3_600_000L) return
+        lastUpdateCheck = System.currentTimeMillis()
+        val v = api.latestVersion() ?: return
+        val installed = if (Build.VERSION.SDK_INT >= 28) packageManager.getPackageInfo(packageName, 0).longVersionCode else @Suppress("DEPRECATION") packageManager.getPackageInfo(packageName, 0).versionCode.toLong()
+        val prefs = getSharedPreferences("basecom", MODE_PRIVATE)
+        if (v.first <= installed || prefs.getLong("updateNotified", 0) == v.first) return
+        prefs.edit().putLong("updateNotified", v.first).apply()
+        val nm = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel("update", "Atualizações da app", NotificationManager.IMPORTANCE_DEFAULT))
+        val pi = PendingIntent.getActivity(this, 7, Intent(Intent.ACTION_VIEW, Uri.parse(api.apkUrl)), PendingIntent.FLAG_IMMUTABLE)
+        val n = (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "update") else @Suppress("DEPRECATION") Notification.Builder(this))
+            .setContentTitle("Nova versão da app BASECOM (${v.second})")
+            .setContentText("Toque para descarregar e instalar.")
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setColor(0xFFFF5A00.toInt())
+            .setContentIntent(pi).setAutoCancel(true).build()
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) nm.notify(7, n)
+    }
+
     /** Ciclo principal: espera por pedidos do CRM; em falha de rede, volta a tentar com pausa crescente. */
     private fun loop() {
         var backoff = 2_000L
         while (running && api.token != null) {
             try {
+                checkUpdate()
                 val cmd = api.next()
                 backoff = 2_000L
                 if (cmd != null) main.post {

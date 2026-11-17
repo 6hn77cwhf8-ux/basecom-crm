@@ -19,6 +19,7 @@ import { teamRoutes } from "./routes/teams.js";
 import { phoneRoutes } from "./routes/phone.js";
 import { timeRoutes } from "./routes/time.js";
 import { messageRoutes } from "./routes/messages.js";
+import { staticRoutes } from "./routes/static.js";
 
 export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean }) {
   const app = Fastify({ logger: deps.logger ?? false });
@@ -54,5 +55,6 @@ export function buildApp(deps: { db: Db; encryptionKey: string; logger?: boolean
   app.register(phoneRoutes, { db: deps.db });
   app.register(timeRoutes, { db: deps.db });
   app.register(messageRoutes, { db: deps.db });
+  app.register(staticRoutes, { appDir: process.env.APP_DIR ?? new URL("../public", import.meta.url).pathname, filesDir: process.env.FILES_DIR ?? "/files" });
   return app;
 }

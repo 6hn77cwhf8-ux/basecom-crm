@@ -60,4 +60,12 @@ class Api(private val ctx: Context) {
     }
 
     fun event(e: JSONObject): JSONObject = request("POST", "/device/events", e)
+
+    /** Versão mais recente publicada da app (atualização com um toque). Devolve null se não houver ou falhar. */
+    fun latestVersion(): Pair<Long, String>? = try {
+        val r = request("GET", "/android/version.json")
+        Pair(r.getLong("versionCode"), r.optString("versionName"))
+    } catch (_: Exception) { null }
+
+    val apkUrl: String get() = "$server/android/BASECOM.apk"
 }

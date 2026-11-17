@@ -5,8 +5,12 @@ name: App Android
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, production]
     paths: ["apps/android/**", ".github/workflows/android.yml"]
+
+# Para publicar a app no ramo android-releases (só nas versões aprovadas, ramo production).
+permissions:
+  contents: write
 
 jobs:
   apk:
@@ -51,3 +55,15 @@ jobs:
           name: BASECOM-Android-${{ env.VERSION_NAME }}
           path: apps/android/BASECOM-*.apk
           if-no-files-found: error
+      # Atualização com um toque (17 nov 2026): nas versões publicadas (ramo production), a app vai para o ramo
+      # android-releases; o servidor copia-a e os telemóveis veem o aviso «Nova versão».
+      - name: Publicar para os telemóveis
+        if: github.ref == 'refs/heads/production'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/rel" && cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/rel/BASECOM.apk"
+          printf '{"versionCode": %s, "versionName": "%s"}\n' "$VERSION_CODE" "$VERSION_NAME" > "$RUNNER_TEMP/rel/version.json"
+          cd "$RUNNER_TEMP/rel" && git init -q && git checkout -q -b android-releases && git add .
+          git -c user.name="BASECOM CI" -c user.email="ci@users.noreply.github.com" commit -qm "App Android $VERSION_NAME"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" android-releases

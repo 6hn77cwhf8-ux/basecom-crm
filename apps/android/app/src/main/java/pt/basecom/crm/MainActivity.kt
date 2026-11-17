@@ -36,6 +36,8 @@ class MainActivity : Activity() {
     private lateinit var codeInput: EditText
     private lateinit var serverInput: EditText
     private lateinit var pairCard: LinearLayout
+    private lateinit var updateCard: LinearLayout
+    private lateinit var updateText: TextView
 
     private val orange = Color.parseColor("#FF5A00")
     private val ink = Color.parseColor("#0B0B0B")
@@ -107,6 +109,15 @@ class MainActivity : Activity() {
         root.addView(status)
         root.gap(16)
 
+        // Versão nova da app: aparece só quando existe (tocar descarrega e instala).
+        updateCard = card().apply { visibility = View.GONE; background = rounded(Color.parseColor("#FFF1E8"), 16, orange) }
+        updateText = text("", 15f, ink, true)
+        updateCard.addView(updateText)
+        updateCard.gap(10)
+        updateCard.addView(button("Instalar a versão nova", true) { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(api.apkUrl))) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        root.addView(updateCard)
+        root.gap(12)
+
         // Passos
         pairCard = card()
         pairCard.addView(step(1, "Emparelhar com o CRM", "No CRM, carregue no ícone do telemóvel (em baixo, no menu) e escreva aqui o código."))
@@ -149,7 +160,20 @@ class MainActivity : Activity() {
         refresh()
     }
 
-    override fun onResume() { super.onResume(); refresh() }
+    override fun onResume() { super.onResume(); refresh(); checkUpdate() }
+
+    private fun installedCode(): Long = if (Build.VERSION.SDK_INT >= 28) packageManager.getPackageInfo(packageName, 0).longVersionCode
+        else @Suppress("DEPRECATION") packageManager.getPackageInfo(packageName, 0).versionCode.toLong()
+
+    private fun checkUpdate() {
+        Thread {
+            val v = api.latestVersion()
+            runOnUiThread {
+                if (v != null && v.first > installedCode()) { updateText.text = "Há uma versão nova da app (${v.second})."; updateCard.visibility = View.VISIBLE }
+                else updateCard.visibility = View.GONE
+            }
+        }.start()
+    }
 
     private fun missingPerms() = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
 

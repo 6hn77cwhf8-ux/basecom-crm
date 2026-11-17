@@ -1,5 +1,6 @@
 /** Endereço do servidor: local em desenvolvimento, crm.basecom.pt em produção. */
-export const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+// Ecrãs servidos pelo servidor em /app/ (atualização automática): a API é o próprio servidor.
+export const API_URL: string = import.meta.env.VITE_API_URL || (location.protocol.startsWith("http") && location.pathname.startsWith("/app") ? location.origin : "http://localhost:3000");
 
 export type Role = "admin" | "team_lead" | "sales";
 export type User = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean; theme?: "light" | "dark" | "auto"; photo?: string | null };
