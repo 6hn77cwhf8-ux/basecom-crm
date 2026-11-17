@@ -5,6 +5,7 @@ import { btn, btnDark, c, card, Chip, CopyButton, ErrorText, fmtDate, fmtDateTim
 import { StatusChips } from "./Companies";
 import { QuickCall } from "./QuickCall";
 import { DeleteDialog, KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
+import { MessageDialog } from "./MessageDialog";
 
 type Tab = "resumo" | "contactos" | "historico" | "oportunidades" | "vendas" | "tickets";
 const TABS: { id: Tab; label: string; later?: string }[] = [
@@ -38,7 +39,7 @@ function Rgu({ rgu }: { rgu: Record<string, number> | null }) {
   );
 }
 
-const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota", wallet: "Carteira", client_work: "Em cliente" };
+const NOTE_KIND: Record<string, string> = { feedback: "Feedback importado", campaign: "Campanha", note: "Nota", wallet: "Carteira", client_work: "Em cliente", message: "Mensagem" };
 
 /** Ficha da empresa em gaveta (maqueta «Ficha»): abre por cima do ecrã atual; «Voltar» fecha. */
 export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClose: () => void }) {
@@ -49,7 +50,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   // Ligar pela app BASECOM do telemóvel (botão «Ligar» e números da ficha).
   const [oppsKey, setOppsKey] = useState(0);
   const [calling, setCalling] = useState<{ id: string; value: string } | null>(null);
-  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | "message" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
   useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
   const after = () => { setDialog(null); load(); };
@@ -92,6 +93,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               </div>
               <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
                 <button style={btn} disabled title={later}>Nova solicitação</button>
+                <button style={btn} onClick={() => setDialog("message")}>Mensagem</button>
                 <button style={btn} onClick={() => setDialog("opp")}>Nova oportunidade</button>
                 {main ? <button style={btnDark} title="Liga pelo telemóvel BASECOM e regista o resultado" onClick={() => setCalling(main)}>Ligar {formatPhone(main.value)}</button>
                   : <button style={btnDark} disabled>Ligar</button>}
@@ -108,6 +110,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
             {calling && <QuickCall company={{ id: co.id, name: co.name, nif: co.nif, walletKind: co.walletKind }} contact={calling} needsKind={co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed}
               onClose={() => setCalling(null)} onSaved={() => { setCalling(null); setTab("historico"); load(); }} />}
+            {dialog === "message" && <MessageDialog companyId={co.id} me={me} onClose={() => setDialog(null)} onSent={load} />}
             {dialog === "opp" && <NewOpportunity companyId={co.id} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setTab("oportunidades"); setOppsKey((k) => k + 1); load(); }} />}
             {dialog === "transfer" && <TransferDialog companyIds={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={after} />}
             {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"

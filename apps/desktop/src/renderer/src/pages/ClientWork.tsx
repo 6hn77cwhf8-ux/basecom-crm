@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, WORK_EVENT, type ClientWork, type DaySummary, type SearchHit, type User, type WorkKind } from "../api";
 import { btn, btnDark, c, card, CopyButton, ErrorText, input } from "../ui";
 import { Modal } from "./Wallet";
+import { MessageDialog } from "./MessageDialog";
 
 /**
  * Em cliente (decisões de 16 nov 2026): trabalho de proposta ou venda num cliente concreto, com o código
@@ -89,6 +90,7 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
   const [, tick] = useState(0);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(false);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
   const secs = Math.max(0, Math.floor((Date.now() - new Date(work.since).getTime()) / 1000));
   const since = new Date(work.since).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -118,8 +120,10 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: "auto" }}>
           <button style={{ ...btnDark, height: 52, padding: "0 28px", fontSize: 15 }} disabled={busy} onClick={() => { setBusy(true); api.endClient().then(onEnded).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>Terminar e voltar a ligar</button>
           {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => onOpenCompany(work.companyId!)}>Abrir ficha</button>}
+          {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => setMsg(true)}>Mensagem</button>}
           {work.companyId && work.opCode && <button style={{ ...btn, height: 52 }} disabled={busy} onClick={() => api.startClient({ companyId: work.companyId!, kind: other, opCode: work.opCode! }).then(onChanged).catch((e) => setErr(e.message))}>Mudar para {KIND_LABEL[other]}</button>}
         </div>
+        {msg && work.companyId && <MessageDialog companyId={work.companyId} me={me} initialTemplate={work.kind === "sale" ? "docs" : "proposal"} onClose={() => setMsg(false)} />}
       </section>
       <aside style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: 12 }}>
         <section style={{ ...card, padding: 20, display: "flex", flexDirection: "column", gap: 10, fontSize: 14, lineHeight: "20px" }}>

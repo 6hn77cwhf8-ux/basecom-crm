@@ -106,8 +106,11 @@ class PhoneService : Service() {
                 val cmd = api.next()
                 backoff = 2_000L
                 if (cmd != null) main.post {
-                    if (cmd.optString("kind") == "hangup") hangUp()
-                    else dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
+                    when (cmd.optString("kind")) {
+                        "hangup" -> hangUp()
+                        "sms" -> openSms(cmd.getString("number"), cmd.optString("text"))
+                        else -> dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
+                    }
                 }
             } catch (e: Api.HttpError) {
                 if (e.status == 401) { api.token = null; running = false; stopSelf(); return }
@@ -116,6 +119,27 @@ class PhoneService : Service() {
                 Thread.sleep(backoff); backoff = (backoff * 2).coerceAtMost(30_000)
             }
         }
+    }
+
+    /**
+     * SMS pedida no CRM: abre a app de mensagens com o número e o texto (o comercial carrega em enviar).
+     * Como o Android não deixa abrir ecrãs a partir de segundo plano, aparece também um aviso: tocar nele abre a mensagem.
+     */
+    private fun openSms(number: String, text: String) {
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")).putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try { startActivity(intent) } catch (_: Exception) {}
+        val nm = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel("sms", "SMS do CRM", NotificationManager.IMPORTANCE_HIGH))
+        val pi = PendingIntent.getActivity(this, number.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n = (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "sms") else @Suppress("DEPRECATION") Notification.Builder(this))
+            .setContentTitle("SMS para $number")
+            .setContentText("Toque para abrir a mensagem e enviar.")
+            .setSmallIcon(android.R.drawable.sym_action_chat)
+            .setColor(0xFFFF5A00.toInt())
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) nm.notify(number.hashCode(), n)
     }
 
     private fun dial(number: String, callId: String?) {

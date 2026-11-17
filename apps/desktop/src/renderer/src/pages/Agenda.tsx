@@ -6,6 +6,7 @@ import { Modal } from "./Wallet";
 import { ResultPanel, type Group } from "./ResultPanel";
 import { useCallEnd } from "./Phone";
 import { DatePicker } from "./DatePicker";
+import { MessageDialog } from "./MessageDialog";
 
 const ORIGIN: Record<string, string> = { call: "da chamada", manual: "manual" };
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -25,7 +26,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
   const [who, setWho] = useState(isAdmin ? "" : me.id);
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [error, setError] = useState("");
-  const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "reschedule" | "cancel" | "done"; t: AgendaTask } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "new" } | { kind: "reschedule" | "cancel" | "done" | "message"; t: AgendaTask } | null>(null);
   const [calling, setCalling] = useState<{ t: AgendaTask; callId: string; phone: string | null; ended: number | null; group: Group; needsKind: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -136,6 +137,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
               <div style={{ display: "flex", gap: 6 }}>
                 {(t.assignedTo === me.id) && <button style={{ ...btnDark, height: 32, fontSize: 13 }} disabled={!t.phone} title={t.phone ? "Ligar e registar o resultado" : "Sem telefone válido"} onClick={() => startCall(t)}>Ligar</button>}
                 <button style={small} onClick={() => setDialog({ kind: "done", t })}>Concluir</button>
+                <button style={small} onClick={() => setDialog({ kind: "message", t })}>Mensagem</button>
                 <button style={small} onClick={() => setDialog({ kind: "reschedule", t })}>Reagendar</button>
                 <button style={{ ...small, color: "#A1000F" }} onClick={() => setDialog({ kind: "cancel", t })}>Cancelar</button>
               </div>
@@ -143,6 +145,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
           ))}
         </section>
       ))}
+      {dialog?.kind === "message" && <MessageDialog companyId={dialog.t.companyId} me={me} initialTemplate={dialog.t.type === "Pedir documentos" ? "docs_reminder" : undefined} onClose={() => setDialog(null)} />}
       {dialog?.kind === "reschedule" && <Reschedule t={dialog.t} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "done" && <DoneTask t={dialog.t} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "cancel" && <CancelTask t={dialog.t} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}

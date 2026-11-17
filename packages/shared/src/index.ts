@@ -5,3 +5,4 @@ export * from "./schedule.js";
 export * from "./scripts.js";
 export * from "./ponto.js";
 export * from "./points.js";
+export * from "./messages.js";

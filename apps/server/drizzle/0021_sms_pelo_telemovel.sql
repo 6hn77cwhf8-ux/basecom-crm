@@ -1,0 +1,1 @@
+ALTER TABLE "phone_commands" ADD COLUMN "text" text;

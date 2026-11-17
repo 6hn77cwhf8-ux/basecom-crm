@@ -5,17 +5,19 @@ import { Campaigns } from "./Campaigns";
 import { CatalogSettings } from "./CatalogSettings";
 import { TeamsSettings } from "./TeamsSettings";
 
-type Section = "timeLimits" | "catalogs" | "campaigns" | "teams" | "auth" | "audit";
+type Section = "timeLimits" | "catalogs" | "messages" | "campaigns" | "teams" | "auth" | "audit";
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "timeLimits", label: "Limites de tempo" },
   { id: "catalogs", label: "Catálogos (resultados, motivos, prazos)" },
+  { id: "messages", label: "Mensagens (WhatsApp, SMS, email)" },
   { id: "campaigns", label: "Campanhas e scripts" },
   { id: "teams", label: "Equipas" },
   { id: "auth", label: "Segurança e entrada" },
   { id: "audit", label: "Histórico de auditoria" },
 ];
 
-const FIELDS: { [K in keyof S]: { key: keyof S[K]; label: string; unit: string; note?: string }[] } = {
+type NumericKey = "timeLimits" | "auth";
+const FIELDS: { [K in NumericKey]: { key: keyof S[K]; label: string; unit: string; note?: string }[] } = {
   timeLimits: [
     { key: "resultSeconds", label: "Registar o resultado após a chamada", unit: "s", note: "Se ultrapassar, o Chefe de Equipa é avisado" },
     { key: "nextCallSeconds", label: "Espera até marcar a empresa seguinte", unit: "s" },
@@ -46,13 +48,13 @@ export function Settings() {
           ))}
           <span style={{ fontSize: 12, color: c.muted, padding: "8px 12px" }}>As restantes secções (ciclos, comissões…) chegam com o Arranque B.</span>
         </nav>
-        {section === "audit" ? <Audit /> : section === "catalogs" ? <CatalogSettings /> : section === "teams" ? <TeamsSettings /> : section === "campaigns" ? <Campaigns /> : <Limits key={section} kind={section} />}
+        {section === "audit" ? <Audit /> : section === "catalogs" ? <CatalogSettings /> : section === "messages" ? <MessageSettings /> : section === "teams" ? <TeamsSettings /> : section === "campaigns" ? <Campaigns /> : <Limits key={section} kind={section as NumericKey} />}
       </div>
     </>
   );
 }
 
-function Limits({ kind }: { kind: keyof S }) {
+function Limits({ kind }: { kind: NumericKey }) {
   const [value, setValue] = useState<Record<string, number> | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -143,5 +145,36 @@ function Audit() {
         </table>
       </section>
     </div>
+  );
+}
+
+/** Modelos das mensagens rápidas: o Administrador muda nomes e textos. Campos automáticos: {decisor} {empresa} {op} {comercial}. */
+function MessageSettings() {
+  const [list, setList] = useState<S["messages"]["templates"] | null>(null);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { api.settings().then((s) => setList(s.messages.templates)).catch((e) => setError(e.message)); }, []);
+  if (!list) return <section style={{ ...card, padding: 24 }}>{error ? <ErrorText>{error}</ErrorText> : "A carregar…"}</section>;
+  const upd = (i: number, p: Partial<S["messages"]["templates"][number]>) => { setList(list.map((x, j) => (j === i ? { ...x, ...p } : x))); setSaved(false); };
+  return (
+    <section style={{ ...card, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <h2 style={{ margin: 0, fontSize: 15 }}>Mensagens rápidas</h2>
+      <span style={{ fontSize: 13, color: c.muted }}>Campos automáticos: {"{decisor}"} {"{empresa}"} {"{op}"} {"{comercial}"}. Sem OP, a «(referência …)» desaparece sozinha.</span>
+      {list.map((t, i) => (
+        <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${c.line}`, paddingTop: 10 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <input style={{ ...input, height: 34, flex: 1 }} value={t.label} onChange={(e) => upd(i, { label: e.target.value })} />
+            <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={t.active} onChange={(e) => upd(i, { active: e.target.checked })} /> Ativo</label>
+          </div>
+          <textarea style={{ ...input, minHeight: 72, padding: "8px 10px", lineHeight: "20px", resize: "vertical" }} value={t.text} onChange={(e) => upd(i, { text: e.target.value })} />
+        </div>
+      ))}
+      <button style={{ ...btn, height: 32, fontSize: 13, alignSelf: "flex-start" }} onClick={() => { setList([...list, { id: `modelo_${Date.now().toString(36)}`, label: "Novo modelo", text: "Bom dia, {decisor}. Fala {comercial}, da BASECOM.", active: true }]); setSaved(false); }}>+ Acrescentar modelo</button>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end" }}>
+        <ErrorText>{error}</ErrorText>
+        {saved && <span role="status" style={{ color: c.ok, fontSize: 13, fontWeight: 600 }}>Guardado.</span>}
+        <button style={btnDark} onClick={() => api.saveSetting("messages", { templates: list }).then(() => setSaved(true)).catch((e) => setError(e.message))}>Guardar mensagens</button>
+      </div>
+    </section>
   );
 }

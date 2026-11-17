@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES } from "@basecom/shared";
+import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
 import { AuthError } from "./auth/errors.js";
@@ -78,6 +78,13 @@ export const SETTINGS = {
       taskTypes: z.array(z.string().min(1).max(60)).min(1),
     }),
     defaults: { outcomes: DEFAULT_OUTCOMES, attempts: DEFAULT_ATTEMPT_RULES, reasons: DEFAULT_REASONS, opportunities: DEFAULT_OPPORTUNITY_RULES, taskTypes: DEFAULT_TASK_TYPES },
+  },
+  /** Mensagens rápidas (17 nov): modelos para WhatsApp, SMS e email. */
+  messages: {
+    schema: z.object({
+      templates: z.array(z.object({ id: z.string().min(1).max(40), label: z.string().trim().min(2).max(60), text: z.string().trim().min(5).max(1000), active: z.boolean() })).min(1),
+    }),
+    defaults: { templates: DEFAULT_MESSAGE_TEMPLATES },
   },
 } as const;
 

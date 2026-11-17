@@ -148,6 +148,13 @@
       "when": 1794913991879,
       "tag": "0020_valor_proposto_tipos",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794914167984,
+      "tag": "0021_sms_pelo_telemovel",
+      "breakpoints": true
     }
   ]
 }

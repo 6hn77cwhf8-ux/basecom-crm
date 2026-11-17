@@ -6,6 +6,7 @@ export type User = { id: string; name: string; email: string; role: Role; mustCh
 export type TeamMember = { id: string; name: string; email: string; role: Role; active: boolean; hiredAt: string | null; totpEnabled: boolean; mustChangePassword: boolean; locked: boolean };
 export type AuditEntry = { id: string; action: string; userName: string; targetName: string | null; details: string | null; at: string };
 export type Settings = {
+  messages: { templates: { id: string; label: string; text: string; active: boolean }[] };
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
   timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number };
 };
@@ -136,6 +137,8 @@ export const api = {
   companyKpis: () => call<CompanyKpis>("/companies/kpis"),
   filterOptions: () => call<FilterOptions>("/companies/options"),
   company: (id: string) => call<CompanyDetail>(`/companies/${id}`),
+  messageTemplates: () => call<{ templates: { id: string; label: string; text: string }[] }>("/messages/templates").then((r) => r.templates),
+  logMessage: (companyId: string, b: { channel: "whatsapp" | "sms" | "email"; templateId?: string; to: string; text: string }) => call<{ ok: boolean; viaPhone: boolean }>(`/companies/${companyId}/messages`, { method: "POST", body: JSON.stringify(b) }),
   search: (q: string) => call<{ results: SearchHit[] }>(`/search${qs({ q })}`).then((r) => r.results),
 
   transfer: (b: { companyIds: string[]; toOwnerId: string | null; when: "current" | "next"; reason: string }) =>
@@ -181,7 +184,7 @@ export const api = {
   incoming: () => call<{ incoming: Incoming | null }>("/phone/incoming").then((r) => r.incoming),
   myDay: () => call<MyDay>("/me/day"),
   opportunities: (q: { ownerId?: string; closed?: boolean } = {}) => call<{ opportunities: Opportunity[] }>(`/opportunities${qs({ ownerId: q.ownerId, closed: q.closed ? "1" : undefined })}`).then((r) => r.opportunities),
-  companyOpportunities: (id: string) => call<{ opportunities: { id: string; stage: string; stageLabel: string; services: string | null; createdAt: string; closedAt: string | null; lastActivityAt: string }[] }>(`/companies/${id}/opportunities`).then((r) => r.opportunities),
+  companyOpportunities: (id: string) => call<{ opportunities: { id: string; stage: string; stageLabel: string; services: string | null; createdAt: string; closedAt: string | null; lastActivityAt: string; nosOp: string | null }[] }>(`/companies/${id}/opportunities`).then((r) => r.opportunities),
   createOpportunity: (b: { companyId: string; stage?: string; services?: string }) => call("/opportunities", { method: "POST", body: JSON.stringify(b) }),
   moveOpportunity: (id: string, stage: string, comment?: string) => call(`/opportunities/${id}/stage`, { method: "POST", body: JSON.stringify({ stage, comment }) }),
   opportunityActivity: (id: string, text: string) => call(`/opportunities/${id}/activity`, { method: "POST", body: JSON.stringify({ text }) }),
