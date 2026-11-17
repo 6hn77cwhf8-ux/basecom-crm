@@ -32,14 +32,14 @@ Decidido a 17/11/2026:
 Desenhos 10 a 12 em https://claude.ai/artifact/U2NSSE9SRcvhQhsumFExEu
 
 Aprovado:
-- **Callback com atalhos**: «Daqui a 1 hora · 1 dia · 1 semana · 1 mês» junto à data; contam só o horário de trabalho. **Limite do callback: 1 mês** (configurável); acima disso tem de ser Recusa.
-- **«Aguarda docs»: tarefa automática** (Pedir documentos) ao fim de X dias, com mensagem de lembrete pronta. Falta: quantos dias.
+- **Callback com atalhos**: «1 hora · 1 dia · 1 semana · 1 mês» + calendário + horas (novo desenho 12). **O calendário só deixa escolher até 1 mês** (configurável); sem mensagens de aviso.
+- **«Aguarda docs»: tarefa automática** (Pedir documentos) ao fim de **2 dias**, com mensagem de lembrete pronta.
+- **Mensagem rápida** WhatsApp/SMS/email (desenho 10). SMS: abre a app de mensagens do telemóvel BASECOM emparelhado com número e texto.
 
 Por aprovar (desenho):
-- **Mensagem rápida** por WhatsApp/SMS/email com modelos configuráveis (abre o WhatsApp do computador com o texto; fica no histórico).
-- **Previsão de pontos** na proposta (tipo NN/XSell/FID/Upsell + valor proposto) e «Pontos do ciclo» no O meu dia.
+- **Previsão de pontos** (novo desenho 11, simples): tipos de venda com até 2 por proposta (FID + XSell ou FID + Upsell; NN sozinho), valor por tipo, etiqueta «+X pontos» e caixa «Pontos do ciclo» com barra. Sem tabela de escalões.
 
 Para testar:
-- **«Abrir OP na NOS»**: falta o endereço de uma OP aberta na extranet.
+- **«Abrir OP na NOS»**: o endereço da OP (ClientContext.aspx) não traz o número; alternativa: copiar a OP e abrir a lista de oportunidades na extranet para colar.
 
 Fora: lista «Prontos para FID» (já se faz com os filtros de campanha).
