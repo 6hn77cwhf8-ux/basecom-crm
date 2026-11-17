@@ -21,4 +21,8 @@ Desenho: https://claude.ai/artifact/U2NSSE9SRcvhQhsumFExEu
 2. **Fotos das pessoas** (carregadas em Equipa comercial); até lá, iniciais.
 3. **Pipeline (Oportunidades)** com cores por etapa, cartão com OP, estado pela regra dos 7 dias, barra de dias sem atividade e foto do comercial; vista «Por etapa» e «Por comercial».
 
-Por decidir: quem vê a vista «Por comercial»; campo novo «valor proposto (€/mês)» na oportunidade para as somas das colunas.
+Decidido a 17/11/2026:
+- Cores do tema escuro aprovadas (desenho, ecrãs 1 a 9).
+- A vista «Por comercial» é vista pelo Administrador e pelo Chefe de Equipa.
+- Campo novo «valor proposto (€/mês)» na oportunidade (soma por coluna e por comercial).
+- Tudo o que é novo (Pipeline com cores, fotos, valor proposto, vista por comercial) também no **tema claro**, com as mesmas funções.
