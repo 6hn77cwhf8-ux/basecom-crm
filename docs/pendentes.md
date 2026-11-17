@@ -26,3 +26,20 @@ Decidido a 17/11/2026:
 - A vista «Por comercial» é vista pelo Administrador e pelo Chefe de Equipa.
 - Campo novo «valor proposto (€/mês)» na oportunidade (soma por coluna e por comercial).
 - Tudo o que é novo (Pipeline com cores, fotos, valor proposto, vista por comercial) também no **tema claro**, com as mesmas funções.
+
+## Melhorias de 17/11/2026
+
+Desenhos 10 a 12 em https://claude.ai/artifact/U2NSSE9SRcvhQhsumFExEu
+
+Aprovado:
+- **Callback com atalhos**: «Daqui a 1 hora · 1 dia · 1 semana · 1 mês» junto à data; contam só o horário de trabalho. **Limite do callback: 1 mês** (configurável); acima disso tem de ser Recusa.
+- **«Aguarda docs»: tarefa automática** (Pedir documentos) ao fim de X dias, com mensagem de lembrete pronta. Falta: quantos dias.
+
+Por aprovar (desenho):
+- **Mensagem rápida** por WhatsApp/SMS/email com modelos configuráveis (abre o WhatsApp do computador com o texto; fica no histórico).
+- **Previsão de pontos** na proposta (tipo NN/XSell/FID/Upsell + valor proposto) e «Pontos do ciclo» no O meu dia.
+
+Para testar:
+- **«Abrir OP na NOS»**: falta o endereço de uma OP aberta na extranet.
+
+Fora: lista «Prontos para FID» (já se faz com os filtros de campanha).
