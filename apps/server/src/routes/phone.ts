@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, myDevice, nextCommand, pairDevice, unpairDevice } from "../phone/service.js";
+import { callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, missedCount, myDevice, nextCommand, pairDevice, queueMute, receivedList, unpairDevice } from "../phone/service.js";
 
 /** Telefonia: rotas do CRM (sessão do utilizador) e da app Android (token do telemóvel, cabeçalho «Authorization: Device …»). */
 export async function phoneRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -16,6 +16,9 @@ export async function phoneRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.delete("/devices/me", any, async (req) => { await unpairDevice(db, req.user!); return { ok: true }; });
   app.get("/calls/:id/status", any, async (req) => callStatus(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id));
   app.get("/phone/incoming", any, async (req) => ({ incoming: await latestIncoming(db, req.user!) }));
+  app.get("/phone/received", any, async (req) => ({ calls: await receivedList(db, req.user!) }));
+  app.get("/phone/missed-count", any, async (req) => ({ n: await missedCount(db, req.user!.id) }));
+  app.post("/phone/mute", any, async (req) => queueMute(db, req.user!.id, z.object({ on: z.boolean() }).parse(req.body).on));
 
   // App Android
   app.post("/device/pair", async (req) => {
@@ -31,6 +34,8 @@ export async function phoneRoutes(app: FastifyInstance, opts: { db: Db }) {
     const ev = z.discriminatedUnion("type", [
       z.object({ type: z.literal("outgoing_ended"), callId: z.string().uuid(), endedAt: z.string().datetime({ offset: true }), durationSeconds: z.number().int().min(0).max(86400) }),
       z.object({ type: z.literal("incoming_ringing"), number: z.string().max(40), at: z.string().datetime({ offset: true }) }),
+      z.object({ type: z.literal("incoming_answered"), incomingId: z.string().uuid(), at: z.string().datetime({ offset: true }) }),
+      z.object({ type: z.literal("incoming_missed"), number: z.string().max(40), at: z.string().datetime({ offset: true }) }),
       z.object({ type: z.literal("incoming_ended"), incomingId: z.string().uuid(), endedAt: z.string().datetime({ offset: true }), durationSeconds: z.number().int().min(0).max(86400) }),
     ]).parse(req.body);
     return deviceEvent(db, d, ev);

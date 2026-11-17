@@ -4,7 +4,7 @@ import { createDb } from "../db/client.js";
 import { calls, companies, companyContacts, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { endCall, startCall } from "../dialer/service.js";
-import { incomingStats, callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, myDevice, nextCommand, pairDevice, receivedToday } from "./service.js";
+import { incomingStats, callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, missedCount, myDevice, nextCommand, pairDevice, queueMute, receivedList, receivedToday } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -70,5 +70,38 @@ describe.skipIf(!url)("telefonia: app Android", () => {
     await db.insert(calls).values({ companyId: coId, userId: ana.id, phone: "911222333", source: "ficha", startedAt: new Date(Date.now() + 1000) });
     const after = await incomingStats(db, ana.id);
     expect(after).toMatchObject({ toReturn: before.toReturn, returned: before.returned + 1 });
+  });
+
+  it("atendida no telemóvel: janela no CRM, resultado sem marcar e o fim chega pelo telemóvel; Desligar e Mute vão ao telemóvel", async () => {
+    const d = await deviceFromToken(db, (globalThis as Record<string, unknown>).tok as string);
+    const r = await deviceEvent(db, d, { type: "incoming_ringing", number: `+351 96${tag}1`, at: new Date(Date.now() - 5000).toISOString() }) as { incomingId: string };
+    await deviceEvent(db, d, { type: "incoming_answered", incomingId: r.incomingId, at: new Date().toISOString() });
+    const inc = await latestIncoming(db, toPublic(ana));
+    expect(inc).toMatchObject({ id: r.incomingId, companies: [{ id: coId }] });
+    expect(inc!.answeredAt).not.toBeNull();
+    const call = await startCall(db, toPublic(ana), { companyId: coId, source: "recebida", phone: `96${tag}1` });
+    expect(call.viaPhone).toBe(true);
+    expect(await nextCommand(db, d.id, 0)).toBeNull(); // não marca
+    await endCall(db, toPublic(ana), call.id);
+    expect(await nextCommand(db, d.id, 0)).toMatchObject({ kind: "hangup" });
+    await queueMute(db, ana.id, true);
+    expect(await nextCommand(db, d.id, 0)).toMatchObject({ kind: "mute", text: "1" });
+    await deviceEvent(db, d, { type: "incoming_ended", incomingId: r.incomingId, endedAt: new Date().toISOString(), durationSeconds: 40 });
+    expect(await latestIncoming(db, toPublic(ana))).toBeNull();
+  });
+
+  it("não atendida durante outra chamada: entra na lista (sem duplicados), conta no menu até ser devolvida", async () => {
+    const d = await deviceFromToken(db, (globalThis as Record<string, unknown>).tok as string);
+    await db.insert(companyContacts).values({ companyId: coId, kind: "phone", value: `96${tag}2` });
+    const before = await missedCount(db, ana.id);
+    const at = new Date(Date.now() + 2000).toISOString(); // depois da chamada do teste anterior
+    await deviceEvent(db, d, { type: "incoming_missed", number: `+351 96${tag}2`, at });
+    await deviceEvent(db, d, { type: "incoming_missed", number: `96${tag}2`, at });
+    expect(await missedCount(db, ana.id)).toBe(before + 1);
+    const list = await receivedList(db, toPublic(ana));
+    expect(list.filter((x) => x.number === `96${tag}2` && x.missed && !x.returned)).toHaveLength(1);
+    expect(list.find((x) => x.number === `96${tag}2` && x.missed)!.companies[0]).toMatchObject({ id: coId, name: `Tel ${tag}` });
+    await db.insert(calls).values({ companyId: coId, userId: ana.id, phone: `96${tag}2`, source: "ficha", startedAt: new Date(Date.now() + 5000) });
+    expect(await missedCount(db, ana.id)).toBe(before);
   });
 });

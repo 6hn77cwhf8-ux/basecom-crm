@@ -148,7 +148,7 @@ export async function releaseEntry(db: Db, user: PublicUser, entryId: string) {
   await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null }).where(and(eq(campaignEntries.id, entryId), eq(campaignEntries.lockedBy, user.id)));
 }
 
-export async function startCall(db: Db, user: PublicUser, input: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean }) {
+export async function startCall(db: Db, user: PublicUser, input: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean; phone?: string }) {
   // Fora de «A trabalhar» não se marcam chamadas de campanha; depois de mudar de campanha, a chamada volta a pôr a trabalhar.
   if (input.entryId) {
     const st = await currentState(db, user.id);
@@ -164,6 +164,8 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
     if (!ct || ct.companyId !== input.companyId) throw new AuthError(400, "Contacto inválido.");
     phone = ct.value;
   }
+  if (!phone && input.source === "recebida" && input.phone) phone = input.phone.replace(/\D/g, "").slice(-9);
+
   let campaignId: string | null = null;
   if (input.entryId) {
     const e = await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, input.entryId) });
@@ -176,7 +178,8 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
   }
   const [c0] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source, details: input.consultedNos ? { consultedNos: true } : null }).returning({ id: calls.id, startedAt: calls.startedAt });
   // Com o telemóvel emparelhado e ligado, o próprio telemóvel marca o número (app BASECOM, Fase 4).
-  const viaPhone = phone ? await queueDial(db, user.id, c0!.id, phone) : false;
+  // Chamada recebida (já atendida no telemóvel): não marca; o fim chega com o aviso do telemóvel.
+  const viaPhone = input.source === "recebida" ? true : phone ? await queueDial(db, user.id, c0!.id, phone) : false;
   return { ...c0!, viaPhone };
 }
 

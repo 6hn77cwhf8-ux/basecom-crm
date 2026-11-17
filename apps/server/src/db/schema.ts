@@ -441,6 +441,8 @@ export const incomingCalls = pgTable("incoming_calls", {
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   ringingAt: timestamp("ringing_at", { withTimezone: true }).notNull().defaultNow(),
   answered: boolean("answered"),
+  /** Quando o comercial atendeu no telemóvel (abre a janela de chamada no CRM). */
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
   durationSeconds: integer("duration_seconds"),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 }, (t) => [index("incoming_calls_user_idx").on(t.userId, t.ringingAt)]);

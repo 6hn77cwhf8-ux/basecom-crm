@@ -83,7 +83,15 @@ export async function queueSms(db: Db, userId: string, number: string, text: str
 /** «Desligar» no CRM: se a chamada foi marcada pelo telemóvel, pede-lhe que a desligue. */
 export async function queueHangup(db: Db, userId: string, callId: string) {
   const sent = await db.query.phoneCommands.findFirst({ where: and(eq(phoneCommands.callId, callId), eq(phoneCommands.kind, "dial")) });
-  if (!sent || sent.status === "expired") return false;
+  if (!sent) {
+    // Chamada recebida (atendida no telemóvel): desliga a chamada em curso nesse telemóvel.
+    const c = await db.query.calls.findFirst({ where: eq(calls.id, callId) });
+    const d = c?.source === "recebida" ? await myDevice(db, userId) : null;
+    if (!d?.online) return false;
+    await db.insert(phoneCommands).values({ deviceId: d.id, callId, number: "", kind: "hangup" });
+    return true;
+  }
+  if (sent.status === "expired") return false;
   await db.update(phoneCommands).set({ status: "expired" }).where(and(eq(phoneCommands.callId, callId), eq(phoneCommands.status, "pending")));
   await db.insert(phoneCommands).values({ deviceId: sent.deviceId, callId, number: "", kind: "hangup" });
   return true;
@@ -107,7 +115,17 @@ export async function nextCommand(db: Db, deviceId: string, waitMs = 25_000) {
 export type DeviceEvent =
   | { type: "outgoing_ended"; callId: string; endedAt: string; durationSeconds: number }
   | { type: "incoming_ringing"; number: string; at: string }
+  | { type: "incoming_answered"; incomingId: string; at: string }
+  /** Chamada que entrou durante outra chamada e não foi atendida (lida do registo do telemóvel no fim da chamada). */
+  | { type: "incoming_missed"; number: string; at: string }
   | { type: "incoming_ended"; incomingId: string; endedAt: string; durationSeconds: number };
+
+/** Empresas com este número (pode haver mais de uma). */
+async function companiesFor(db: Db, national: string) {
+  const r = await db.execute(sql`select distinct c.id, c.name, c.nif from company_contacts k join companies c on c.id = k.company_id
+    where k.kind = 'phone' and k.value = ${national} order by c.name limit 10`);
+  return r.rows as { id: string; name: string; nif: string }[];
+}
 
 export async function deviceEvent(db: Db, device: { id: string; userId: string }, ev: DeviceEvent) {
   if (ev.type === "outgoing_ended") {
@@ -118,15 +136,33 @@ export async function deviceEvent(db: Db, device: { id: string; userId: string }
     await db.update(phoneCommands).set({ status: "done" }).where(eq(phoneCommands.callId, c.id));
     return { ok: true };
   }
-  if (ev.type === "incoming_ringing") {
+  if (ev.type === "incoming_ringing" || ev.type === "incoming_missed") {
     const p = normalizePhone(ev.number);
     const company = p ? (await db.select({ id: companyContacts.companyId }).from(companyContacts).where(and(eq(companyContacts.kind, "phone"), eq(companyContacts.value, p.national))).limit(1))[0] : undefined;
-    const [row] = await db.insert(incomingCalls).values({ userId: device.userId, number: p?.national ?? ev.number.slice(0, 30), companyId: company?.id ?? null, ringingAt: new Date(ev.at) }).returning({ id: incomingCalls.id });
+    const number = p?.national ?? ev.number.slice(0, 30);
+    const at = new Date(ev.at);
+    if (ev.type === "incoming_missed") {
+      // Sem duplicados: o mesmo número à mesma hora já registado.
+      const dup = await db.execute(sql`select 1 from incoming_calls where user_id = ${device.userId}::uuid and number = ${number} and abs(extract(epoch from ringing_at - ${at.toISOString()}::timestamptz)) < 90`);
+      if (dup.rows.length) return { ok: true };
+      await db.insert(incomingCalls).values({ userId: device.userId, number, companyId: company?.id ?? null, ringingAt: at, endedAt: at, answered: false, durationSeconds: 0 });
+      return { ok: true };
+    }
+    const [row] = await db.insert(incomingCalls).values({ userId: device.userId, number, companyId: company?.id ?? null, ringingAt: at }).returning({ id: incomingCalls.id });
     return { incomingId: row!.id };
+  }
+  if (ev.type === "incoming_answered") {
+    const ic = await db.query.incomingCalls.findFirst({ where: eq(incomingCalls.id, ev.incomingId) });
+    if (!ic || ic.userId !== device.userId) throw new AuthError(404, "Chamada recebida não encontrada.");
+    await db.update(incomingCalls).set({ answeredAt: new Date(ev.at), answered: true }).where(eq(incomingCalls.id, ic.id));
+    return { ok: true };
   }
   const ic = await db.query.incomingCalls.findFirst({ where: eq(incomingCalls.id, ev.incomingId) });
   if (!ic || ic.userId !== device.userId) throw new AuthError(404, "Chamada recebida não encontrada.");
-  await db.update(incomingCalls).set({ endedAt: new Date(ev.endedAt), durationSeconds: ev.durationSeconds, answered: ev.durationSeconds > 0 }).where(eq(incomingCalls.id, ic.id));
+  await db.update(incomingCalls).set({ endedAt: new Date(ev.endedAt), durationSeconds: ev.durationSeconds, answered: ev.durationSeconds > 0 || !!ic.answeredAt }).where(eq(incomingCalls.id, ic.id));
+  // Resultado aberto no CRM para esta chamada recebida: o fim conta para os 15 s.
+  await db.execute(sql`update calls set ended_at = ${new Date(ev.endedAt).toISOString()}::timestamptz, duration_seconds = ${ev.durationSeconds}, answered = true, via = 'app'
+    where user_id = ${device.userId}::uuid and source = 'recebida' and ended_at is null and phone = ${ic.number} and started_at > ${ic.ringingAt.toISOString()}::timestamptz`);
   return { ok: true };
 }
 
@@ -139,11 +175,45 @@ export async function callStatus(db: Db, user: PublicUser, callId: string) {
 
 /** Aviso «Chamada a entrar»: a última chamada recebida nos últimos 2 minutos, com a empresa se o número for conhecido. */
 export async function latestIncoming(db: Db, user: PublicUser) {
-  const r = await db.execute(sql`select i.id, i.number, i.ringing_at as "ringingAt", i.ended_at as "endedAt", i.company_id as "companyId", c.name as company,
+  const r = await db.execute(sql`select i.id, i.number, i.ringing_at as "ringingAt", i.answered_at as "answeredAt", i.ended_at as "endedAt", i.company_id as "companyId", c.name as company, c.nif,
       o.name as owner, (select count(*)::int from tasks t where t.company_id = i.company_id and t.status = 'open') as "openTasks"
     from incoming_calls i left join companies c on c.id = i.company_id left join users o on o.id = c.owner_id
-    where i.user_id = ${user.id}::uuid and i.ringing_at > now() - interval '2 minutes' order by i.ringing_at desc limit 1`);
-  return (r.rows[0] ?? null) as { id: string; number: string; ringingAt: string; endedAt: string | null; companyId: string | null; company: string | null; owner: string | null; openTasks: number } | null;
+    where i.user_id = ${user.id}::uuid and i.ended_at is null and i.ringing_at > now() - interval '2 hours'
+      and (i.answered_at is not null or i.ringing_at > now() - interval '2 minutes') order by i.ringing_at desc limit 1`);
+  const row = (r.rows[0] ?? null) as { id: string; number: string; ringingAt: string; answeredAt: string | null; endedAt: string | null; companyId: string | null; company: string | null; nif: string | null; owner: string | null; openTasks: number } | null;
+  return row ? { ...row, companies: /^\d{9}$/.test(row.number) ? await companiesFor(db, row.number) : [] } : null;
+}
+
+/** Ecrã «Chamadas recebidas» (17 nov): últimos dias, com as empresas desse número e se já foi devolvida. */
+export async function receivedList(db: Db, user: PublicUser, days = 7) {
+  const r = await db.execute(sql`select i.id, i.number, i.ringing_at as "ringingAt", i.answered, i.duration_seconds as "durationSeconds", i.ended_at as "endedAt",
+      exists (select 1 from calls k where k.user_id = i.user_id and k.phone = i.number and k.started_at > i.ringing_at) as returned
+    from incoming_calls i where i.user_id = ${user.id}::uuid and i.ringing_at > now() - make_interval(days => ${days}::int)
+    order by i.ringing_at desc limit 300`);
+  const rows = r.rows as { id: string; number: string; ringingAt: string; answered: boolean | null; durationSeconds: number | null; endedAt: string | null; returned: boolean }[];
+  const cache = new Map<string, { id: string; name: string; nif: string }[]>();
+  const out = [];
+  for (const x of rows) {
+    if (/^\d{9}$/.test(x.number) && !cache.has(x.number)) cache.set(x.number, await companiesFor(db, x.number));
+    out.push({ ...x, missed: !x.answered && !!x.endedAt, companies: cache.get(x.number) ?? [] });
+  }
+  return out;
+}
+
+/** Número no menu «Ligar»: não atendidas dos últimos 3 dias que ainda não foram devolvidas. */
+export async function missedCount(db: Db, userId: string) {
+  const r = await db.execute(sql`select count(*)::int as n from incoming_calls i where i.user_id = ${userId}::uuid
+    and not coalesce(i.answered, false) and i.ended_at is not null and i.ringing_at > now() - interval '3 days'
+    and not exists (select 1 from calls k where k.user_id = i.user_id and k.phone = i.number and k.started_at > i.ringing_at)`);
+  return (r.rows[0] as { n: number }).n;
+}
+
+/** Mute no telemóvel BASECOM (desenho 13). */
+export async function queueMute(db: Db, userId: string, on: boolean) {
+  const d = await myDevice(db, userId);
+  if (!d?.online) throw new AuthError(409, "O telemóvel BASECOM não está ligado.");
+  await db.insert(phoneCommands).values({ deviceId: d.id, number: "", kind: "mute", text: on ? "1" : "0" });
+  return { ok: true, on };
 }
 
 export async function receivedToday(db: Db, userId: string) {
