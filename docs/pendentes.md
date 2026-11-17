@@ -70,3 +70,7 @@ Decidido:
 
 Por decidir:
 - Chamadas iniciadas e desligadas logo (contam no rating e reiniciam os tempos).
+
+Aprovado (17/11, fim do dia): desenhos 13 a 18.
+- Cores sóbrias (ecrã 18 «Cor com calma»): ícones do menu com cor suave, painel do dia com caixas de cor, ponto pequeno nos estados e etiquetas, linha fina nas etapas; números do menu a cinzento, só as não atendidas a laranja.
+- **Sem pontos de cor nos botões de resultado** (Recusa, Callback, …): ficam brancos; o escolhido fica preto.
