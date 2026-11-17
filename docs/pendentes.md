@@ -32,7 +32,7 @@ Decidido a 17/11/2026:
 Desenhos 10 a 12 em https://claude.ai/artifact/U2NSSE9SRcvhQhsumFExEu
 
 Aprovado:
-- **Callback com atalhos**: «1 hora · 1 dia · 1 semana · 1 mês» + calendário + horas (desenho 12 aprovado). **Todos os calendários do CRM passam a ter este design** (seleção de dia + horas de 30 em 30 min), em tamanho mais pequeno. **O calendário só deixa escolher até 1 mês** (configurável); sem mensagens de aviso.
+- **Callback com atalhos**: «1 hora · 1 dia · 1 semana · 1 mês» + calendário + horas (desenho 12 aprovado). **Todos os calendários do CRM passam a ter este design** (seleção de dia + horas de 30 em 30 min), em tamanho mais pequeno. No callback, **o calendário só deixa escolher até 1 mês** (configurável); sem mensagens de aviso. Nas outras datas (ex.: fim de fidelização) não há este limite.
 - **«Aguarda docs»: tarefa automática** (Pedir documentos) ao fim de **2 dias**, com mensagem de lembrete pronta.
 - **Mensagem rápida** WhatsApp/SMS/email (desenho 10). SMS: abre a app de mensagens do telemóvel BASECOM emparelhado com número e texto.
 
@@ -45,7 +45,6 @@ Por confirmar:
 Aprovado também:
 - **Previsão de pontos** (desenho 11 aprovado): tipos de venda com até 2 por proposta (FID + XSell ou FID + Upsell; NN sozinho), valor por tipo, etiqueta «+X pontos» e caixa «Pontos do ciclo» com barra. Sem tabela de escalões.
 
-Para testar:
 - **Botão «Copiar» no NIF e na OP** onde aparecem (ficha, Ligar, Em cliente, oportunidades). Sem link para a extranet (o endereço da OP não traz o número).
 
 Fora: lista «Prontos para FID» (já se faz com os filtros de campanha).
