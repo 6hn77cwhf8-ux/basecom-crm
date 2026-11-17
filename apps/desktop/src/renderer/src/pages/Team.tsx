@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fmtBalance } from "@basecom/shared";
 import { api, ROLE_LABEL, type Role, type TeamMember, type User } from "../api";
-import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th } from "../ui";
+import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th, Avatar, resizePhoto } from "../ui";
 import { mmss, STATE_LABEL } from "./WorkState";
 import type { DaySummary } from "../api";
 import { DatePicker } from "./DatePicker";
@@ -26,7 +26,7 @@ export function Team({ me }: { me: User }) {
       <PageHeader eyebrow="Utilizadores e perfis" title="Equipa comercial"
         actions={isAdmin && <button style={btnDark} onClick={() => setCreating(true)}>Novo utilizador</button>} />
       {secret && (
-        <section role="status" style={{ ...card, padding: 16, borderColor: c.brand, background: "#FFF8F3", display: "flex", gap: 16, alignItems: "center" }}>
+        <section role="status" style={{ ...card, padding: 16, borderColor: c.brand, background: c.brandSoft, display: "flex", gap: 16, alignItems: "center" }}>
           <div style={{ flex: 1 }}>
             <b>Palavra-passe provisória de {secret.who}:</b> <code style={{ fontSize: 16, padding: "2px 8px", background: c.card, borderRadius: 6 }}>{secret.password}</code>
             <div style={{ fontSize: 13, color: c.muted, marginTop: 4 }}>Entregue-a à pessoa. Não volta a ser mostrada. Na primeira entrada, a pessoa escolhe uma nova e ativa o Microsoft Authenticator.</div>
@@ -38,13 +38,22 @@ export function Team({ me }: { me: User }) {
       <ErrorText>{error}</ErrorText>
       <section style={{ ...card, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead><tr style={{ background: "#FAFAFA", color: c.muted, textAlign: "left" }}>
+          <thead><tr style={{ background: c.sunken, color: c.muted, textAlign: "left" }}>
             {["Nome", "Perfil", "Email", "Admissão", "Estado", "2FA", ...(isAdmin ? [""] : [])].map((h) => <th key={h} style={{ padding: "10px 12px", fontWeight: 600, borderBottom: `1px solid ${c.line}` }}>{h}</th>)}
           </tr></thead>
           <tbody>
             {list.map((u) => (
               <tr key={u.id} style={{ borderBottom: `1px solid ${c.line}`, opacity: u.active ? 1 : 0.55 }}>
-                <td style={{ padding: "10px 12px", fontWeight: 600 }}>{u.name}</td>
+                <td style={{ padding: "10px 12px", fontWeight: 600 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Avatar name={u.name} photo={u.photo} size={30} />{u.name}
+                    {isAdmin && (
+                      <label title="Carregar a foto" style={{ fontSize: 12, fontWeight: 500, color: c.muted, textDecoration: "underline", cursor: "pointer" }}>foto
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) act(() => resizePhoto(f).then((ph) => api.setPhoto(u.id, ph))); }} />
+                      </label>
+                    )}
+                  </span>
+                </td>
                 <td style={{ padding: "10px 12px" }}>
                   {isAdmin && u.id !== me.id ? (
                     <select aria-label={`Perfil de ${u.name}`} style={{ ...input, height: 32 }} value={u.role} onChange={(e) => act(() => api.updateUser(u.id, { role: e.target.value as Role }))}>
@@ -135,7 +144,7 @@ function Ponto({ canExport }: { canExport: boolean }) {
       <ErrorText>{error}</ErrorText>
       <div style={{ overflow: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Em cliente", "Office", "Apoio", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <thead><tr style={{ background: c.sunken, color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Em cliente", "Office", "Apoio", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
         <tbody>{rows?.map((r) => {
           const p = r.ponto;
           return (
@@ -144,7 +153,7 @@ function Ponto({ canExport }: { canExport: boolean }) {
               <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}{r.client ? ` · ${r.client.kind === "sale" ? "Venda" : "Proposta"} · NIF ${r.client.nif} · OP ${r.client.opCode}` : ""}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
               <td style={td}>{hm(p.entrada)}</td><td style={td}>{hm(p.saidaAlmoco)}</td><td style={td}>{hm(p.regressoAlmoco)}</td><td style={td}>{hm(p.saida)}</td>
               <td style={{ ...td, fontWeight: 700 }}>{mmss(p.presenceSeconds)}</td>
-              <td style={{ ...td, fontWeight: 700, color: p.balanceSeconds < 0 ? "#A1000F" : "#1E6F33" }}>{fmtBalance(p.balanceSeconds)}</td>
+              <td style={{ ...td, fontWeight: 700, color: p.balanceSeconds < 0 ? c.danger : c.ok }}>{fmtBalance(p.balanceSeconds)}</td>
               <td style={td}>{hm(p.expectedExit)}</td>
               <td style={{ ...td, ...red(r.over.break) }}>{mmss(r.seconds.break)}</td>
               <td style={td}>{mmss(r.seconds.training)}</td>

@@ -60,7 +60,7 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
       <ol style={{ display: "flex", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
         {STEPS.map((s, i) => (
           <li key={s} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: i === step ? 700 : 500, color: i <= step ? c.ink : c.muted }}>
-            <span style={{ width: 24, height: 24, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, background: i < step || done ? c.ink : i === step ? c.brand : c.line, color: i <= step || done ? "#FFF" : c.muted }}>{i < step || done ? "✓" : i + 1}</span>
+            <span style={{ width: 24, height: 24, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, background: i < step || done ? c.ink : i === step ? c.brand : c.line, color: i <= step || done ? c.onInk : c.muted }}>{i < step || done ? "✓" : i + 1}</span>
             {s}{i < STEPS.length - 1 && <span style={{ width: 24, height: 1, background: c.line }} />}
           </li>
         ))}
@@ -80,7 +80,7 @@ export function ImportWizard({ onBack }: { onBack: () => void }) {
         <section style={{ ...card, overflow: "hidden" }}>
           <Head title={`Análise de «${up.fileName}»`} hint="Escolha o que fazer com cada folha. Valores propostos conforme as decisões de 10 nov." />
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Folha", "Linhas", "NIF válidos", "NIF inválidos", "Sem NIF", "Telefones", "Sem telefone", "Colunas novas", "O que fazer"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background: c.sunken, color: c.muted }}>{["Folha", "Linhas", "NIF válidos", "NIF inválidos", "Sem NIF", "Telefones", "Sem telefone", "Colunas novas", "O que fazer"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{up.sheets.map((s) => (
               <tr key={s.name}>
                 <td style={{ ...td, fontWeight: 600 }}>{s.name}</td><Num v={s.rows} /><Num v={s.validNif} /><Num v={s.invalidNif} warn /><Num v={s.emptyNif} warn />
@@ -161,7 +161,7 @@ function Preview({ id, summary, trial, done, busy, onFull, onBack, onConfirm }: 
         </div>
         <div style={{ maxHeight: 420, overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr style={{ background: "#FAFAFA", color: c.muted, position: "sticky", top: 0 }}>{["Folha · linha", "NIF", "Empresa", "Tipo de conta", "Comercial responsável", "Resultado", "Detalhe"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background: c.sunken, color: c.muted, position: "sticky", top: 0 }}>{["Folha · linha", "NIF", "Empresa", "Tipo de conta", "Comercial responsável", "Resultado", "Detalhe"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{rows?.rows.map((r) => (
               <tr key={r.id}>
                 <td style={{ ...td, color: c.muted, whiteSpace: "nowrap" }}>{r.sheet} · {r.rowNumber}</td>
@@ -224,23 +224,23 @@ function Batches({ batches, onChange }: { batches: Batch[]; onChange: () => void
     <section style={{ ...card, overflow: "hidden" }}>
       <Head title="Lotes de importação" hint="Cada lote pode ser anulado por inteiro (pede o código 2FA)." />
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>{["Lote", "Ficheiro", "Estado", "Resultado", "Quem", "Quando", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <thead><tr style={{ background: c.sunken, color: c.muted }}>{["Lote", "Ficheiro", "Estado", "Resultado", "Quem", "Quando", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
         <tbody>{shown.map((b) => (
           <tr key={b.id}>
             <td style={{ ...td, fontWeight: 700 }}>{b.number}</td><td style={td}>{b.fileName}</td>
             <td style={td}><Chip tone={b.status === "committed" ? "ok" : b.status === "reverted" ? "bad" : "neutral"}>{STATUS[b.status] ?? b.status}</Chip></td>
             <td style={td}>{b.summary.committed ? `${fmtInt(b.summary.committed.created)} novas · ${fmtInt(b.summary.committed.updated)} atualizadas` : b.summary.preview ? `${fmtInt(b.summary.preview.total)} linhas analisadas` : "—"}</td>
             <td style={td}>{b.createdBy ?? "—"}</td><td style={td}>{fmtDateTime(b.revertedAt ?? b.committedAt ?? b.createdAt)}</td>
-            <td style={{ ...td, textAlign: "right" }}>{b.status === "committed" && <button style={{ ...btn, height: 30, color: "#A1000F" }} onClick={() => setReverting(b)}>Anular lote</button>}</td>
+            <td style={{ ...td, textAlign: "right" }}>{b.status === "committed" && <button style={{ ...btn, height: 30, color: c.danger }} onClick={() => setReverting(b)}>Anular lote</button>}</td>
           </tr>
         ))}</tbody>
       </table>
       {reverting && (
-        <form onSubmit={revert} style={{ display: "flex", gap: 12, alignItems: "flex-end", padding: 16, borderTop: `1px solid ${c.line}`, background: "#FFF8F3" }}>
+        <form onSubmit={revert} style={{ display: "flex", gap: 12, alignItems: "flex-end", padding: 16, borderTop: `1px solid ${c.line}`, background: c.brandSoft }}>
           <p style={{ margin: 0, flex: 1, fontSize: 14 }}><b>Anular o lote {reverting.number}?</b> As empresas criadas por este lote são apagadas e as atualizadas voltam aos valores anteriores.</p>
           <Field label="Código 2FA"><input style={{ ...input, width: 120, textAlign: "center" }} inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} autoFocus /></Field>
           <button type="button" style={btn} onClick={() => setReverting(null)}>Não anular</button>
-          <button style={{ ...btnDark, background: "#A1000F", borderColor: "#A1000F" }} disabled={code.length !== 6}>Anular lote</button>
+          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={code.length !== 6}>Anular lote</button>
           <ErrorText>{error}</ErrorText>
         </form>
       )}
@@ -254,4 +254,4 @@ const Head = ({ title, hint }: { title: string; hint: string }) => (
   </div>
 );
 const Foot = ({ children }: { children: ReactNode }) => <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", padding: 12, borderTop: `1px solid ${c.line}` }}>{children}</div>;
-const Num = ({ v, warn }: { v: number; warn?: boolean }) => <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: warn && v > 0 ? "#8A3D00" : c.ink, fontWeight: warn && v > 0 ? 700 : 400 }}>{fmtInt(v)}</td>;
+const Num = ({ v, warn }: { v: number; warn?: boolean }) => <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: warn && v > 0 ? c.warn : c.ink, fontWeight: warn && v > 0 ? 700 : 400 }}>{fmtInt(v)}</td>;

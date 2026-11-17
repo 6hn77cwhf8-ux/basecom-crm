@@ -90,7 +90,7 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
         <ErrorText>{error}</ErrorText>
         <div style={{ overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>
+            <thead><tr style={{ background: c.sunken, color: c.muted }}>
               {["Empresa", "Decisor", "Telefone", "", "RGU", "Próxima ação", "Último contacto", "Tarefas", ...(isAdmin && !owner ? ["Carteira"] : [])].map((h, i) => <th key={i} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -103,7 +103,7 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
                     <td style={{ ...td, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{r.phone ? formatPhone(r.phone) : <span style={{ color: c.muted }}>Sem telefone</span>}</td>
                     <td style={td}><button style={{ ...btnDark, height: 30, fontSize: 12, padding: "0 12px" }} disabled={!r.phone || (!isAdmin && false)} onClick={() => call(r)}>Ligar</button></td>
                     <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.lines || "—"}</td>
-                    <td style={{ ...td, color: late ? "#A1000F" : c.ink }}>{r.nextAction ? `${r.nextAction.type} · ${fmtDate(r.nextAction.dueAt)}` : <span style={{ color: c.muted }}>—</span>}</td>
+                    <td style={{ ...td, color: late ? c.danger : c.ink }}>{r.nextAction ? `${r.nextAction.type} · ${fmtDate(r.nextAction.dueAt)}` : <span style={{ color: c.muted }}>—</span>}</td>
                     <td style={td}>{r.lastContact ? fmtDate(r.lastContact) : <span style={{ color: c.muted }}>—</span>}</td>
                     <td style={{ ...td, textAlign: "right" }}>{r.openTasks || "—"}</td>
                     {isAdmin && !owner && <td style={td}>{r.owner}</td>}

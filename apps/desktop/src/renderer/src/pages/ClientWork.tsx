@@ -44,7 +44,7 @@ export function StartClientDialog({ onClose, onStarted, initial }: { onClose: ()
     const t = setTimeout(() => api.search(q.trim()).then((r) => setHits(r.slice(0, 6))).catch(() => setHits([])), 250);
     return () => clearTimeout(t);
   }, [q, co]);
-  const pill = (on: boolean) => ({ ...btn, flex: 1, height: 40, background: on ? c.ink : c.card, color: on ? "#FFF" : c.ink, borderColor: on ? c.ink : c.line });
+  const pill = (on: boolean) => ({ ...btn, flex: 1, height: 40, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
   return (
     <Modal title="Começar trabalho em cliente" onClose={onClose} width={560}>
       <span style={{ fontSize: 13, color: c.muted }}>Sem chamada: por exemplo, o cliente pediu proposta por email.</span>

@@ -74,7 +74,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved }: {
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Chamada · {company.name}</span>
                 <span style={{ fontSize: 30, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{formatPhone(contact.value)}</span>
-                <span style={{ fontSize: 13, color: call?.viaPhone ? "#1E6F33" : c.muted }}>
+                <span style={{ fontSize: 13, color: call?.viaPhone ? c.ok : c.muted }}>
                   {!call ? "A preparar…" : call.viaPhone ? "O telemóvel está a marcar. Pode abrir o resultado sem desligar." : "Telemóvel BASECOM sem ligação: marque o número no telemóvel."}
                 </span>
               </div>

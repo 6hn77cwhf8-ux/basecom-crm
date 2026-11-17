@@ -155,6 +155,13 @@
       "when": 1794914167984,
       "tag": "0021_sms_pelo_telemovel",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794914426391,
+      "tag": "0022_tema_e_foto",
+      "breakpoints": true
     }
   ]
 }

@@ -126,13 +126,13 @@ function Audit() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${c.line}`, gap: 12, flexWrap: "wrap" }}>
           <b>Histórico de auditoria</b>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1 }}>
-            {GROUPS.map(([id, label]) => <button key={id} onClick={() => setGroup(id)} style={{ ...btn, height: 28, fontSize: 12, padding: "0 10px", background: group === id ? c.ink : c.card, color: group === id ? "#FFF" : c.ink, borderColor: group === id ? c.ink : c.line }}>{label}</button>)}
+            {GROUPS.map(([id, label]) => <button key={id} onClick={() => setGroup(id)} style={{ ...btn, height: 28, fontSize: 12, padding: "0 10px", background: group === id ? c.ink : c.card, color: group === id ? c.onInk : c.ink, borderColor: group === id ? c.ink : c.line }}>{label}</button>)}
           </div>
           <button style={{ ...btn, height: 30, fontSize: 12 }} onClick={load}>Atualizar</button>
         </div>
         <ErrorText>{error}</ErrorText>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead><tr style={{ background: "#FAFAFA", color: c.muted, textAlign: "left" }}>{["Quando", "Quem", "O quê", "Sobre", "Detalhe"].map((h) => <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
+          <thead><tr style={{ background: c.sunken, color: c.muted, textAlign: "left" }}>{["Quando", "Quem", "O quê", "Sobre", "Detalhe"].map((h) => <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>)}</tr></thead>
           <tbody>{rows.map((r) => (
             <tr key={r.id} style={{ borderTop: `1px solid ${c.line}`, background: isImport(r.action) ? c.brandSoft : undefined, fontWeight: isImport(r.action) ? 600 : 400 }}>
               <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>{fmtDateTime(r.at)}</td>

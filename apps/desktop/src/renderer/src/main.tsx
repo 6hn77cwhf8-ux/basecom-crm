@@ -2,6 +2,9 @@ import "./styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { initialTheme } from "./theme";
+
+initialTheme();
 
 // ⌘Z / Ctrl+Z só anulam texto dentro de campos (o menu não os trata; durante as chamadas o Power Dialer bloqueia-os).
 window.addEventListener("keydown", (e) => {

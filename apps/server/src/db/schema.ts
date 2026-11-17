@@ -13,6 +13,10 @@ export const users = pgTable("users", {
   active: boolean("active").notNull().default(true),
   /** Data de admissão: a fase de carreira muda sozinha a partir dela. */
   hiredAt: timestamp("hired_at", { withTimezone: true }),
+  /** Tema escolhido pela pessoa (17 nov): light | dark | auto. */
+  theme: text("theme").notNull().default("light"),
+  /** Foto da pessoa (imagem pequena em data URL, até ~150 KB), usada no Pipeline e no menu. */
+  photo: text("photo"),
   passwordHash: text("password_hash"),
   /** Segredo do Microsoft Authenticator, encriptado. Nulo até a 2FA estar ativa. */
   totpSecretEnc: text("totp_secret_enc"),

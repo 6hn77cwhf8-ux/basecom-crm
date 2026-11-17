@@ -93,18 +93,18 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
     return () => window.removeEventListener("keydown", k);
   });
 
-  const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? "#FFF" : c.ink, borderColor: on ? c.ink : c.line });
+  const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
   return (
     <section style={{ ...card, padding: 20, display: hidden ? "none" : "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0, overflow: "auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: live ? "#1E6F33" : c.muted }}>{live ? "Em chamada" : "Chamada terminada"}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: live ? c.ok : c.muted }}>{live ? "Em chamada" : "Chamada terminada"}</span>
           <h2 style={{ margin: "2px 0", fontSize: 20 }}>{company.name}</h2>
           <span style={{ fontSize: 13, color: c.muted }}>NIF {company.nif}{company.phone ? ` · ${company.phone}` : ""}{company.decisor ? ` · ${company.decisor}` : ""}</span>
         </div>
         {live ? (
           <div style={{ textAlign: "right", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-            <span style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#1E6F33" }}>{String(Math.floor(live.secs / 60)).padStart(2, "0")}:{String(live.secs % 60).padStart(2, "0")}</span>
+            <span style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: c.ok }}>{String(Math.floor(live.secs / 60)).padStart(2, "0")}:{String(live.secs % 60).padStart(2, "0")}</span>
           </div>
         ) : (
           <div role="timer" style={{ textAlign: "right" }}>
@@ -193,7 +193,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
           <span style={{ flex: "1 1 260px", fontSize: 13, lineHeight: "20px" }}>Ao guardar, os 15 s param e começa o tempo «Em cliente», sem limite, para fazer a {workKind === "sale" ? "venda" : "proposta"}. A oportunidade fica com esta OP.</span>
         </div>
       )}
-      {eff === "sale" && <p style={{ margin: 0, fontSize: 13, padding: "8px 12px", background: "#E8F5EC", borderRadius: 10 }}>A empresa passa para a sua carteira (se ainda não tiver responsável). O registo das linhas e dos serviços vendidos chega com o módulo de Vendas (Arranque B).</p>}
+      {eff === "sale" && <p style={{ margin: 0, fontSize: 13, padding: "8px 12px", background: c.okSoft, borderRadius: 10 }}>A empresa passa para a sua carteira (se ainda não tiver responsável). O registo das linhas e dos serviços vendidos chega com o módulo de Vendas (Arranque B).</p>}
 
       <Field label={reason?.effect === "other" ? "Comentários (obrigatório no motivo «Outro»)" : "Comentários"}>
         <textarea style={{ ...input, height: 64, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} />

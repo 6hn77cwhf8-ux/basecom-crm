@@ -104,7 +104,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               {co.ownerId && (me.role === "admin" || co.ownerId === me.id) && <button style={small} onClick={() => setDialog("kind")}>Mudar para {co.walletKind === "NC" ? "FC" : "NC"}</button>}
               {!co.doNotContact && <button style={small} onClick={() => setDialog("dnc")}>Marcar «Não contactar»</button>}
               {co.doNotContact && me.role === "admin" && <button style={small} onClick={() => setDialog("undnc")}>Retirar «Não contactar»</button>}
-              {me.role === "admin" && <button style={{ ...small, color: "#A1000F" }} onClick={() => setDialog("delete")}>Apagar empresa</button>}
+              {me.role === "admin" && <button style={{ ...small, color: c.danger }} onClick={() => setDialog("delete")}>Apagar empresa</button>}
             </div>
             {dialog === "address" && <AddressDialog co={co} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
             {dialog === "delete" && <DeleteDialog ids={[co.id]} label={co.name} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onClose(); }} />}
@@ -121,7 +121,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             {dialog === "undnc" && <ReasonDialog title="Retirar «Não contactar»" confirm="Retirar" text="Use só com prova de que a oposição foi retirada (fica em auditoria)."
               onClose={() => setDialog(null)} onConfirm={async (r) => { await api.setDoNotContact(co.id, false, r); after(); }} />}
             {needsKind && (
-              <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", borderRadius: 10, background: "#FFF4E5", color: "#8A3D00", fontSize: 14 }}>
+              <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", borderRadius: 10, background: c.warnSoft, color: c.warn, fontSize: 14 }}>
                 <b>Cliente NOS sem NC/FC. Identifique:</b>
                 {(["NC", "FC"] as const).map((k) => <button key={k} style={{ ...small, minWidth: 56 }} onClick={() => api.identifyKind(co.id, k).then(load).catch((e) => setError(e.message))}>{k}</button>)}
                 <span style={{ fontSize: 12 }}>Fica registado; depois só muda por alteração manual com justificação.</span>
@@ -130,7 +130,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             {co.needsReview && <Notice tone="warn">{co.needsReview}</Notice>}
             {co.doNotContact && <Notice tone="bad">Empresa marcada «Não contactar» (RGPD). Não entra em campanhas e nenhuma importação a reativa.</Notice>}
 
-            <nav role="tablist" style={{ display: "flex", gap: 2, padding: 4, background: "#E9E9EE", borderRadius: 12, alignSelf: "flex-start" }}>
+            <nav role="tablist" style={{ display: "flex", gap: 2, padding: 4, background: c.line, borderRadius: 12, alignSelf: "flex-start" }}>
               {TABS.map((t) => (
                 <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} title={t.later ? `Chega no ${t.later}` : undefined}
                   style={{ border: 0, borderRadius: 9, padding: "7px 14px", fontSize: 14, cursor: "pointer", background: tab === t.id ? c.card : "transparent", fontWeight: tab === t.id ? 600 : 400, color: t.later && tab !== t.id ? c.muted : c.ink, boxShadow: tab === t.id ? "0 1px 2px rgba(0,0,0,.08)" : "none" }}>{t.label}</button>
@@ -188,7 +188,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
 }
 
 function Notice({ tone, children }: { tone: "warn" | "bad"; children: ReactNode }) {
-  return <p role="note" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, fontSize: 13, background: tone === "bad" ? "#FFE5E7" : "#FFF4E5", color: tone === "bad" ? "#A1000F" : "#8A3D00" }}>{children}</p>;
+  return <p role="note" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, fontSize: 13, background: tone === "bad" ? c.dangerSoft : c.warnSoft, color: tone === "bad" ? c.danger : c.warn }}>{children}</p>;
 }
 
 function Card({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
@@ -370,7 +370,7 @@ function NewOpportunity({ companyId, onClose, onDone }: { companyId: string; onC
   return (
     <Modal title="Nova oportunidade" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{stages.map(([id, l]) => <button key={id} onClick={() => setStage(id!)} style={{ ...btn, height: 32, fontSize: 13, background: stage === id ? c.ink : c.card, color: stage === id ? "#FFF" : c.ink }}>{l}</button>)}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{stages.map(([id, l]) => <button key={id} onClick={() => setStage(id!)} style={{ ...btn, height: 32, fontSize: 13, background: stage === id ? c.ink : c.card, color: stage === id ? c.onInk : c.ink }}>{l}</button>)}</div>
         <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600 }}>Serviços<input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></label>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>

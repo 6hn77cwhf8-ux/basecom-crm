@@ -28,7 +28,7 @@ export function TeamsSettings() {
         <button style={btnDark} onClick={() => setEditing("new")}>Nova equipa</button>
       </div>
       <ErrorText>{error}</ErrorText>
-      {leads.length === 0 && <p style={{ ...card, margin: 0, padding: 14, fontSize: 13, color: "#8A3D00", background: "#FFF4E5" }}>Ainda ninguém tem o perfil «Chefe de Equipa». Mude o perfil em Equipa comercial (coluna Perfil) e volte aqui.</p>}
+      {leads.length === 0 && <p style={{ ...card, margin: 0, padding: 14, fontSize: 13, color: c.warn, background: c.warnSoft }}>Ainda ninguém tem o perfil «Chefe de Equipa». Mude o perfil em Equipa comercial (coluna Perfil) e volte aqui.</p>}
       {teams?.length === 0 && <p style={{ ...card, margin: 0, padding: 24, textAlign: "center", color: c.muted }}>Ainda não há equipas.</p>}
       {teams?.map((t) => (
         <article key={t.id} style={{ ...card, padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -37,7 +37,7 @@ export function TeamsSettings() {
             <div style={{ fontSize: 13, color: c.muted }}>Chefe: {t.leadName ?? "—"} · Comerciais: {t.members.map((m) => m.name).join(", ") || "—"}</div>
           </div>
           <button style={{ ...btn, height: 30, fontSize: 12 }} onClick={() => setEditing(t)}>Editar</button>
-          <button style={{ ...btn, height: 30, fontSize: 12, color: "#A1000F" }} onClick={() => confirm(`Apagar a equipa «${t.name}»? Os comerciais ficam sem equipa.`) && api.deleteTeam(t.id).then(load).catch((e) => setError(e.message))}>Apagar</button>
+          <button style={{ ...btn, height: 30, fontSize: 12, color: c.danger }} onClick={() => confirm(`Apagar a equipa «${t.name}»? Os comerciais ficam sem equipa.`) && api.deleteTeam(t.id).then(load).catch((e) => setError(e.message))}>Apagar</button>
         </article>
       ))}
       {editing && <TeamForm team={editing === "new" ? null : editing} people={people} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
@@ -64,7 +64,7 @@ function TeamForm({ team, people, onClose, onSaved }: { team: Team | null; peopl
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {people.filter((p) => p.role === "sales").map((p) => {
               const on = members.includes(p.id);
-              return <button key={p.id} type="button" onClick={() => setMembers(on ? members.filter((x) => x !== p.id) : [...members, p.id])} style={{ ...btn, height: 30, fontSize: 12, background: on ? c.ink : c.card, color: on ? "#FFF" : c.ink }}>{p.name}</button>;
+              return <button key={p.id} type="button" onClick={() => setMembers(on ? members.filter((x) => x !== p.id) : [...members, p.id])} style={{ ...btn, height: 30, fontSize: 12, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink }}>{p.name}</button>;
             })}
           </div>
         </Field>

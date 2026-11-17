@@ -2,6 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
+import { eq } from "drizzle-orm";
+import { users } from "../db/schema.js";
+import { AuthError } from "../auth/service.js";
 import { AUDIT_GROUPS, type AuditGroup, createUser, listAudit, listSessions, listUsers, resetPassword, resetTotp, revokeSession, updateUser } from "../users/service.js";
 import { getAllSettings, getSetting, setSetting, SETTINGS, type SettingKey } from "../settings.js";
 
@@ -32,6 +35,19 @@ export async function adminRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.get("/users/:id/sessions", admin, async (req) => ({ sessions: await listSessions(db, id.parse(req.params).id) }));
   app.delete("/sessions/:id", admin, async (req) => { await revokeSession(db, req.user!.id, id.parse(req.params).id); return { ok: true }; });
 
+  // Tema (cada pessoa, 17 nov) e foto (a própria pessoa ou o Administrador).
+  app.put("/me/theme", { preHandler: requireAuth(db) }, async (req) => {
+    const { theme } = z.object({ theme: z.enum(["light", "dark", "auto"]) }).parse(req.body);
+    await db.update(users).set({ theme }).where(eq(users.id, req.user!.id));
+    return { theme };
+  });
+  app.put("/users/:id/photo", { preHandler: requireAuth(db) }, async (req) => {
+    const uid = id.parse(req.params).id;
+    if (req.user!.id !== uid && req.user!.role !== "admin") throw new AuthError(403, "Só a própria pessoa ou o Administrador mudam a foto.");
+    const { photo } = z.object({ photo: z.string().max(200_000).regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/).nullable() }).parse(req.body);
+    await db.update(users).set({ photo }).where(eq(users.id, uid));
+    return { ok: true };
+  });
   app.get("/settings", admin, async () => ({ settings: await getAllSettings(db) }));
   // Catálogos e limites de tempo: todos os perfis precisam deles para trabalhar (Power Dialer, resultados).
   app.get("/catalogs", { preHandler: requireAuth(db) }, async () => ({ catalogs: await getSetting(db, "catalogs"), timeLimits: await getSetting(db, "timeLimits") }));

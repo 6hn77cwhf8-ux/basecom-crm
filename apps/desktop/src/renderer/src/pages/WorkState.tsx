@@ -44,7 +44,7 @@ export function WorkStates({ role, onChange, disabled }: { role: Role; onChange?
     const on = d.state === s;
     return (
       <button key={s} disabled={(disabled && !on) || inClient || off} onClick={() => !on && set(s)} aria-pressed={on}
-        style={{ height: 32, padding: "0 12px", borderRadius: 999, border: `1px solid ${on ? (s === "working" ? "#248A3D" : c.brand) : c.line}`, background: on ? (s === "working" ? "#E8F5EC" : c.brandSoft) : c.card, color: warn ? "#D70015" : off ? c.muted : c.ink, fontWeight: on ? 700 : 500, fontSize: 13, cursor: on ? "default" : "pointer", fontVariantNumeric: "tabular-nums" }}>
+        style={{ height: 32, padding: "0 12px", borderRadius: 999, border: `1px solid ${on ? (s === "working" ? c.ok : c.brand) : c.line}`, background: on ? (s === "working" ? c.okSoft : c.brandSoft) : c.card, color: warn ? "#D70015" : off ? c.muted : c.ink, fontWeight: on ? 700 : 500, fontSize: 13, cursor: on ? "default" : "pointer", fontVariantNumeric: "tabular-nums" }}>
         {text}
       </button>
     );

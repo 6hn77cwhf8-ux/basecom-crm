@@ -52,7 +52,7 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
       onSent?.();
     } catch (e) { setErr((e as Error).message); }
   }
-  const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? "#FFF" : c.ink, borderColor: on ? c.ink : c.line });
+  const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
 
   return (
     <Modal title={`Mensagem · ${d?.company.name ?? "…"}`} onClose={onClose} width={680}>

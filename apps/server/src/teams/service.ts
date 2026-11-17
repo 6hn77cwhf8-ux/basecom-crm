@@ -64,6 +64,6 @@ export async function deleteTeam(db: Db, by: PublicUser, id: string) {
 /** Pessoas que este ator pode consultar (seletores «Agenda de», «Carteira de», «Comercial»). */
 export async function visiblePeople(db: Db, actor: { id: string; role: string }) {
   const v = await visibleUserIds(db, actor);
-  return db.select({ id: users.id, name: users.name, role: users.role }).from(users)
+  return db.select({ id: users.id, name: users.name, role: users.role, photo: users.photo }).from(users)
     .where(and(eq(users.active, true), v === null ? sql`true` : inArray(users.id, v))).orderBy(users.name);
 }

@@ -118,12 +118,12 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
       {groups.filter(([, l]) => l.length).map(([title, list, late]) => (
         <section key={title} style={{ ...card, overflow: "hidden", ...(late ? { borderColor: "#D70015" } : {}) }}>
           <div style={{ padding: "12px 16px", borderBottom: `1px solid ${c.line}`, display: "flex", gap: 8, alignItems: "center" }}>
-            <b style={{ fontSize: 15, color: late ? "#A1000F" : c.ink }}>{title}</b><Chip tone={late ? "bad" : "neutral"}>{list.length}</Chip>
+            <b style={{ fontSize: 15, color: late ? c.danger : c.ink }}>{title}</b><Chip tone={late ? "bad" : "neutral"}>{list.length}</Chip>
           </div>
           {list.map((t) => (
             <div key={t.id} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 16, alignItems: "center", padding: "10px 16px", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
               <div style={{ display: "flex", flexDirection: "column" }}>
-                <b style={{ fontVariantNumeric: "tabular-nums", color: late ? "#A1000F" : c.ink }}>{hm(t.dueAt)}</b>
+                <b style={{ fontVariantNumeric: "tabular-nums", color: late ? c.danger : c.ink }}>{hm(t.dueAt)}</b>
                 <span style={{ fontSize: 12, color: c.muted }}>{day(t.dueAt)}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
@@ -139,7 +139,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
                 <button style={small} onClick={() => setDialog({ kind: "done", t })}>Concluir</button>
                 <button style={small} onClick={() => setDialog({ kind: "message", t })}>Mensagem</button>
                 <button style={small} onClick={() => setDialog({ kind: "reschedule", t })}>Reagendar</button>
-                <button style={{ ...small, color: "#A1000F" }} onClick={() => setDialog({ kind: "cancel", t })}>Cancelar</button>
+                <button style={{ ...small, color: c.danger }} onClick={() => setDialog({ kind: "cancel", t })}>Cancelar</button>
               </div>
             </div>
           ))}
@@ -203,7 +203,7 @@ function CancelTask({ t, onClose, onDone }: { t: AgendaTask; onClose: () => void
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={{ ...btnDark, background: "#A1000F", borderColor: "#A1000F" }} disabled={note.trim().length < 5} onClick={() => api.closeTask(t.id, "cancelled", note).then(onDone).catch((e) => setErr(e.message))}>Cancelar tarefa</button>
+          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={note.trim().length < 5} onClick={() => api.closeTask(t.id, "cancelled", note).then(onDone).catch((e) => setErr(e.message))}>Cancelar tarefa</button>
         </div>
       </div>
     </Modal>

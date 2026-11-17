@@ -126,7 +126,7 @@ export function DatePicker({ value, onChange, withTime = false, min, max, workda
                 return (
                   <button key={i} type="button" disabled={!ok} onClick={() => pickDay(d)}
                     style={{ height: 30, border: k === today && !on ? `1px solid ${c.line}` : 0, borderRadius: 7, cursor: ok ? "pointer" : "default", fontSize: 12, fontWeight: on ? 800 : 500,
-                      background: on ? c.ink : ok ? c.surface : "transparent", color: on ? c.card : ok ? c.ink : "#C7C7CC" }}>{d.getDate()}</button>
+                      background: on ? c.ink : ok ? c.surface : "transparent", color: on ? c.card : ok ? c.ink : c.line }}>{d.getDate()}</button>
                 );
               })}
             </div>

@@ -15,7 +15,7 @@ async function audit(db: Db, by: string, action: string, targetId: string, detai
 export async function listUsers(db: Db) {
   const rows = await db.query.users.findMany({ orderBy: [desc(users.active), users.name] });
   return rows.map((u) => ({
-    id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, hiredAt: u.hiredAt,
+    id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, hiredAt: u.hiredAt, photo: u.photo,
     totpEnabled: u.totpEnabled, mustChangePassword: u.mustChangePassword,
     locked: !!u.lockedUntil && u.lockedUntil > new Date(), createdAt: u.createdAt,
   }));

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { fmtBalance } from "@basecom/shared";
-import { c, font } from "./ui";
+import { Avatar, btn, btnDark, c, ErrorText, font, resizePhoto } from "./ui";
 import { IncomingBanner, PhoneDialog } from "./pages/Phone";
 import { ClientBanner } from "./pages/ClientWork";
 import { api, ROLE_LABEL, type Role, type MyDay, type SearchHit, type User } from "./api";
 import logo from "./assets/logo-horizontal.webp";
 import simbolo from "./assets/simbolo.webp";
+import { applyTheme, type ThemePref } from "./theme";
+import { Modal } from "./pages/Wallet";
 
 export type PageId = "painel" | "agenda" | "empresas" | "novos" | "atuais" | "carteira" | "pendencias" | "tickets" | "oportunidades" | "vendas" | "equipa" | "objetivos" | "relatorios" | "config";
 
@@ -32,16 +34,16 @@ const Icon = ({ d }: { d: string }) => (
 
 function readOpen() { try { return localStorage.getItem("bc_nav") !== "0"; } catch { return true; } }
 
-export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, children }: { user: User; page: PageId; onNavigate: (p: PageId) => void; onLogout: () => void; onOpenCompany: (id: string) => void; children: ReactNode }) {
+export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser, children }: { user: User; page: PageId; onNavigate: (p: PageId) => void; onLogout: () => void; onOpenCompany: (id: string) => void; onUser?: (u: User) => void; children: ReactNode }) {
+  const [looks, setLooks] = useState(false);
   const [open, setOpen] = useState(readOpen);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem("bc_nav", v ? "1" : "0"); } catch { /* sem armazenamento */ } };
   const items = NAV.filter((n) => !n.roles || n.roles.includes(user.role));
-  const initials = user.name.split(" ").map((p) => p[0]).slice(0, 2).join("");
 
   return (
     <div style={{ display: "flex", height: "100vh", background: c.surface, color: c.ink, fontFamily: font }}>
-      <nav aria-label="Navegação principal" style={{ flex: "0 0 auto", width: open ? 256 : 64, background: c.card, borderRight: `1px solid ${c.line}`, padding: "16px 12px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+      <nav aria-label="Navegação principal" style={{ flex: "0 0 auto", width: open ? 256 : 64, background: c.nav, borderRight: `1px solid ${c.line}`, padding: "16px 12px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
         <div style={{ display: "flex", flexDirection: open ? "row" : "column", alignItems: "center", justifyContent: open ? "space-between" : "center", gap: open ? 0 : 10, padding: open ? "4px 0 16px 10px" : "4px 0 12px" }}>
           {!open && <img src={simbolo} alt="BASECOM" style={{ width: 26, height: "auto" }} />}
           {open ? <img src={logo} alt="BASECOM" style={{ width: 132, height: "auto" }} /> : null}
@@ -63,13 +65,17 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, childre
           );
         })}
         <div style={{ marginTop: "auto", paddingTop: 14, borderTop: `1px solid ${c.line}`, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ flex: "0 0 28px", width: 28, height: 28, borderRadius: "50%", background: c.brandSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>{initials}</span>
-          {open && (
-            <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</span>
-              <span style={{ fontSize: 12, color: c.muted }}>{ROLE_LABEL[user.role]} · v{__APP_VERSION__}</span>
-            </span>
-          )}
+          {/* Carregar no nome abre «Aparência»: tema Claro/Escuro/Automático e a foto. */}
+          <button onClick={() => setLooks(true)} title="Aparência e foto" style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flex: open ? 1 : "0 0 auto", minWidth: 0, textAlign: "left", fontFamily: "inherit", color: c.ink }}>
+            <Avatar name={user.name} photo={user.photo} size={28} />
+            {open && (
+              <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</span>
+                <span style={{ fontSize: 12, color: c.muted }}>{ROLE_LABEL[user.role]} · v{__APP_VERSION__}</span>
+              </span>
+            )}
+          </button>
+          {looks && <Appearance user={user} onClose={() => setLooks(false)} onUser={(u) => onUser?.(u)} />}
           <button onClick={() => setPhoneOpen(true)} title="Telemóvel (app BASECOM)" style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", padding: 4 }}><Icon d="M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2" /></button>
           {open && <button onClick={onLogout} style={{ border: 0, background: "transparent", color: c.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>Sair</button>}
         </div>
@@ -146,7 +152,7 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
   }, []);
   const row = (k: string, v: ReactNode, warn = false) => (
     <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${c.line}`, fontSize: 13 }}>
-      <span style={{ color: c.muted }}>{k}</span><b style={{ color: warn ? "#A1000F" : c.ink, fontVariantNumeric: "tabular-nums" }}>{v}</b>
+      <span style={{ color: c.muted }}>{k}</span><b style={{ color: warn ? c.danger : c.ink, fontVariantNumeric: "tabular-nums" }}>{v}</b>
     </div>
   );
   const lab = { fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase" as const, color: c.muted };
@@ -162,7 +168,7 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
             <div style={{ border: `1px solid ${c.line}`, borderRadius: 12, padding: "10px 10px 8px", marginBottom: 8, display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><b>Pontos do ciclo</b><span style={{ color: c.muted }}>{p.cycle}</span></span>
               <b style={{ fontSize: 20, fontVariantNumeric: "tabular-nums" }}>{total.toLocaleString("pt-PT")}{p.next && <span style={{ fontSize: 12, color: c.muted, fontWeight: 600 }}> / {p.next.points.toLocaleString("pt-PT")}</span>}</b>
-              <div style={{ position: "relative", height: 8, borderRadius: 999, background: "#E9E9E9", overflow: "hidden" }}>
+              <div style={{ position: "relative", height: 8, borderRadius: 999, background: c.line, overflow: "hidden" }}>
                 <div style={{ position: "absolute", left: 0, top: 0, height: 8, width: pct(p.confirmed), background: c.ink }} />
                 <div style={{ position: "absolute", left: pct(p.confirmed), top: 0, height: 8, width: pct(p.forecast), background: c.brand }} />
               </div>
@@ -184,16 +190,16 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
         {d.officeSeconds > 0 && row("Office", `${mins(d.officeSeconds)} / ${mins(d.officeLimit)} min`)}
         {d.supportSeconds > 0 && row("Apoio", `${mins(d.supportSeconds)} min`)}
         {(d.oppsLate > 0 || d.oppsWarn > 0) && (
-          <button onClick={onOpps} style={{ border: 0, marginTop: 10, background: d.oppsLate ? "#FFE5E7" : "#FFF4E5", color: d.oppsLate ? "#A1000F" : "#8A3D00", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+          <button onClick={onOpps} style={{ border: 0, marginTop: 10, background: d.oppsLate ? c.dangerSoft : c.warnSoft, color: d.oppsLate ? c.danger : c.warn, borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
             Oportunidades: {d.oppsLate > 0 ? `${d.oppsLate} atrasada${d.oppsLate === 1 ? "" : "s"}` : ""}{d.oppsLate > 0 && d.oppsWarn > 0 ? " · " : ""}{d.oppsWarn > 0 ? `${d.oppsWarn} em alerta` : ""} →
           </button>
         )}
         <span style={{ ...lab, marginTop: 14 }}>Agenda</span>
-        {d.late > 0 && <button onClick={onAgenda} style={{ border: 0, background: "#FFE5E7", color: "#A1000F", borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>{d.late} atrasada{d.late === 1 ? "" : "s"} →</button>}
+        {d.late > 0 && <button onClick={onAgenda} style={{ border: 0, background: c.dangerSoft, color: c.danger, borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>{d.late} atrasada{d.late === 1 ? "" : "s"} →</button>}
         {d.next.length === 0 && <span style={{ fontSize: 13, color: c.muted }}>Sem tarefas.</span>}
         {d.next.map((t) => (
           <button key={t.id} onClick={() => onOpenCompany(t.companyId)} style={{ border: 0, background: "transparent", padding: "5px 0", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 12, color: c.ink, borderBottom: `1px solid ${c.line}` }}>
-            <b style={{ color: new Date(t.dueAt) < new Date() ? "#A1000F" : c.ink }}>{hhmm(t.dueAt)}</b> {t.type}<br /><span style={{ color: c.muted }}>{t.company}</span>
+            <b style={{ color: new Date(t.dueAt) < new Date() ? c.danger : c.ink }}>{hhmm(t.dueAt)}</b> {t.type}<br /><span style={{ color: c.muted }}>{t.company}</span>
           </button>
         ))}
         <button onClick={onAgenda} style={{ border: 0, background: "transparent", padding: "8px 0", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 12, color: c.muted, textDecoration: "underline" }}>Abrir a Agenda</button>
@@ -216,7 +222,7 @@ function Bell({ open, onOpenCompany }: { open: boolean; onOpenCompany: (id: stri
   const toggle = () => { setShow(!show); if (!show && data.unread) api.readNotifications().then(() => setData({ ...data, unread: 0 })).catch(() => undefined); };
   return (
     <div style={{ position: "relative", marginBottom: 8 }}>
-      <button onClick={toggle} title="Avisos" style={{ display: "flex", alignItems: "center", gap: 10, height: 34, width: "100%", padding: "0 12px", borderRadius: 10, border: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 14, background: data.unread ? "#FFE5E7" : "transparent", color: data.unread ? "#A1000F" : c.ink, fontWeight: data.unread ? 700 : 400 }}>
+      <button onClick={toggle} title="Avisos" style={{ display: "flex", alignItems: "center", gap: 10, height: 34, width: "100%", padding: "0 12px", borderRadius: 10, border: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 14, background: data.unread ? c.dangerSoft : "transparent", color: data.unread ? c.danger : c.ink, fontWeight: data.unread ? 700 : 400 }}>
         <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" />
         {open && <span style={{ flex: 1, textAlign: "left" }}>Avisos</span>}
         {data.unread > 0 && <span style={{ fontSize: 11, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, background: "#D70015", color: "#FFF", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{data.unread}</span>}
@@ -233,5 +239,47 @@ function Bell({ open, onOpenCompany }: { open: boolean; onOpenCompany: (id: stri
         </div>
       )}
     </div>
+  );
+}
+
+/** Aparência (desenho 6): tema por pessoa e foto. */
+function Appearance({ user, onClose, onUser }: { user: User; onClose: () => void; onUser: (u: User) => void }) {
+  const [theme, setThemeState] = useState<ThemePref>(user.theme ?? "light");
+  const [err, setErr] = useState("");
+  const pick = (t: ThemePref) => { setThemeState(t); applyTheme(t); api.setTheme(t).then(() => onUser({ ...user, theme: t })).catch((e) => setErr(e.message)); };
+  const card = (t: ThemePref, label: string, preview: ReactNode, note?: string) => (
+    <button role="radio" aria-checked={theme === t} onClick={() => pick(t)} style={{ border: theme === t ? `2px solid ${c.brand}` : `1px solid ${c.line}`, background: theme === t ? c.brandSoft : c.card, borderRadius: 14, padding: theme === t ? 9 : 10, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: c.ink }}>
+      {preview}<b style={{ fontSize: 14 }}>{label}</b>{note && <span style={{ fontSize: 12, color: c.muted, marginTop: -4 }}>{note}</span>}
+    </button>
+  );
+  const mini = (bg: string, side: string, bar: string, panel: string) => (
+    <span aria-hidden="true" style={{ height: 72, borderRadius: 10, background: bg, display: "flex", gap: 6, padding: 8, boxSizing: "border-box", border: `1px solid ${c.line}` }}>
+      <span style={{ width: 22, borderRadius: 6, background: side }} />
+      <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}><span style={{ height: 10, width: "60%", borderRadius: 4, background: bar }} /><span style={{ flex: 1, borderRadius: 6, background: panel }} /></span>
+    </span>
+  );
+  return (
+    <Modal title="Aparência" onClose={onClose} width={600}>
+      <span style={{ fontSize: 13, color: c.muted }}>Fica guardado para o seu login, em qualquer computador.</span>
+      <div role="radiogroup" aria-label="Tema" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+        {card("light", "Claro", mini("#F5F5F7", "#FFFFFF", "#0B0B0B", "#FFFFFF"))}
+        {card("dark", "Escuro", mini("#121826", "#0E1320", "#E8ECF4", "#1B2335"))}
+        {card("auto", "Automático", <span aria-hidden="true" style={{ height: 72, borderRadius: 10, overflow: "hidden", display: "flex", border: `1px solid ${c.line}` }}><span style={{ flex: 1, background: "#F5F5F7" }} /><span style={{ flex: 1, background: "#121826" }} /></span>, "Segue o Windows ou o Mac")}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, borderTop: `1px solid ${c.line}`, paddingTop: 14 }}>
+        <Avatar name={user.name} photo={user.photo} size={56} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <b style={{ fontSize: 14 }}>A sua foto</b>
+          <span style={{ display: "flex", gap: 8 }}>
+            <label style={{ ...btn, height: 34, display: "inline-flex", alignItems: "center", fontSize: 13 }}>Escolher foto
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) resizePhoto(f).then((ph) => api.setPhoto(user.id, ph).then(() => onUser({ ...user, photo: ph }))).catch((x) => setErr(x.message)); }} />
+            </label>
+            {user.photo && <button style={{ ...btn, height: 34, fontSize: 13 }} onClick={() => api.setPhoto(user.id, null).then(() => onUser({ ...user, photo: null })).catch((x) => setErr(x.message))}>Tirar foto</button>}
+          </span>
+        </div>
+      </div>
+      <ErrorText>{err}</ErrorText>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}><button style={btnDark} onClick={onClose}>Fechar</button></div>
+    </Modal>
   );
 }

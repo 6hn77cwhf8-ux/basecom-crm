@@ -48,14 +48,14 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
           <button style={btn} onClick={() => setDialog("scheduled")}>Transferências agendadas</button>
           <button style={btnDark} onClick={onImport} title="Só o Administrador">Importar ficheiro</button>
         </>} />
-      {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: "#E8F5EC", color: "#1E6F33", fontSize: 14, fontWeight: 600 }}>{notice}</p>}
+      {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: c.okSoft, color: c.ok, fontSize: 14, fontWeight: 600 }}>{notice}</p>}
       {isAdmin && picked.size > 0 && (
         <div style={{ ...card, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, borderColor: c.ink }}>
           <b style={{ fontSize: 14 }}>{fmtInt(picked.size)} empresa{picked.size === 1 ? "" : "s"} selecionada{picked.size === 1 ? "" : "s"}</b>
           <span style={{ flex: 1 }} />
           {data && data.total > picked.size && <button style={btn} onClick={() => api.companyIds({ ...f, offset: undefined, limit: undefined }).then((ids) => setPicked(new Set(ids))).catch((e) => setError(e.message))}>Selecionar as {fmtInt(data.total)} deste filtro</button>}
           <button style={btn} onClick={() => setPicked(new Set())}>Limpar seleção</button>
-          <button style={{ ...btn, color: "#A1000F" }} onClick={() => setDialog("delete")}>Apagar</button>
+          <button style={{ ...btn, color: c.danger }} onClick={() => setDialog("delete")}>Apagar</button>
           <button style={btnDark} onClick={() => setDialog("transfer")}>Transferir carteira</button>
         </div>
       )}
@@ -106,7 +106,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
         <ErrorText>{error}</ErrorText>
         <div style={{ overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr style={{ background: "#FAFAFA", color: c.muted }}>
+            <thead><tr style={{ background: c.sunken, color: c.muted }}>
               {isAdmin && <th style={{ ...th, width: 28 }}><input type="checkbox" aria-label="Selecionar todas desta página" checked={allPicked}
                 onChange={() => setPicked((p) => { const n = new Set(p); pageIds.forEach((id) => (allPicked ? n.delete(id) : n.add(id))); return n; })} /></th>}
               {COLS.map(([h, k]) => {

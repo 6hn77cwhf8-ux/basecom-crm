@@ -2,8 +2,8 @@
 export const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 export type Role = "admin" | "team_lead" | "sales";
-export type User = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean };
-export type TeamMember = { id: string; name: string; email: string; role: Role; active: boolean; hiredAt: string | null; totpEnabled: boolean; mustChangePassword: boolean; locked: boolean };
+export type User = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean; theme?: "light" | "dark" | "auto"; photo?: string | null };
+export type TeamMember = { photo?: string | null; id: string; name: string; email: string; role: Role; active: boolean; hiredAt: string | null; totpEnabled: boolean; mustChangePassword: boolean; locked: boolean };
 export type AuditEntry = { id: string; action: string; userName: string; targetName: string | null; details: string | null; at: string };
 export type Settings = {
   messages: { templates: { id: string; label: string; text: string; active: boolean }[] };
@@ -48,7 +48,7 @@ export type ResultInput = { outcomeId: string; reasonId?: string; comment?: stri
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
 export type MyDay = { incoming: IncomingStats; ponto: Ponto; oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; points: { cycle: string; confirmed: number; forecast: number; next: { points: number; bonus: number } | null }; clientSeconds: number; officeSeconds: number; officeLimit: number; supportSeconds: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
-export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; nosOp: string | null; proposedValue: string | null; saleTypes: Record<string, number> | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
+export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; nosOp: string | null; proposedValue: string | null; saleTypes: Record<string, number> | null; ownerPhoto: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
 export type WalletRow = { id: string; name: string; nif: string; walletKind: string; l2bMonthly: string | null; loyaltyEnd: string | null; owner: string; lines: number; decisor: string | null; phone: string | null; lastContact: string | null; openTasks: number; nextAction: { type: string; dueAt: string } | null };
 export type PhoneDevice = { id: string; model: string | null; pairedAt: string; lastSeenAt: string | null; online: boolean };
 export type Incoming = { id: string; number: string; ringingAt: string; endedAt: string | null; companyId: string | null; company: string | null; owner: string | null; openTasks: number };
@@ -137,6 +137,8 @@ export const api = {
   companyKpis: () => call<CompanyKpis>("/companies/kpis"),
   filterOptions: () => call<FilterOptions>("/companies/options"),
   company: (id: string) => call<CompanyDetail>(`/companies/${id}`),
+  setTheme: (theme: "light" | "dark" | "auto") => call<{ theme: string }>("/me/theme", { method: "PUT", body: JSON.stringify({ theme }) }),
+  setPhoto: (userId: string, photo: string | null) => call<{ ok: boolean }>(`/users/${userId}/photo`, { method: "PUT", body: JSON.stringify({ photo }) }),
   messageTemplates: () => call<{ templates: { id: string; label: string; text: string }[] }>("/messages/templates").then((r) => r.templates),
   logMessage: (companyId: string, b: { channel: "whatsapp" | "sms" | "email"; templateId?: string; to: string; text: string }) => call<{ ok: boolean; viaPhone: boolean }>(`/companies/${companyId}/messages`, { method: "POST", body: JSON.stringify(b) }),
   search: (q: string) => call<{ results: SearchHit[] }>(`/search${qs({ q })}`).then((r) => r.results),
@@ -192,7 +194,7 @@ export const api = {
   loseOpportunity: (id: string, reasonId: string, comment?: string, extra?: { operator: string; date: string }) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment, ...extra }) }),
   wallet: (q: { ownerId?: string; tasks?: string; q?: string }) => call<{ companies: WalletRow[] }>(`/wallet${qs(q)}`).then((r) => r.companies),
   callFromWallet: (id: string) => call<{ callId: string; phone: { id: string; value: string; type: string | null } }>(`/wallet/${id}/call`, { method: "POST", body: "{}" }),
-  agendaPeople: () => call<{ people: { id: string; name: string; role: string }[] }>("/agenda/people").then((r) => r.people),
+  agendaPeople: () => call<{ people: { id: string; name: string; role: string; photo: string | null }[] }>("/agenda/people").then((r) => r.people),
   createTask: (b: { companyId: string; type: string; dueAt: string; description?: string; assignedTo?: string }) => call("/agenda/tasks", { method: "POST", body: JSON.stringify(b) }),
   rescheduleTask: (id: string, dueAt: string, reason: string) => call(`/agenda/tasks/${id}/reschedule`, { method: "POST", body: JSON.stringify({ dueAt, reason }) }),
   closeTask: (id: string, status: "done" | "cancelled", note?: string) => call(`/agenda/tasks/${id}/close`, { method: "POST", body: JSON.stringify({ status, note }) }),

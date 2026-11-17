@@ -122,7 +122,7 @@ export function ReasonDialog({ title, text, confirm, danger, onClose, onConfirm 
         <ErrorText>{error}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" style={btn} onClick={onClose}>Cancelar</button>
-          <button style={{ ...btnDark, ...(danger ? { background: "#A1000F", borderColor: "#A1000F" } : {}) }} disabled={busy || reason.trim().length < 5}>{confirm}</button>
+          <button style={{ ...btnDark, ...(danger ? { background: c.danger, borderColor: c.danger } : {}) }} disabled={busy || reason.trim().length < 5}>{confirm}</button>
         </div>
       </form>
     </Modal>
@@ -141,7 +141,7 @@ export function DeleteDialog({ ids, label, onClose, onDone }: { ids: string[]; l
   return (
     <Modal title={`Apagar ${label}`} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <p style={{ margin: 0, padding: "10px 12px", borderRadius: 10, background: "#FFE5E7", color: "#A1000F", fontSize: 13 }}>
+        <p style={{ margin: 0, padding: "10px 12px", borderRadius: 10, background: c.dangerSoft, color: c.danger, fontSize: 13 }}>
           Apaga a empresa e tudo o que lhe pertence (contactos, histórico, chamadas, tarefas e oportunidades). Não se pode desfazer. Fica registado na auditoria. Se a empresa voltar numa importação, entra como nova.
         </p>
         <Field label="Justificação"><input style={input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: leads duplicadas / empresa inexistente" /></Field>
@@ -149,7 +149,7 @@ export function DeleteDialog({ ids, label, onClose, onDone }: { ids: string[]; l
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={{ ...btnDark, background: "#A1000F", borderColor: "#A1000F" }} disabled={busy || reason.trim().length < 5 || code.length < 6}
+          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={busy || reason.trim().length < 5 || code.length < 6}
             onClick={() => { setBusy(true); setErr(""); api.deleteCompanies(ids, reason, code).then((r) => onDone(`${r.deleted} empresa(s) apagada(s).`)).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>{busy ? "A apagar…" : "Apagar definitivamente"}</button>
         </div>
       </div>

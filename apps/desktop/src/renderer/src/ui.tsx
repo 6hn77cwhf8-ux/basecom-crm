@@ -1,11 +1,16 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 /** Cores do Design System BASECOM. */
-export const c = { surface: "#F5F5F7", card: "#FFFFFF", line: "#E5E5EA", ink: "#0B0B0B", muted: "#6E6E73", brand: "#FF5A00", brandSoft: "#FFF1E8", danger: "#A1000F", dangerSoft: "#FFE5E7", ok: "#1E6F33", okSoft: "#E8F5EC", warn: "#8A3D00", warnSoft: "#FFF4E5" };
+/** Cores do Design System BASECOM, em variáveis do tema (claro ou escuro, escolhido por cada pessoa). */
+export const c = {
+  surface: "var(--bc-surface)", card: "var(--bc-card)", line: "var(--bc-line)", ink: "var(--bc-ink)", muted: "var(--bc-muted)", brand: "#FF5A00",
+  brandSoft: "var(--bc-brand-soft)", danger: "var(--bc-danger)", dangerSoft: "var(--bc-danger-soft)", ok: "var(--bc-ok)", okSoft: "var(--bc-ok-soft)",
+  warn: "var(--bc-warn)", warnSoft: "var(--bc-warn-soft)", sunken: "var(--bc-sunken)", onInk: "var(--bc-on-ink)", nav: "var(--bc-nav)",
+};
 export const font = "Manrope, -apple-system, 'Segoe UI', sans-serif";
 export const input: CSSProperties = { fontFamily: "inherit", fontSize: 14, height: 38, padding: "0 12px", border: `1px solid ${c.line}`, borderRadius: 10, background: c.card, color: c.ink, boxSizing: "border-box" };
 export const btn: CSSProperties = { fontFamily: "inherit", fontSize: 14, fontWeight: 600, height: 38, padding: "0 16px", borderRadius: 10, border: `1px solid ${c.line}`, background: c.card, color: c.ink, cursor: "pointer" };
-export const btnDark: CSSProperties = { ...btn, background: c.ink, color: "#FFFFFF", borderColor: c.ink };
+export const btnDark: CSSProperties = { ...btn, background: c.ink, color: c.onInk, borderColor: c.ink };
 export const card: CSSProperties = { background: c.card, border: `1px solid ${c.line}`, borderRadius: 14 };
 
 export function Chip({ tone = "neutral", children }: { tone?: "neutral" | "ok" | "warn" | "bad" | "brand"; children: ReactNode }) {
@@ -66,8 +71,33 @@ export function CopyButton({ text, label = "Copiar", small = true }: { text: str
   return (
     <button type="button" title={`Copiar ${text}`} aria-label={`Copiar ${text}`}
       onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1400); }).catch(() => undefined); }}
-      style={{ ...btn, height: small ? 26 : 32, padding: "0 9px", fontSize: 12, transition: "background .2s, color .2s", ...(done ? { background: c.ok, color: "#FFF", borderColor: c.ok } : {}) }}>
+      style={{ ...btn, height: small ? 26 : 32, padding: "0 9px", fontSize: 12, transition: "background .2s, color .2s", ...(done ? { background: c.ok, color: c.onInk, borderColor: c.ok } : {}) }}>
       {done ? "Copiado ✓" : label}
     </button>
   );
+}
+
+/** Foto da pessoa (ou as iniciais, se ainda não tiver foto), com aro opcional. */
+export function Avatar({ name, photo, size = 32, ring }: { name: string; photo?: string | null; size?: number; ring?: string }) {
+  const initials = name.split(" ").filter(Boolean).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const style: CSSProperties = { width: size, height: size, flex: `0 0 ${size}px`, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center",
+    fontSize: Math.round(size * 0.38), fontWeight: 800, background: c.brandSoft, color: c.ink, overflow: "hidden", boxShadow: ring ? `0 0 0 2px ${c.card}, 0 0 0 4px ${ring}` : undefined };
+  return photo ? <img src={photo} alt={name} title={name} style={{ ...style, objectFit: "cover" }} /> : <span role="img" aria-label={name} title={name} style={style}>{initials}</span>;
+}
+
+/** Reduz uma imagem escolhida pela pessoa para 192×192 (JPEG), para guardar como foto. */
+export function resizePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = 192, cv = document.createElement("canvas");
+      cv.width = s; cv.height = s;
+      const ctx = cv.getContext("2d")!;
+      const side = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, s, s);
+      resolve(cv.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => reject(new Error("Não foi possível ler a imagem."));
+    img.src = URL.createObjectURL(file);
+  });
 }

@@ -13,6 +13,7 @@ import { PowerDialer } from "./pages/PowerDialer";
 import { Agenda } from "./pages/Agenda";
 import { Opportunities } from "./pages/Opportunities";
 import { Carteira } from "./pages/Carteira";
+import { applyTheme } from "./theme";
 
 const PHASE: Partial<Record<PageId, string>> = {
   painel: "Arranque B", atuais: "Fase 3",
@@ -28,7 +29,7 @@ export function App() {
 
   useEffect(() => {
     if (!api.hasToken()) return;
-    api.me().then(setUser).catch(() => undefined).finally(() => setChecking(false));
+    api.me().then((u) => { setUser(u); if (u?.theme) applyTheme(u.theme); }).catch(() => undefined).finally(() => setChecking(false));
   }, []);
 
   const logout = () => api.logout().then(() => setUser(null));
@@ -40,12 +41,12 @@ export function App() {
     return () => clearInterval(t);
   }, [user?.id, user?.mustChangePassword]);
   if (checking) return null;
-  if (!user) return <Login onDone={(u) => { setUser(u); setPage("novos"); }} />;
+  if (!user) return <Login onDone={(u) => { setUser(u); if (u.theme) applyTheme(u.theme); setPage("novos"); }} />;
   if (user.mustChangePassword) return <ChangePassword onLogout={logout} onDone={() => setUser({ ...user, mustChangePassword: false })} />;
 
   const label = NAV.find((n) => n.id === page)?.label ?? "";
   return (
-    <Shell user={user} page={page} onNavigate={(p) => { setPage(p); setImporting(false); }} onLogout={logout} onOpenCompany={setCompanyId}>
+    <Shell user={user} onUser={setUser} page={page} onNavigate={(p) => { setPage(p); setImporting(false); }} onLogout={logout} onOpenCompany={setCompanyId}>
       {page === "empresas" ? (importing && user.role === "admin"
         ? <ImportWizard onBack={() => setImporting(false)} />
         : <Companies me={user} onOpen={setCompanyId} onImport={() => setImporting(true)} />)

@@ -175,7 +175,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
     navigator.clipboard?.writeText(t).then(() => { setCopied(key); setTimeout(() => setCopied((x) => (x === key ? "" : x)), 1500); }).catch(() => undefined);
   };
   const copyBtn = (key: string, t: string) => (
-    <button style={{ ...small, transition: "background .2s, color .2s", ...(copied === key ? { background: c.ok, color: "#FFF", borderColor: c.ok } : {}) }} onClick={() => copy(key, t)}>{copied === key ? "Copiado ✓" : "Copiar"}</button>
+    <button style={{ ...small, transition: "background .2s, color .2s", ...(copied === key ? { background: c.ok, color: c.onInk, borderColor: c.ok } : {}) }} onClick={() => copy(key, t)}>{copied === key ? "Copiado ✓" : "Copiar"}</button>
   );
   const callSecs = phase === "calling" ? Math.floor((Date.now() - startedAt) / 1000) : 0;
 
@@ -328,7 +328,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
                   <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button></>
                 : <button style={{ ...btnDark, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>}
               {phone.device?.online
-                ? <span style={{ fontSize: 12, color: "#1E6F33" }}>{phase === "calling" && viaPhone ? "O telemóvel está a marcar. Quando a chamada acabar, o resultado abre sozinho." : "Telemóvel ligado: «Iniciar chamada» marca no telemóvel."} <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.muted, textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Telemóvel</button></span>
+                ? <span style={{ fontSize: 12, color: c.ok }}>{phase === "calling" && viaPhone ? "O telemóvel está a marcar. Quando a chamada acabar, o resultado abre sozinho." : "Telemóvel ligado: «Iniciar chamada» marca no telemóvel."} <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.muted, textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Telemóvel</button></span>
                 : <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»). <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.brand, textDecoration: "underline", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{phone.device ? "Telemóvel sem sinal" : "Emparelhar telemóvel"}</button></span>}
             </section>
           </aside>
@@ -356,7 +356,7 @@ export function PowerDialer({ me, onOpenCompany }: { me: User; onOpenCompany: (i
       {!client && cur && (phase === "calling") && (
         <footer style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
           {GROUPS.map((g) => (
-            <button key={g.id} onClick={() => openResult(g.id)} style={{ ...btn, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 15, ...(g.id === "sale" ? { background: c.ink, color: "#FFF", borderColor: c.ink } : {}) }}>
+            <button key={g.id} onClick={() => openResult(g.id)} style={{ ...btn, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 15, ...(g.id === "sale" ? { background: c.ink, color: c.onInk, borderColor: c.ink } : {}) }}>
               {g.label}<span style={{ fontSize: 11, opacity: 0.6 }}>tecla {g.key}</span>
             </button>
           ))}

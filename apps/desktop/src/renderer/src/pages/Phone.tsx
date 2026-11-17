@@ -40,12 +40,12 @@ export function PhoneDialog({ onClose }: { onClose: () => void }) {
     <Modal title="Telemóvel" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 14 }}>
         {device ? (
-          <div style={{ padding: "10px 12px", borderRadius: 10, background: device.online ? "#E8F5EC" : "#FFF4E5", color: device.online ? "#1E6F33" : "#8A3D00" }}>
+          <div style={{ padding: "10px 12px", borderRadius: 10, background: device.online ? c.okSoft : c.warnSoft, color: device.online ? c.ok : c.warn }}>
             <b>{device.online ? "Ligado" : "Emparelhado, mas sem sinal"}</b> · {device.model ?? "Telemóvel"}{device.lastSeenAt ? ` · último sinal ${new Date(device.lastSeenAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}` : ""}
             {!device.online && <div style={{ fontSize: 13, marginTop: 4 }}>Abra a app BASECOM no telemóvel e confirme que tem internet e que a app está «sem restrições de bateria».</div>}
           </div>
         ) : <span style={{ color: c.muted }}>Ainda não há telemóvel emparelhado. Sem ele, marca à mão e usa os botões «Iniciar chamada» e «Desligar».</span>}
-        {fresh && <b style={{ color: "#1E6F33" }}>Emparelhado com sucesso.</b>}
+        {fresh && <b style={{ color: c.ok }}>Emparelhado com sucesso.</b>}
         <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
           <li>Instale a app BASECOM no telemóvel (ficheiro APK enviado pelo Administrador).</li>
           <li>Abra a app e escreva o código abaixo.</li>
@@ -59,7 +59,7 @@ export function PhoneDialog({ onClose }: { onClose: () => void }) {
         ) : <button style={btnDark} onClick={() => api.pairCode().then(setCode).catch((e) => setErr(e.message))}>{device ? "Emparelhar outro telemóvel" : "Gerar código"}</button>}
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          {device ? <button style={{ ...btn, color: "#A1000F" }} onClick={() => confirm("Desligar este telemóvel do CRM?") && api.unpairDevice().then(reload).catch((e) => setErr(e.message))}>Desemparelhar</button> : <span />}
+          {device ? <button style={{ ...btn, color: c.danger }} onClick={() => confirm("Desligar este telemóvel do CRM?") && api.unpairDevice().then(reload).catch((e) => setErr(e.message))}>Desemparelhar</button> : <span />}
           <button style={btn} onClick={onClose}>Fechar</button>
         </div>
       </div>

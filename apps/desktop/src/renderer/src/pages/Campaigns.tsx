@@ -28,7 +28,7 @@ export function Campaigns() {
         </div>
         <button style={btnDark} onClick={() => setEditing("new")}>Nova campanha</button>
       </div>
-      {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: "#E8F5EC", color: "#1E6F33", fontSize: 14, fontWeight: 600 }}>{notice}</p>}
+      {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: c.okSoft, color: c.ok, fontSize: 14, fontWeight: 600 }}>{notice}</p>}
       <ErrorText>{error}</ErrorText>
       {list && list.length > 0 && <Assignments campaigns={list} onError={setError} />}
       {list?.length === 0 && <p style={{ ...card, margin: 0, padding: 24, textAlign: "center", color: c.muted }}>Ainda não há campanhas.</p>}
@@ -44,7 +44,7 @@ export function Campaigns() {
               <button style={small} onClick={() => act(() => api.refreshCampaign(k.id).then((r) => setNotice(`${fmtInt(r.added)} empresas acrescentadas a «${k.name}».`)))}>Atualizar lista</button>
               <button style={small} title="Traz as empresas que cumprem os filtros e estão por trabalhar noutras campanhas (as reservadas a um comercial ficam)" onClick={() => confirm(`Trazer para «${k.name}» as empresas desta campanha que estão por trabalhar noutras campanhas? Saem dessas campanhas.`) && act(() => api.refreshCampaign(k.id, true).then((r) => setNotice(`${fmtInt(r.added)} empresas trazidas para «${k.name}».`)))}>Trazer de outras campanhas</button>
               <button style={small} onClick={() => act(() => api.updateCampaign(k.id, { status: k.status === "active" ? "paused" : "active" }))}>{k.status === "active" ? "Pausar" : "Retomar"}</button>
-              <button style={{ ...small, color: "#A1000F" }} onClick={() => confirm(`Terminar «${k.name}»? As empresas por ligar ficam livres para outras campanhas.`) && act(() => api.updateCampaign(k.id, { status: "ended" }))}>Terminar</button>
+              <button style={{ ...small, color: c.danger }} onClick={() => confirm(`Terminar «${k.name}»? As empresas por ligar ficam livres para outras campanhas.`) && act(() => api.updateCampaign(k.id, { status: "ended" }))}>Terminar</button>
             </>}
           </div>
           <Progress k={k} />
@@ -95,7 +95,7 @@ function Progress({ k }: { k: Campaign }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: c.line }}>
-        <span style={{ width: pct(k.done), background: c.ink }} /><span style={{ width: pct(k.exhausted), background: "#B25000" }} />
+        <span style={{ width: pct(k.done), background: c.ink }} /><span style={{ width: pct(k.exhausted), background: c.warn }} />
       </div>
       <span style={{ fontSize: 13 }}>
         <b>{fmtInt(k.total)}</b> empresas · <b>{fmtInt(k.done)}</b> concluídas · <b>{fmtInt(k.exhausted)}</b> esgotadas · <b>{fmtInt(k.pending)}</b> por trabalhar (<b>{fmtInt(k.ready)}</b> prontas agora)
@@ -222,7 +222,7 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
             </div>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={!!f.onlyWithoutOwner} onChange={(e) => set("onlyWithoutOwner", e.target.checked || undefined)} /> Só empresas sem carteira</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={!!f.takeFromOtherCampaigns} onChange={(e) => set("takeFromOtherCampaigns", e.target.checked || undefined)} /> Trazer empresas que estão por trabalhar noutras campanhas (saem dessas; as reservadas a um comercial ficam)</label>
-            <div role="status" style={{ padding: "10px 12px", borderRadius: 10, background: count && count.total === 0 ? "#FFF4E5" : c.brandSoft, fontSize: 14, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div role="status" style={{ padding: "10px 12px", borderRadius: 10, background: count && count.total === 0 ? c.warnSoft : c.brandSoft, fontSize: 14, display: "flex", flexDirection: "column", gap: 4 }}>
               {count ? <>
                 <span><b>{fmtInt(count.total)}</b> empresas vão entrar · {fmtInt(count.clients)} clientes NOS · {fmtInt(count.in_wallet)} da carteira dos comerciais escolhidos</span>
                 {count.matching > count.total && <span style={{ fontSize: 13 }}>Dos {fmtInt(count.matching)} que cumprem os filtros, ficam de fora:{" "}
@@ -255,7 +255,7 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
 }
 
 function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
-  return <button type="button" onClick={onClick} aria-pressed={on} style={{ ...btn, height: 30, fontSize: 12, background: on ? c.ink : c.card, color: on ? "#FFF" : c.ink, borderColor: on ? c.ink : c.line }}>{label}</button>;
+  return <button type="button" onClick={onClick} aria-pressed={on} style={{ ...btn, height: 30, fontSize: 12, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line }}>{label}</button>;
 }
 
 /** Escolha múltipla; vazio = todos. */

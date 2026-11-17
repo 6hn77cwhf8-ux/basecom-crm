@@ -5,6 +5,19 @@
   --surface: #f5f5f7;
   --ink: #0b0b0b;
   --brand: #ff5a00;
+  /* Tema claro (Design System BASECOM). */
+  --bc-surface: #f5f5f7; --bc-card: #ffffff; --bc-line: #e5e5ea; --bc-ink: #0b0b0b; --bc-muted: #6e6e73; --bc-sunken: #fafafa;
+  --bc-brand-soft: #fff1e8; --bc-danger: #a1000f; --bc-danger-soft: #ffe5e7; --bc-ok: #1e6f33; --bc-ok-soft: #e8f5ec;
+  --bc-warn: #8a3d00; --bc-warn-soft: #fff4e5; --bc-on-ink: #ffffff; --bc-nav: #ffffff;
+  color-scheme: light;
+}
+/* Tema escuro azul-noite (desenho aprovado a 17/11/2026). */
+:root[data-theme="dark"] {
+  --surface: #121826; --ink: #e8ecf4;
+  --bc-surface: #121826; --bc-card: #1b2335; --bc-line: #263049; --bc-ink: #e8ecf4; --bc-muted: #9aa4b8; --bc-sunken: #161d2d;
+  --bc-brand-soft: rgba(255, 90, 0, 0.16); --bc-danger: #fca5a5; --bc-danger-soft: rgba(239, 68, 68, 0.18); --bc-ok: #86efac; --bc-ok-soft: rgba(34, 197, 94, 0.16);
+  --bc-warn: #fdba74; --bc-warn-soft: rgba(251, 146, 60, 0.16); --bc-on-ink: #121826; --bc-nav: #0e1320;
+  color-scheme: dark;
 }
 
 html,
