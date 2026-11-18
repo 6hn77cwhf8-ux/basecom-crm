@@ -99,6 +99,10 @@ O Leonardo vai juntando correções durante o dia; só se constrói quando ele d
 12. **Agenda: os callbacks antigos** (de antes da 0.12) passam para a fila de cada comercial; as atrasadas vêm primeiro.
 13. **Chamadas desligadas logo a seguir** (decidido 18/11): religar a mesma empresa antes de guardar o resultado põe a contagem em pausa (não recomeça); chamadas com menos de **5 s** (configurável) não contam no rating; religar conta como 1 chamada; CE e Administrador veem «chamadas curtas» na Equipa comercial. Sem códigos nem avisos.
 
+14. **Menos avisos:** o aviso ao CE/Administrador de «resultado registado tarde» passa a ser só **a partir dos 100 s** (configurável). O comercial continua a ver os 15 s no ecrã, sem aviso.
+15. **SMS «Tentámos ligar» no 1.º não atende** (desenho 19, por aprovar): no 1.º não atende de cada empresa, o resultado traz a SMS já escrita (decisor, empresa, comercial); «Não atende + SMS» grava e abre a SMS no telemóvel BASECOM; «Guardar sem SMS» só grava. Só telemóveis. Texto do modelo a confirmar pelo Leonardo; configurável em Mensagens rápidas.
+16. **Editar o L2B na ficha** (mensalidade e meses de permanência; ex.: paga 200 € mas o L2B em Vpro é 130 €): qualquer perfil edita; fica no histórico (antigo → novo); a empresa **troca logo de campanha** (sai das que já não cumpre, entra nas que passa a cumprir); as importações seguintes não apagam a correção.
+
 ### Respostas do Leonardo (18/11)
 - **Ex-cliente:** todos os perfis podem mudar, **com justificação** (auditoria e histórico). Sai das campanhas de clientes atuais, **perde a carteira NC/FC** e entra nas campanhas de ex-clientes (ex.: «NN | Ex-Cliente»). Só existe uma opção: **Ex-cliente** (não há «mudar para NN» separado).
 - **Insatisfeito NOS:** motivo dentro de **Recusa**; sai de todas as campanhas; **12 meses configurável**; a ficha mostra «Insatisfeito NOS até dd/mm/aaaa»; o Administrador pode retirar antes; volta sozinha no fim do prazo.
