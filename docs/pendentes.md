@@ -77,3 +77,20 @@ Aprovado (17/11, fim do dia): desenhos 13 a 18.
 
 Construído na 0.12.0 (17/11, por publicar): itens acima, exceto assinaturas do WhatsApp (à espera) e chamadas desligadas logo a seguir (por decidir).
 Por testar pelo Leonardo no telemóvel: Mute (depende do modelo), janela ao atender, não atendidas durante outra chamada.
+
+## Correções de 18/11/2026 — para o fim do dia (NÃO fazer antes de o Leonardo dizer)
+
+O Leonardo vai juntando correções durante o dia; só se constrói quando ele disser. Podem chegar mais.
+
+1. **Mudar cliente para ex-cliente (ou NN) na ficha.** As bases estão desatualizadas. Na ficha, carregar no NC/FC (ou em «Cliente») e escolher NN ou Ex-cliente; a empresa passa a ser ex-cliente e sai da base de clientes atuais para a de ex-clientes.
+   (Hoje: tipo de conta = Cliente/NN; «EX-CLIENTE» vem do estado no portal NOS e é usado nos filtros de campanha.)
+2. **Recusa nova «Insatisfeito NOS».** Mesmo efeito do RGPD (Não contactar): sai de todas as campanhas e não se liga durante **1 ano**; depois do ano pode voltar a entrar.
+3. **«O meu dia»: número de recusas** do dia (além das chamadas, atendidas, propostas e vendas).
+4. **Próxima ação na proposta: escolher de uma lista** — Follow-up SMS, Follow-up email, Follow-up WhatsApp, Follow-up chamada — com o calendário à frente para a data.
+5. **Feedback anterior com o resultado escolhido.** Hoje mostra data, comercial e o texto; tem de mostrar sempre o resultado (Recusa · motivo, Não atende, Callback, etc.). Linhas sem comentário aparecem vazias (print de 18/11).
+6. **Não atende / voicemail: passar ao número seguinte.** Quando um número esgota o ciclo de não atende ou voicemail, fica em quarentena com a nota «Não atende permanentemente» / «Voicemail permanente» (não «incorreto») e entra o número seguinte. Ligar a todos os números. Sem mais números: a empresa fica em quarentena.
+7. **Botão «Abrir ficha» sempre à mão** enquanto se trata um cliente: no resultado (feedback), na proposta, no Em cliente. Num canto, sem atrapalhar.
+
+Prints recebidos: feedback anterior com linhas vazias; O meu dia (tema escuro); caixa NC/FC (tema escuro); Agenda ainda cheia de callbacks de 17/11.
+
+Ainda pendente de antes: assinaturas do WhatsApp (à espera); chamadas desligadas logo a seguir (por decidir).
