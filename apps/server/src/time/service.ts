@@ -1,5 +1,5 @@
 import { and, inArray, asc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
-import { DEFAULT_PROPOSAL_CHANNELS, lisbonDay, nextWorkingMoment, pontoDay, proposalValue, saleTypesError, type SaleTypes } from "@basecom/shared";
+import { DEFAULT_PROPOSAL_CHANNELS, followUpLabel, type FollowUp, lisbonDay, nextWorkingMoment, pontoDay, proposalValue, saleTypesError, type SaleTypes } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, companies, companyNotes, opportunities, tasks, timeEntries, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -8,6 +8,7 @@ import { notify, notifyLeadOrAdmin } from "../notifications/service.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
 import { incomingStats } from "../phone/service.js";
 import { docsReminders } from "../opportunities/service.js";
+import { queueFollowUp } from "../dialer/service.js";
 
 /**
  * Estados do comercial e registo de ponto (catálogo, secção 14).
@@ -112,7 +113,7 @@ export async function startClient(db: Db, user: PublicUser, input: { companyId: 
   return daySummary(db, user.id);
 }
 
-export type CloseClientInput = { saleTypes: SaleTypes; channel?: string; nextAction?: string; at?: string; comment?: string };
+export type CloseClientInput = { saleTypes: SaleTypes; channel?: string; followUp?: FollowUp; at?: string; comment?: string };
 
 /**
  * «Guardar e fechar» (17 nov 2026): fecha o trabalho em cliente com os dados da proposta ou venda
@@ -129,7 +130,7 @@ export async function endClient(db: Db, user: PublicUser, input?: CloseClientInp
     const rules = (await getSetting(db, "catalogs")).opportunities;
     const channels = rules.channels ?? DEFAULT_PROPOSAL_CHANNELS;
     if (isProposal && !channels.includes(input.channel ?? "")) throw new AuthError(400, "Indique o canal por onde enviou a proposta.");
-    if (isProposal && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
+    if (isProposal && (!input.at || !input.followUp)) throw new AuthError(400, "Escolha a próxima ação (follow-up) e a data.");
     const now = new Date();
     const value = proposalValue(input.saleTypes);
     const companyId = cur.companyId, op = cur.opCode;
@@ -142,7 +143,9 @@ export async function endClient(db: Db, user: PublicUser, input?: CloseClientInp
       const types = Object.keys(input.saleTypes).join(" + ");
       await tx.insert(companyNotes).values({ companyId, kind: "note", userId: user.id, at: now,
         text: `${isProposal ? "Proposta enviada" : "Venda"} · OP ${op} · ${types} · ${eur} €/mês${input.channel ? ` · por ${input.channel}` : ""}${input.comment?.trim() ? ` · ${input.comment.trim()}` : ""}` });
-      if (input.at && input.nextAction?.trim()) await tx.insert(tasks).values({ companyId, type: "Ligar", assignedTo: co?.ownerId ?? user.id, dueAt: nextWorkingMoment(new Date(input.at)), description: input.nextAction.trim(), origin: "call", opportunityId: opp!.id, createdBy: user.id });
+      // Follow-up (18 nov): chamada → fila do comercial; SMS, email e WhatsApp → Agenda.
+      if (input.at && input.followUp === "call") await queueFollowUp(tx as unknown as Db, companyId, user.id, nextWorkingMoment(new Date(input.at)));
+      else if (input.at && input.followUp) await tx.insert(tasks).values({ companyId, type: followUpLabel(input.followUp), assignedTo: co?.ownerId ?? user.id, dueAt: nextWorkingMoment(new Date(input.at)), description: followUpLabel(input.followUp), origin: "call", opportunityId: opp!.id, createdBy: user.id });
     });
   }
   await setState(db, user, user.id, "working");
@@ -233,7 +236,22 @@ export async function teamToday(db: Db, actor: PublicUser) {
   const v = await visibleUserIds(db, actor);
   const people = await db.select({ id: users.id, name: users.name, role: users.role }).from(users)
     .where(and(eq(users.active, true), sql`${users.role} <> 'admin'`, v === null ? sql`true` : inArray(users.id, v.filter((x) => x !== actor.id)))).orderBy(users.name);
-  return Promise.all(people.map(async (p) => ({ ...p, ...(await daySummary(db, p.id)), incoming: await incomingStats(db, p.id) })));
+  return Promise.all(people.map(async (p) => ({ ...p, ...(await daySummary(db, p.id)), incoming: await incomingStats(db, p.id), calls: await callStats(db, p.id) })));
+}
+
+/**
+ * Números de chamadas de hoje (18 nov): chamadas que contam (sem as curtas, abaixo de 5 s, e sem as repetidas da mesma
+ * empresa antes de guardar o resultado), recusas e chamadas curtas (só o Chefe de Equipa e o Administrador as veem).
+ */
+export async function callStats(db: Db, userId: string) {
+  const short = (await getSetting(db, "timeLimits")).shortCallSeconds ?? 5;
+  const r = await db.execute(sql`select
+      count(*) filter (where effect not in ('redial', 'discarded') and extract(epoch from (coalesce(ended_at, saved_at) - started_at)) >= ${short})::int as calls,
+      count(*) filter (where effect = 'not_interested')::int as refusals,
+      count(*) filter (where effect = 'redial' or (effect <> 'discarded' and extract(epoch from (coalesce(ended_at, saved_at) - started_at)) < ${short}))::int as short
+    from calls where user_id = ${userId}::uuid and saved_at is not null
+      and (saved_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date`);
+  return r.rows[0] as { calls: number; refusals: number; short: number };
 }
 
 /** Horas previstas do dia (Lisboa): dias úteis e sábado configuráveis; domingo 0. */

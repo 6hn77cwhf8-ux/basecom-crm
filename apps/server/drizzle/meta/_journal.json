@@ -176,6 +176,20 @@
       "when": 1794934121836,
       "tag": "0024_chamadas_recebidas",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795028605125,
+      "tag": "0025_correcoes_18_nov",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795028605897,
+      "tag": "0026_insatisfeito_nos",
+      "breakpoints": true
     }
   ]
 }

@@ -66,7 +66,7 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     expect((await nextEntry(db, toPublic(ana), campaignId))!.company.id).toBe(a.company.id);
   });
 
-  it("Não atendeu: +2 h; à 3.ª tentativa do dia passa para o dia seguinte; à 6.ª fica esgotada", async () => {
+  it("Não atendeu: +2 h; à 3.ª tentativa do dia passa para o dia seguinte; nunca sai da fila (vai para o fim)", async () => {
     const { n } = await call(ana, { outcomeId: "no_answer" });
     let e = await entryOf(n.company.id);
     expect(e.attempts).toBe(1);
@@ -78,7 +78,11 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     for (let i = 0; i < 3; i++) { await readyNow(n.company.id); await db.update(campaignEntries).set({ attempts: 5 }).where(eq(campaignEntries.id, e.id)); }
     await readyNow(n.company.id);
     await call(ana, { outcomeId: "no_answer" });
-    expect((await entryOf(n.company.id)).status).toBe("exhausted");
+    // 18 nov: 4 sem resposta no mesmo número → número em quarentena (passa ao seguinte); sem mais números → fim da fila.
+    const last = await entryOf(n.company.id);
+    expect(last.status).toBe("pending");
+    const parked = await db.select().from(companyContacts).where(and(eq(companyContacts.companyId, n.company.id), eq(companyContacts.statusNote, "Não atende permanentemente")));
+    expect(last.quarantined || parked.length > 0).toBe(true);
   });
 
   it("Número errado sem outro número: «Sem contacto válido»", async () => {
@@ -119,7 +123,7 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     expect(back!.entry.id).toBe(e1.id);
     await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: new Date(Date.now() + 86400_000) }).where(eq(campaignEntries.id, e1.id));
 
-    const { n: n2 } = await call(ana, { outcomeId: "interested", at, nextAction: "Enviar proposta 4P", services: "4P" });
+    const { n: n2 } = await call(ana, { outcomeId: "interested", at, followUp: "sms", services: "4P" });
     expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n2.company.id)))[0]).toMatchObject({ stage: "interest", ownerId: ana.id });
 
     await (await nextEntry(db, toPublic(ana), campaignId)); // garante a fila
@@ -230,11 +234,11 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     await db.update(campaigns).set({ dialMode: "power" }).where(eq(campaigns.id, campaignId));
   });
 
-  it("Resultado registado depois dos 15 s: aviso ao Chefe de Equipa / Administrador", async () => {
+  it("Resultado registado depois dos 100 s: aviso ao Chefe de Equipa / Administrador (abaixo disso, sem aviso)", async () => {
     await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.campaignId, campaignId), eq(campaignEntries.status, "pending")));
     const n = (await nextEntry(db, toPublic(ana), campaignId))!;
     const c = await startCall(db, toPublic(ana), { companyId: n.company.id, contactId: n.phone?.id, entryId: n.entry.id, source: "new" });
-    await db.update(calls).set({ endedAt: new Date(Date.now() - 40_000) }).where(eq(calls.id, c.id));
+    await db.update(calls).set({ endedAt: new Date(Date.now() - 140_000) }).where(eq(calls.id, c.id));
     await saveResult(db, toPublic(ana), c.id, { outcomeId: "no_answer", walletKind: "NC" });
     const got = await db.select().from(notifications).where(and(eq(notifications.userId, admin.id), eq(notifications.kind, "result_late")));
     expect(got.length).toBe(1);

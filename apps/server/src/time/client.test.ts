@@ -58,12 +58,12 @@ describe.skipIf(!url)("em cliente, office, apoio e formação", () => {
     await expect(endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 } })).rejects.toThrow(/canal/);
     await expect(endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 }, channel: "WhatsApp" })).rejects.toThrow(/próxima ação/);
     const at = new Date(Date.now() + 2 * 86400_000).toISOString();
-    await endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 }, channel: "WhatsApp", nextAction: "Confirmar receção", at, comment: "Compara com a MEO" });
+    await endClient(db, toPublic(ana), { saleTypes: { FID: 120, XSell: 45 }, channel: "WhatsApp", followUp: "whatsapp", at, comment: "Compara com a MEO" });
     expect((await daySummary(db, ana.id)).state).toBe("working");
     const [o2] = await db.select().from(opportunities).where(eq(opportunities.companyId, coId));
     expect(o2).toMatchObject({ sentChannel: "WhatsApp", proposedValue: "165.00" });
     const t = await db.select().from(tasks).where(eq(tasks.opportunityId, o2!.id));
-    expect(t[0]).toMatchObject({ type: "Ligar", description: "Confirmar receção" });
+    expect(t[0]).toMatchObject({ type: "Follow-up WhatsApp" });
     const sent = await db.select().from(companyNotes).where(and(eq(companyNotes.companyId, coId), eq(companyNotes.kind, "note")));
     expect(sent.map((x) => x.text)).toContain("Proposta enviada · OP 7590457 · FID + XSell · 165,00 €/mês · por WhatsApp · Compara com a MEO");
     const notes = await db.select().from(companyNotes).where(and(eq(companyNotes.companyId, coId), eq(companyNotes.kind, "client_work")));

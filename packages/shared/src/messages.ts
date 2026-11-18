@@ -3,10 +3,13 @@
  * Campos automáticos: {decisor} {empresa} {op} {comercial}. Um campo sem valor desaparece da frase com o espaço à volta.
  */
 export type MessageTemplate = { id: string; label: string; text: string; active: boolean };
-export const MESSAGE_FIELDS = ["decisor", "empresa", "op", "comercial"] as const;
+export const MESSAGE_FIELDS = ["decisor", "empresa", "op", "comercial", "saudacao"] as const;
 export type MessageVars = Partial<Record<(typeof MESSAGE_FIELDS)[number], string>>;
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplate[] = [
+  // SMS automática no 1.º não atende (18 nov): só «NOS Empresas», com o pedido para devolver a chamada.
+  { id: "tried_call", label: "Tentámos ligar (1.º não atende)", active: true,
+    text: "{saudacao}, {decisor}. Tentámos ligar-lhe da NOS Empresas sobre as comunicações da {empresa}.\n\nLigue-nos para este número quando lhe der jeito — são 2 minutos.\n\n{comercial} · NOS Empresas" },
   { id: "no_answer", label: "Não conseguimos falar consigo", active: true,
     text: "Bom dia, {decisor}. Fala {comercial}, da BASECOM – parceiro NOS Empresas. Tentei contactá-lo(a) por telefone sobre os serviços da {empresa}. Quando lhe der jeito falarmos?" },
   { id: "proposal", label: "Proposta enviada", active: true,
@@ -19,9 +22,17 @@ export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplate[] = [
     text: "Bom dia, {decisor}. Fala {comercial}, da BASECOM. Confirmo a nossa conversa sobre os serviços da {empresa}. Até breve!" },
 ];
 
+/** «Bom dia» até às 13h; depois «Boa tarde» (hora de Lisboa). */
+export function greeting(now = new Date()): string {
+  const h = Number(new Intl.DateTimeFormat("pt-PT", { timeZone: "Europe/Lisbon", hour: "2-digit", hourCycle: "h23" }).format(now));
+  return h < 13 ? "Bom dia" : "Boa tarde";
+}
+
 export function renderMessage(text: string, v: MessageVars): string {
+  const vars = { saudacao: greeting(), ...v } as Record<string, string | undefined>;
   return text
     .replace(/\s*\(referência \{op\}\)/g, v.op ? ` (referência ${v.op})` : "")
-    .replace(/\{(decisor|empresa|op|comercial)\}/g, (_, k: string) => (v as Record<string, string | undefined>)[k] ?? "")
-    .replace(/ {2,}/g, " ").replace(/ ,/g, ",").replace(/ \./g, ".").trim();
+    .replace(/\{(decisor|empresa|op|comercial|saudacao)\}/g, (_, k: string) => vars[k] ?? "")
+    .replace(/ ,/g, ",")
+    .replace(/ {2,}/g, " ").replace(/ ,/g, ",").replace(/ \./g, ".").replace(/,\./g, ".").trim();
 }

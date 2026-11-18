@@ -25,7 +25,7 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.post("/time/client/end", any, async (req) => {
     const b = z.object({
       saleTypes: z.object({ NN: z.number().min(0).max(100_000).optional(), FID: z.number().min(0).max(100_000).optional(), XSell: z.number().min(0).max(100_000).optional(), Upsell: z.number().min(0).max(100_000).optional() }),
-      channel: z.string().max(40).optional(), nextAction: z.string().max(300).optional(), at: z.string().datetime().optional(), comment: z.string().max(2000).optional(),
+      channel: z.string().max(40).optional(), followUp: z.enum(["call", "sms", "email", "whatsapp"]).optional(), at: z.string().datetime().optional(), comment: z.string().max(2000).optional(),
     }).optional().parse(req.body ?? undefined);
     return endClient(db, req.user!, b);
   });

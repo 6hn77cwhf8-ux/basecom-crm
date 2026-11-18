@@ -58,8 +58,10 @@ export const DEFAULT_ATTEMPT_RULES: AttemptRules = { noAnswerRetryMinutes: 120, 
  * - company_closed: empresa inativa, sai de todas as campanhas;
  * - other: descrição obrigatória; o comercial define a tarefa e o prazo.
  */
-export type ReasonEffect = "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other";
+export type ReasonEffect = "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "dissatisfied" | "other";
 export type Reason = { id: string; label: string; effect: ReasonEffect; days?: number; monthsBefore?: number; contractMonths?: number;
+  /** «Insatisfeito NOS»: meses fora de todas as campanhas (12 por omissão). */
+  months?: number;
   /** Outra operadora sem data (cliente não refere, «NS/NR»): novo contacto daqui a X meses (6 por omissão, decisão de 16 nov). */
   unknownMonths?: number; active: boolean };
 /** Não sabe / não responde: o cliente não refere a operadora ou o fim da fidelização. */
@@ -75,6 +77,8 @@ export const DEFAULT_REASONS: Reason[] = [
   { id: "decisor_undecided", label: "Decisor indisponível ou indeciso", effect: "followup_task", days: 30, active: true },
   { id: "no_coverage", label: "Sem cobertura ou viabilidade técnica", effect: "cooldown", days: 180, active: true },
   { id: "closed", label: "Empresa encerrada ou sem atividade", effect: "company_closed", active: true },
+  // 18 nov: como o RGPD, mas por tempo — sai de todas as campanhas e não se liga durante 12 meses (configurável).
+  { id: "dissatisfied", label: "Insatisfeito NOS", effect: "dissatisfied", months: 12, active: true },
   { id: "other", label: "Outro", effect: "other", active: true },
 ];
 
@@ -106,6 +110,8 @@ export function nextContactFor(reason: Reason, today: Date, date?: Date | null):
   switch (reason.effect) {
     case "cooldown": return { at: null, eligibleAt: addDays(today, reason.days ?? 0) };
     case "followup_task": return { at: addDays(today, reason.days ?? 0), eligibleAt: null };
+    // Insatisfeito NOS (18 nov): fora de todas as campanhas durante X meses (12 por omissão); depois pode voltar.
+    case "dissatisfied": return { at: null, eligibleAt: addMonths(today, reason.months ?? 12) };
     // Outra operadora (fidelizado ou renovou): a data é o fim da fidelização; contacto X meses antes (4 por omissão).
     case "loyalty_end":
     case "new_contract": {
@@ -147,3 +153,11 @@ export function operatorRefusalNote(operator: string, endDate: string | null, mo
   const [y, m, d] = endDate.slice(0, 10).split("-");
   return `${who} até ${d}/${m}/${y}, agendado contacto para ${months(monthsBefore)} antes.`;
 }
+
+/** Próxima ação (18 nov): só estes quatro, com data. A chamada volta à fila do comercial; os outros vão para a Agenda. */
+export const FOLLOW_UPS = [
+  { id: "call", label: "Follow-up chamada" }, { id: "sms", label: "Follow-up SMS" },
+  { id: "email", label: "Follow-up email" }, { id: "whatsapp", label: "Follow-up WhatsApp" },
+] as const;
+export type FollowUp = (typeof FOLLOW_UPS)[number]["id"];
+export const followUpLabel = (f: string) => FOLLOW_UPS.find((x) => x.id === f)?.label ?? f;

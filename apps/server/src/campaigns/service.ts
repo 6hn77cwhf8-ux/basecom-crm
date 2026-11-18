@@ -171,3 +171,30 @@ export async function listCampaigns(db: Db, by: PublicUser) {
     from campaigns k where ${mine} and k.filters->>'system' is null order by (k.status = 'ended'), k.created_at desc`);
   return r.rows;
 }
+
+/**
+ * Uma empresa mudou (ex-cliente, L2B, meses de permanência — 18 nov): sai das campanhas cujos filtros já não cumpre
+ * e entra nas que passa a cumprir. As campanhas automáticas e as entradas reservadas a alguém (callbacks) não mexem.
+ */
+export async function reassignCompany(db: Db, companyId: string) {
+  const ks = (await db.execute(sql`select k.id, k.filters,
+      coalesce((select array_agg(m.user_id) from campaign_members m where m.campaign_id = k.id), '{}') as members
+    from campaigns k where k.status = 'active' and k.filters->>'system' is null`)).rows as { id: string; filters: CampaignFilters; members: string[] }[];
+  const out = { left: [] as string[], joined: [] as string[] };
+  for (const k of ks) {
+    const f = filtersSchema.parse(k.filters);
+    const fits = (await db.execute(sql`select 1 from companies c where c.id = ${companyId}::uuid and ${filterCond(f)}`)).rows.length > 0;
+    const entry = (await db.execute(sql`select id, status, assigned_to as "assignedTo", locked_until as "lockedUntil" from campaign_entries where campaign_id = ${k.id}::uuid and company_id = ${companyId}::uuid`)).rows[0] as { id: string; status: string; assignedTo: string | null; lockedUntil: string | null } | undefined;
+    if (!fits && entry?.status === "pending" && !(entry.lockedUntil && new Date(entry.lockedUntil) > new Date())) {
+      await db.execute(sql`update campaign_entries set status = 'removed' where id = ${entry.id}::uuid`);
+      out.left.push(k.id);
+    } else if (fits && (!entry || entry.status === "removed")) {
+      const ok = (await db.execute(sql`select 1 from companies c where c.id = ${companyId}::uuid and ${eligible(f, k.members, k.id)}`)).rows.length > 0;
+      if (!ok) continue;
+      if (entry) await db.execute(sql`update campaign_entries set status = 'pending', attempts = 0, next_at = null, quarantined = false, assigned_to = (select owner_id from companies where id = ${companyId}::uuid) where id = ${entry.id}::uuid`);
+      else await db.execute(sql`insert into campaign_entries (campaign_id, company_id, assigned_to) select ${k.id}::uuid, c.id, c.owner_id from companies c where c.id = ${companyId}::uuid`);
+      out.joined.push(k.id);
+    }
+  }
+  return out;
+}

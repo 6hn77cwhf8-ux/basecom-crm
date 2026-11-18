@@ -128,6 +128,12 @@ export const companies = pgTable("companies", {
    * contactos/nomes editados no CRM ou já confirmados numa chamada atendida → a importação deixa de os alterar.
    */
   addressEditedAt: timestamp("address_edited_at", { withTimezone: true }),
+  /** L2B (mensalidade e meses de permanência) corrigido no CRM: a importação deixa de o alterar (18 nov). */
+  l2bEditedAt: timestamp("l2b_edited_at", { withTimezone: true }),
+  /** Passou a ex-cliente no CRM: a importação não volta a pôr o estado do portal (18 nov). */
+  statusEditedAt: timestamp("status_edited_at", { withTimezone: true }),
+  /** Recusa «Insatisfeito NOS»: fora de todas as campanhas até esta data (12 meses por omissão). */
+  dissatisfiedUntil: date("dissatisfied_until"),
   contactsLockedAt: timestamp("contacts_locked_at", { withTimezone: true }),
   /** RGPD: nunca é reativada por uma importação. */
   doNotContact: boolean("do_not_contact").notNull().default(false),
@@ -170,6 +176,10 @@ export const companyContacts = pgTable("company_contacts", {
   salutation: text("salutation"),
   isPrimary: boolean("is_primary").notNull().default(false),
   status: text("status").notNull().default("valid"),
+  /** Número em quarentena (18 nov): «Não atende permanentemente» / «Voicemail permanente». */
+  statusNote: text("status_note"),
+  /** Desde quando se contam as tentativas sem resposta deste número (volta a zero quando a empresa entra em quarentena). */
+  noReplyResetAt: timestamp("no_reply_reset_at", { withTimezone: true }),
   batchId: uuid("batch_id").references(() => importBatches.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("company_contacts_value_idx").on(t.value), index("company_contacts_company_idx").on(t.companyId)]);
@@ -270,6 +280,8 @@ export const campaignEntries = pgTable("campaign_entries", {
   /** Reserva enquanto um comercial a tem no ecrã (evita duas pessoas a ligar à mesma empresa). */
   lockedBy: uuid("locked_by").references(() => users.id),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  /** Todos os números sem resposta (18 nov): vai para o fim da fila e só sai quando não houver empresas por contactar. */
+  quarantined: boolean("quarantined").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("campaign_entries_queue_idx").on(t.campaignId, t.status, t.nextAt), index("campaign_entries_company_idx").on(t.companyId)]);
 

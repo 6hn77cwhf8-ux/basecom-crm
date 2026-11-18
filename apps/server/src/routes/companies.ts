@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
+import { editL2B, liftDissatisfied, markFormerClient } from "../companies/status.js";
 import { companyKpis, listCompanyIds, filterOptions, getCompany, listCompanies, quickSearch, SORT_KEYS } from "../companies/service.js";
 import { addContact, editAddress, editContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
 
@@ -64,6 +65,13 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
     if (b.personName !== undefined || b.salutation !== undefined) await editContact(db, req.user!, cid, b);
     return { ok: true };
   });
+  // 18 nov: passar a ex-cliente (com justificação), corrigir o L2B e retirar o «Insatisfeito NOS».
+  app.post("/companies/:id/former-client", any, async (req) => markFormerClient(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, z.object({ reason: z.string().max(500) }).parse(req.body).reason));
+  app.patch("/companies/:id/l2b", any, async (req) => {
+    const b = z.object({ l2bMonthly: z.number().nullable().optional(), loyaltyMonths: z.number().int().nullable().optional() }).parse(req.body);
+    return editL2B(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, b);
+  });
+  app.delete("/companies/:id/dissatisfied", any, async (req) => liftDissatisfied(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id));
   app.patch("/companies/:id/address", any, async (req) => {
     const s = z.string().max(200).nullable().optional();
     const b = z.object({ address: s, postalCode: s, locality: s, municipality: s, district: s }).parse(req.body);

@@ -449,11 +449,13 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
           address = case when c.address_edited_at is null then coalesce(x.address, c.address) else c.address end,
           postal_code = case when c.address_edited_at is null then coalesce(x.postal_code, c.postal_code) else c.postal_code end,
           municipality = case when c.address_edited_at is null then coalesce(x.municipality, c.municipality) else c.municipality end,
-          locality = case when c.address_edited_at is null then coalesce(x.locality, c.locality) else c.locality end, loyalty_end = coalesce(x.loyalty_end, c.loyalty_end), l2b_monthly = coalesce(x.l2b_monthly, c.l2b_monthly),
+          locality = case when c.address_edited_at is null then coalesce(x.locality, c.locality) else c.locality end, loyalty_end = coalesce(x.loyalty_end, c.loyalty_end), l2b_monthly = case when c.l2b_edited_at is null then coalesce(x.l2b_monthly, c.l2b_monthly) else c.l2b_monthly end,
           size = coalesce(x.size, c.size), district = case when c.address_edited_at is null then coalesce(x.district, c.district) else c.district end, sector = coalesce(x.sector, c.sector),
           annual_revenue = coalesce(x.annual_revenue, c.annual_revenue), locations_potential = coalesce(x.locations_potential, c.locations_potential),
           rgu = coalesce(x.rgu, c.rgu), product = coalesce(x.product, c.product), technology = coalesce(x.technology, c.technology),
-          loyalty_months = coalesce(x.loyalty_months, c.loyalty_months), portal_status = coalesce(x.portal_status, c.portal_status),
+          loyalty_months = case when c.l2b_edited_at is null then coalesce(x.loyalty_months, c.loyalty_months) else c.loyalty_months end,
+          -- Ex-cliente marcado no CRM (18 nov): a importação não volta a mudar o estado do portal.
+          portal_status = case when c.status_edited_at is null then coalesce(x.portal_status, c.portal_status) else c.portal_status end,
           nos_exit_month = coalesce(x.nos_exit_month, c.nos_exit_month), nbo_campaign = coalesce(x.nbo_campaign, c.nbo_campaign), updated_at = now()
         from jsonb_to_recordset(${JSON.stringify(sets)}::jsonb) as x(id uuid, name text, name_key text, address text, postal_code text, municipality text, locality text,
           loyalty_end date, l2b_monthly numeric, size text, district text, sector text, annual_revenue numeric, locations_potential text, rgu jsonb, product text,

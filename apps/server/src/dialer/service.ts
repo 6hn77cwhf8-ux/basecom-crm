@@ -1,9 +1,10 @@
-import { and, desc, eq, sql } from "drizzle-orm";
-import { DEFAULT_SCRIPTS, NSNR, callbackLimit, proposalValue, saleTypesError, type SaleTypes, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { DEFAULT_SCRIPTS, followUpLabel, type FollowUp, NSNR, callbackLimit, proposalValue, saleTypesError, type SaleTypes, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
+import { markFormerClient } from "../companies/status.js";
 import { currentState, OP_CODE, setState, startClient, type WorkKind } from "../time/service.js";
 import { notifyLeadOrAdmin } from "../notifications/service.js";
 import { queueDial, queueHangup } from "../phone/service.js";
@@ -31,7 +32,7 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
   const cb = await db.execute(sql`update campaign_entries set locked_by = ${user.id}::uuid, locked_until = ${minutes(LOCK_MINUTES)}
     where id = (
       select e.id from campaign_entries e join campaigns k on k.id = e.campaign_id join companies c on c.id = e.company_id
-      where e.assigned_to = ${user.id}::uuid and e.status = 'pending' and e.next_at <= now() and k.status = 'active' and e.last_outcome = 'call_later'
+      where e.assigned_to = ${user.id}::uuid and e.status = 'pending' and e.next_at <= now() and k.status = 'active' and e.last_outcome in ('call_later', 'followup_call')
         and (e.locked_until is null or e.locked_until < now() or e.locked_by = ${user.id}::uuid)
         and not c.do_not_contact and not c.inactive
         and not exists (select 1 from campaign_entries o where o.company_id = e.company_id and o.id <> e.id and o.locked_by <> ${user.id}::uuid and o.locked_until > now())
@@ -52,6 +53,8 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
         -- A mesma empresa pode estar em várias campanhas: nunca a dá a duas pessoas ao mesmo tempo.
         and not exists (select 1 from campaign_entries o where o.company_id = e.company_id and o.id <> e.id and o.locked_by <> ${user.id}::uuid and o.locked_until > now())
       order by (e.locked_by = ${user.id}::uuid and e.locked_until >= now()) desc nulls last,
+               -- Quarentena (todos os números sem resposta): só depois de todas as outras.
+               e.quarantined,
                (e.next_at is not null) desc, (e.assigned_to is not null) desc, e.next_at nulls last, e.created_at, e.id
       limit 1 for update of e skip locked)
     returning id`);
@@ -72,6 +75,8 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   const people = contacts.filter((x) => x.personName && x.status !== "incorrect").sort((a, b) => Number(b.kind === "person" && b.isPrimary) - Number(a.kind === "person" && a.isPrimary));
   const owner = co.ownerId ? (await db.query.users.findFirst({ where: eq(users.id, co.ownerId) }))?.name ?? null : null;
   const history = await companyFeed(db, co.id, 12);
+  // SMS «Tentámos ligar» (18 nov): só no 1.º não atende de cada empresa.
+  const noAnswers = (await db.execute(sql`select count(*)::int as n from calls where company_id = ${co.id}::uuid and effect in ('no_answer', 'voicemail')`)).rows[0] as { n: number };
   const decisor1 = people[0] ? `${people[0].salutation ? people[0].salutation + " " : ""}${people[0].personName}` : "";
   const decisor2 = people.find((p) => p.personName !== people[0]?.personName);
   const vars = {
@@ -95,6 +100,7 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
     people: [...new Map(people.map((p) => [p.personName!.toLowerCase(), { salutation: p.salutation, name: p.personName! }])).values()],
     decisors: [decisor1, decisor2?.personName].filter(Boolean),
     history,
+    firstNoAnswer: noAnswers.n === 0,
   };
 }
 
@@ -137,13 +143,18 @@ export async function dialerAssignments(db: Db) {
 /** Feedback anterior, mais recente primeiro: chamadas no CRM e histórico importado. */
 export async function companyFeed(db: Db, companyId: string, limit = 20) {
   const r = await db.execute(sql`(
-      select c.saved_at as at, u.name as "user", c.outcome_id as outcome, c.comment as text, 'call' as kind
+      select c.saved_at as at, u.name as "user", c.outcome_id as outcome, c.reason_id as reason, c.comment as text, 'call' as kind
       from calls c join users u on u.id = c.user_id where c.company_id = ${companyId}::uuid and c.saved_at is not null
     ) union all (
-      select n.at, case when n.batch_id is null then u.name else null end, null, n.text, n.kind
+      select n.at, case when n.batch_id is null then u.name else null end, null, null, n.text, n.kind
       from company_notes n left join users u on u.id = n.user_id where n.company_id = ${companyId}::uuid and n.kind in ('feedback', 'campaign', 'note')
     ) order by at desc limit ${limit}`);
-  return r.rows as { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
+  // Feedback anterior (18 nov): mostra sempre o resultado escolhido (e o motivo), antes do comentário.
+  const cat = await getSetting(db, "catalogs");
+  const label = (id: string | null, list: { id: string; label: string }[]) => (id ? list.find((x) => x.id === id)?.label ?? null : null);
+  return (r.rows as { at: string; user: string | null; outcome: string | null; reason: string | null; text: string | null; kind: string }[]).map(({ reason, ...x }) => (
+    x.kind === "call" ? { ...x, text: [label(x.outcome, cat.outcomes as Outcome[]), label(reason, cat.reasons as Reason[]), x.text].filter(Boolean).join(" · ") || null } : x
+  ));
 }
 
 /** Preview: saltar a empresa com motivo (fica no histórico); volta no dia útil seguinte. */
@@ -189,11 +200,24 @@ export async function startCall(db: Db, user: PublicUser, input: { companyId: st
     if (k?.dialMode === "preview" && !input.consultedNos) throw new AuthError(400, "Confirme «Consultei a NOS» antes de ligar.");
     await db.update(campaignEntries).set({ lockedBy: user.id, lockedUntil: minutes(LOCK_MINUTES * 3) }).where(eq(campaignEntries.id, e.id));
   }
-  const [c0] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source, details: input.consultedNos ? { consultedNos: true } : null }).returning({ id: calls.id, startedAt: calls.startedAt });
+  // Religar a mesma empresa antes de guardar o resultado (18 nov): a chamada anterior conta como a mesma (não entra no rating)
+  // e o tempo de registo fica em pausa — continua de onde estava, não recomeça.
+  let priorResultSeconds = 0;
+  const prev = (await db.execute(sql`select id, ended_at as "endedAt", details from calls where user_id = ${user.id}::uuid and company_id = ${input.companyId}::uuid
+    and saved_at is null and started_at > now() - interval '30 minutes' order by started_at desc limit 1`)).rows[0] as { id: string; endedAt: string | null; details: Record<string, unknown> | null } | undefined;
+  if (prev) {
+    const ended = prev.endedAt ? new Date(prev.endedAt) : new Date();
+    priorResultSeconds = Number(prev.details?.priorResultSeconds ?? 0) + Math.max(0, Math.round((Date.now() - ended.getTime()) / 1000));
+    await db.update(calls).set({ endedAt: ended, savedAt: new Date(), effect: "redial", outcomeId: null }).where(eq(calls.id, prev.id));
+  }
+  const details: Record<string, unknown> = {};
+  if (input.consultedNos) details.consultedNos = true;
+  if (prev) { details.priorResultSeconds = priorResultSeconds; details.redialOf = prev.id; }
+  const [c0] = await db.insert(calls).values({ companyId: input.companyId, campaignId, entryId: input.entryId ?? null, userId: user.id, contactId: input.contactId ?? null, phone, source: input.source, details: Object.keys(details).length ? details : null }).returning({ id: calls.id, startedAt: calls.startedAt });
   // Com o telemóvel emparelhado e ligado, o próprio telemóvel marca o número (app BASECOM, Fase 4).
   // Chamada recebida (já atendida no telemóvel): não marca; o fim chega com o aviso do telemóvel.
   const viaPhone = input.source === "recebida" ? true : phone ? await queueDial(db, user.id, c0!.id, phone) : false;
-  return { ...c0!, viaPhone };
+  return { ...c0!, viaPhone, priorResultSeconds };
 }
 
 export async function endCall(db: Db, user: PublicUser, callId: string) {
@@ -205,19 +229,33 @@ export async function endCall(db: Db, user: PublicUser, callId: string) {
   return { endedAt: c.endedAt ?? new Date() };
 }
 
+/** «Fechar sem registar» (18 nov): só numa chamada que não foi atendida (marcada por engano); não conta no dia. */
+export async function discardCall(db: Db, user: PublicUser, callId: string) {
+  const c = await db.query.calls.findFirst({ where: eq(calls.id, callId) });
+  if (!c || c.userId !== user.id) throw new AuthError(404, "Chamada não encontrada.");
+  if (c.savedAt) throw new AuthError(409, "O resultado desta chamada já foi registado.");
+  if (c.answered) throw new AuthError(409, "A chamada foi atendida: registe o resultado.");
+  if (!c.endedAt) await queueHangup(db, user.id, callId);
+  await db.update(calls).set({ endedAt: c.endedAt ?? new Date(), savedAt: new Date(), effect: "discarded" }).where(eq(calls.id, callId));
+  if (c.entryId) await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null }).where(and(eq(campaignEntries.id, c.entryId), eq(campaignEntries.lockedBy, user.id)));
+}
+
 export type ResultInput = {
   outcomeId: string; reasonId?: string; comment?: string;
   /** Data indicada pelo comercial (fim da fidelização, data da renovação, callback, próxima ação). */
   date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string;
   competitor?: { operator?: string; renewalDate?: string; text?: string };
   /** Clientes NOS sem carteira e sem NC/FC: o comercial identifica no resultado. */
-  walletKind?: "NC" | "FC";
+  /** NN (18 nov): afinal não é cliente → passa a ex-cliente. */
+  walletKind?: "NC" | "FC" | "NN";
   /** «Mudar de decisor» na abertura: fica nos Contactos como decisor principal. */
   newDecisor?: { salutation?: string | null; name: string };
   /** Proposta enviada e Venda fechada: código da oportunidade na NOS (7 algarismos); a seguir começa o tempo «Em cliente». */
   opCode?: string;
   /** Proposta enviada e Venda fechada: tipos de venda e valor de cada um (€/mês), para o Pipeline e a previsão de pontos. */
   saleTypes?: SaleTypes;
+  /** Próxima ação (18 nov): follow-up por chamada, SMS, email ou WhatsApp, com a data em «at». */
+  followUp?: FollowUp;
 };
 /** Resultados que pedem a OP e abrem o trabalho em cliente. */
 export const CLIENT_WORK: Record<string, WorkKind> = { proposal_sent: "proposal", sale: "sale" };
@@ -244,7 +282,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     if (new Date(input.at!) > callbackLimit(new Date(), lim.callbackMaxMonths ?? 1)) throw new AuthError(400, `O callback é no máximo a ${lim.callbackMaxMonths ?? 1} mês. Para mais tarde, registe como Recusa.`);
   }
   // Proposta enviada (17 nov): no resultado só a OP; a próxima ação, os tipos, o valor e o canal pedem-se ao «Guardar e fechar».
-  if (["interested", "negotiating"].includes(outcome.effect) && (!input.at || !input.nextAction?.trim())) throw new AuthError(400, "Indique a próxima ação e a respetiva data.");
+  if (["interested", "negotiating"].includes(outcome.effect) && (!input.at || !input.followUp)) throw new AuthError(400, "Escolha a próxima ação (follow-up) e a data.");
   const workKind = CLIENT_WORK[outcome.effect];
   if (workKind && !OP_CODE.test(input.opCode?.trim() ?? "")) throw new AuthError(400, "Indique a OP (7 algarismos), como no programa da NOS.");
   // Em negociação: o valor da proposta é obrigatório (sem valor não se contabiliza).
@@ -256,7 +294,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
 
   const now = new Date();
   const endedAt = call.endedAt ?? now;
-  const resultSeconds = Math.max(0, Math.round((now.getTime() - endedAt.getTime()) / 1000));
+  const resultSeconds = Math.max(0, Math.round((now.getTime() - endedAt.getTime()) / 1000)) + Number((call.details as { priorResultSeconds?: number } | null)?.priorResultSeconds ?? 0);
   const co = (await db.query.companies.findFirst({ where: eq(companies.id, call.companyId) }))!;
   // NC/FC só se pede quando houve conversa (não se pede num «Não atendeu», «Ocupado», voicemail ou número errado).
   const needsKind = co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed && !NO_CONTACT.includes(outcome.effect);
@@ -270,11 +308,11 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     const t = tx as unknown as Db;
     await tx.update(calls).set({
       endedAt, outcomeId: outcome.id, effect: outcome.effect, reasonId: reason?.id ?? null, comment: input.comment?.trim() || null,
-      details: { ...((call.details as Record<string, unknown> | null) ?? {}), date: input.date, at: input.at, forMe: input.forMe, nextAction: input.nextAction, services: input.services, decisorName: input.decisorName, competitor: input.competitor },
+      details: { ...((call.details as Record<string, unknown> | null) ?? {}), date: input.date, at: input.at, forMe: input.forMe, nextAction: input.nextAction, followUp: input.followUp, services: input.services, decisorName: input.decisorName, competitor: input.competitor },
       savedAt: now, resultSeconds,
     }).where(eq(calls.id, callId));
 
-    if (needsKind && input.walletKind) {
+    if (needsKind && input.walletKind && input.walletKind !== "NN") {
       await tx.update(companies).set({ walletKind: input.walletKind, walletKindConfirmed: true, updatedAt: now }).where(eq(companies.id, co.id));
       await tx.insert(companyNotes).values({ companyId: co.id, kind: "wallet", text: `Identificada como ${input.walletKind}.`, userId: user.id });
     }
@@ -312,10 +350,36 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     };
     const retry = async (minutesLater: number, countAttempt = true) => {
       const attempts = (entry?.attempts ?? 0) + (countAttempt ? 1 : 0);
-      if (attempts >= a.maxAttemptsTotal) { await setEntry({ attempts, status: "exhausted" }); summary.push(`Esgotada nesta campanha (${attempts} tentativas)`); return; }
+      // 18 nov: a empresa nunca sai da fila por tentativas — vai para o fim (quarentena) e fica lá.
+      if (attempts >= a.maxAttemptsTotal) { await quarantine(); return; }
       const next = todays >= a.maxAttemptsPerDay ? nextWorkingDayStart(now) : nextWorkingMoment(minutes(minutesLater, now));
       await setEntry({ attempts, nextAt: next });
       summary.push(`Nova tentativa ${next.toISOString()}`);
+    };
+    /**
+     * Não atende / voicemail (18 nov): ao fim de X tentativas sem resposta (4) o número fica em quarentena e entra o seguinte;
+     * sem mais números, a empresa vai para o fim da fila (volta a tentar todos os números quando lá chegar).
+     */
+    const noReply = async (label: string) => {
+      if (call.contactId) {
+        const ct = await tx.query.companyContacts.findFirst({ where: eq(companyContacts.id, call.contactId) });
+        const since = ct?.noReplyResetAt ?? new Date(0);
+        const n = (await tx.select({ id: calls.id }).from(calls).where(and(eq(calls.contactId, call.contactId), inArray(calls.effect, ["no_answer", "voicemail"]), sql`${calls.startedAt} >= ${since.toISOString()}::timestamptz`))).length;
+        if (n >= a.maxVoicemailsPerNumber) {
+          await tx.update(companyContacts).set({ status: "exhausted", statusNote: label }).where(eq(companyContacts.id, call.contactId));
+          await tx.insert(companyNotes).values({ companyId: co.id, kind: "note", userId: user.id, text: `${ct?.value ?? "Número"}: ${label.toLowerCase()} (${n} tentativas) — passa ao número seguinte.` });
+          summary.push(`Número em quarentena (${label})`);
+          if (await anotherValidPhone()) { await setEntry({ attempts: (entry?.attempts ?? 0) + 1, nextAt: nextWorkingMoment(minutes(a.noAnswerRetryMinutes, now)) }); return; }
+          await quarantine(); return;
+        }
+      }
+      await retry(a.noAnswerRetryMinutes);
+    };
+    /** Todos os números sem resposta: fim da fila, com os números outra vez disponíveis para a próxima volta. */
+    const quarantine = async () => {
+      await tx.update(companyContacts).set({ status: "valid", noReplyResetAt: now }).where(and(eq(companyContacts.companyId, co.id), eq(companyContacts.kind, "phone"), eq(companyContacts.status, "exhausted")));
+      await setEntry({ attempts: 0, nextAt: null, quarantined: true });
+      summary.push("Sem resposta em nenhum número: vai para o fim da fila");
     };
     const anotherValidPhone = async () => (await tx.select({ id: companyContacts.id }).from(companyContacts)
       .where(and(eq(companyContacts.companyId, co.id), eq(companyContacts.kind, "phone"), eq(companyContacts.status, "valid")))).length > 0;
@@ -332,22 +396,11 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     };
 
     switch (outcome.effect) {
-      case "no_answer": await retry(a.noAnswerRetryMinutes); break;
+      case "no_answer": await noReply("Não atende permanentemente"); break;
       case "busy": await retry(a.busyRetryMinutes); break;
       case "decisor_absent":
         await retry(a.noAnswerRetryMinutes, false); break;
-      case "voicemail": {
-        // Ao 4.º voicemail sem contacto efetivo, o número fica esgotado (continua com os outros números).
-        if (call.contactId) {
-          const vms = (await tx.select({ id: calls.id }).from(calls).where(and(eq(calls.contactId, call.contactId), eq(calls.effect, "voicemail")))).length;
-          if (vms >= a.maxVoicemailsPerNumber) {
-            await tx.update(companyContacts).set({ status: "exhausted" }).where(eq(companyContacts.id, call.contactId));
-            summary.push("Número esgotado (voicemail)");
-            if (!(await anotherValidPhone())) { await setEntry({ attempts: (entry?.attempts ?? 0) + 1, status: "exhausted" }); summary.push("Sem contacto válido"); break; }
-          }
-        }
-        await retry(a.noAnswerRetryMinutes); break;
-      }
+      case "voicemail": await noReply("Voicemail permanente"); break;
       case "wrong_number":
         if (call.contactId) await tx.update(companyContacts).set({ status: "incorrect" }).where(eq(companyContacts.id, call.contactId));
         if (await anotherValidPhone()) { await setEntry({ nextAt: null }); summary.push("Próxima passagem usa o número seguinte"); }
@@ -381,6 +434,8 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
         if (byOperator && input.competitor?.operator && input.competitor.operator !== NSNR) patch.operator = input.competitor.operator;
         if (nc.eligibleAt) patch.campaignEligibleFrom = nc.eligibleAt.toISOString().slice(0, 10);
         if (r.effect === "company_closed") { patch.inactive = true; await leaveAllCampaigns(); }
+        // Insatisfeito NOS: como o RGPD, mas até uma data — sai de todas as campanhas e não volta antes dela.
+        if (r.effect === "dissatisfied" && nc.eligibleAt) { patch.dissatisfiedUntil = nc.eligibleAt.toISOString().slice(0, 10); await leaveAllCampaigns(); }
         if (Object.keys(patch).length) await tx.update(companies).set({ ...patch, updatedAt: now }).where(eq(companies.id, co.id));
         if (nc.at && (r.effect !== "cooldown")) await task("Ligar", nextWorkingMoment(nc.at), `Primeiro contacto após «${r.label}»`);
         if (r.effect === "other" && input.at) await task("Ligar", nextWorkingMoment(new Date(input.at)), input.comment!.trim());
@@ -390,7 +445,11 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       case "interested": case "proposal_sent": case "negotiating": {
         const stage = outcome.effect === "interested" ? "interest" : outcome.effect === "proposal_sent" ? "proposal" : "negotiation";
         const oppId = await opportunity(stage);
-        if (input.at && input.nextAction?.trim()) await task("Ligar", nextWorkingMoment(new Date(input.at)), input.nextAction.trim(), co.ownerId ?? user.id, oppId);
+        if (input.at && input.followUp) {
+          // Follow-up chamada: volta à fila do comercial à hora marcada; SMS, email e WhatsApp: Agenda.
+          if (input.followUp === "call") { await queueFollowUp(tx as unknown as Db, co.id, user.id, nextWorkingMoment(new Date(input.at)), entry?.id); summary.push("Follow-up chamada na sua fila"); break; }
+          await task(followUpLabel(input.followUp), nextWorkingMoment(new Date(input.at)), followUpLabel(input.followUp), co.ownerId ?? user.id, oppId);
+        }
         await setEntry({ status: "done" });
         summary.push(input.at ? "Oportunidade e tarefa de seguimento criadas" : "Oportunidade criada");
         break;
@@ -421,8 +480,12 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     if (resultSeconds > (await getSetting(t, "timeLimits")).resultSeconds) summary.push(`Resultado registado em ${resultSeconds} s`);
   });
   // Excesso no registo do resultado: avisa o Chefe de Equipa (e o Administrador, enquanto não há equipas).
-  const limit = (await getSetting(db, "timeLimits")).resultSeconds;
-  if (resultSeconds > limit) await notifyLeadOrAdmin(db, user.id, { kind: "result_late", companyId: co.id, text: `${user.name} registou o resultado de ${co.name} em ${resultSeconds} s (limite ${limit} s).` });
+  // NN na caixa NC/FC: a empresa já não é cliente NOS → ex-cliente (sai da base de clientes atuais).
+  if (needsKind && input.walletKind === "NN") { await markFormerClient(db, user, co.id, "Indicado na chamada (NN)"); summary.push("Passou a ex-cliente"); }
+  // Avisos (18 nov): o responsável só é avisado a partir dos 100 s (configurável); abaixo disso fica só registado.
+  const lims = await getSetting(db, "timeLimits");
+  const alertAt = lims.resultAlertSeconds ?? 100;
+  if (resultSeconds > alertAt) await notifyLeadOrAdmin(db, user.id, { kind: "result_late", companyId: co.id, text: `${user.name} registou o resultado de ${co.name} em ${resultSeconds} s (aviso a partir de ${alertAt} s).` });
   // Proposta ou venda: começa logo o tempo «Em cliente» (sem limite; alertas ao Chefe de Equipa).
   if (workKind) { await startClient(db, user, { companyId: co.id, kind: workKind, opCode: input.opCode! }); summary.push(`Em cliente · OP ${input.opCode!.trim()}`); }
   return { outcome: outcome.label, resultSeconds, summary, clientWork: !!workKind };
@@ -447,4 +510,15 @@ export async function callbacksCampaign(db: Db, byUserId: string) {
   if (id) return id;
   const [k] = await db.insert(campaigns).values({ name: "Callbacks (automática)", mode: "new", status: "active", filters: { system: "callbacks" }, createdBy: byUserId }).returning({ id: campaigns.id });
   return k!.id;
+}
+
+/** Follow-up chamada: a empresa volta à fila do comercial à hora marcada (na mesma entrada ou na campanha «Callbacks»). */
+export async function queueFollowUp(db: Db, companyId: string, userId: string, at: Date, entryId?: string | null) {
+  if (entryId) {
+    await db.update(campaignEntries).set({ status: "pending", assignedTo: userId, nextAt: at, lastOutcome: "followup_call", lockedBy: null, lockedUntil: null, lastAttemptAt: new Date() }).where(eq(campaignEntries.id, entryId));
+    return;
+  }
+  const kId = await callbacksCampaign(db, userId);
+  await db.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.campaignId, kId), eq(campaignEntries.companyId, companyId), eq(campaignEntries.status, "pending")));
+  await db.insert(campaignEntries).values({ campaignId: kId, companyId, assignedTo: userId, nextAt: at, lastOutcome: "followup_call", lastAttemptAt: new Date() });
 }

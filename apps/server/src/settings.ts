@@ -34,8 +34,12 @@ export const SETTINGS = {
       clientAlertMinutes: z.number().int().min(1).max(240).default(10),
       /** Callback («Ligar mais tarde»): no máximo X meses à frente; mais do que isso é recusa (decisão de 17 nov). */
       callbackMaxMonths: z.number().int().min(1).max(12).default(1),
+      /** Aviso ao Chefe de Equipa/Administrador só quando o resultado demora mais do que isto (18 nov: 100 s). */
+      resultAlertSeconds: z.number().int().min(15).max(600).default(100),
+      /** Chamadas mais curtas do que isto não contam para o rating (18 nov: 5 s). */
+      shortCallSeconds: z.number().int().min(0).max(60).default(5),
     }),
-    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1 },
+    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1, resultAlertSeconds: 100, shortCallSeconds: 5 },
   },
   /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
   importBase: {
@@ -71,8 +75,8 @@ export const SETTINGS = {
       }),
       reasons: z.array(z.object({
         id: z.string().min(1), label: z.string().min(1).max(120), active: z.boolean(),
-        effect: z.enum(["cooldown", "loyalty_end", "new_contract", "followup_task", "company_closed", "other"]),
-        days: z.number().int().min(0).max(3650).optional(), monthsBefore: z.number().int().min(0).max(60).optional(), unknownMonths: z.number().int().min(0).max(60).optional(), contractMonths: z.number().int().min(1).max(120).optional(),
+        effect: z.enum(["cooldown", "loyalty_end", "new_contract", "followup_task", "company_closed", "dissatisfied", "other"]),
+        days: z.number().int().min(0).max(3650).optional(), months: z.number().int().min(1).max(60).optional(), monthsBefore: z.number().int().min(0).max(60).optional(), unknownMonths: z.number().int().min(0).max(60).optional(), contractMonths: z.number().int().min(1).max(120).optional(),
       })).min(1),
       opportunities: z.object({ warnDays: z.number().int().min(1).max(60), lateDays: z.number().int().min(1).max(90), lostReopenDays: z.number().int().min(0).max(3650), docsTaskDays: z.number().int().min(1).max(60).default(2), channels: z.array(z.string().min(1).max(40)).min(1).max(12).default(DEFAULT_PROPOSAL_CHANNELS) }),
       taskTypes: z.array(z.string().min(1).max(60)).min(1),
