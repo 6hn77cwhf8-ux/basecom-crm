@@ -95,6 +95,21 @@ O Leonardo vai juntando correções durante o dia; só se constrói quando ele d
 9. **Botão «Abrir script» no aviso de chamada a entrar.**
 10. **Carregar num número ou email não abre logo o script.** Hoje, carregar num número abre a janela da chamada e não há forma de voltar atrás: é obrigatório pôr «Não atende» para fechar. Tem de perguntar primeiro (ex.: «Ligar e abrir script» · «Copiar» · «Cancelar»; no email «Abrir email» · «Copiar») e deixar fechar sem registar resultado quando ainda não se falou.
 
+11. **Caixa «Cliente NOS sem NC/FC» no resultado: acrescentar NN** (ao lado de NC e FC). Escolher NN = a empresa já não é cliente → passa a ex-cliente (mesmo efeito do ponto 1).
+12. **Agenda: os callbacks antigos** (de antes da 0.12) passam para a fila de cada comercial; as atrasadas vêm primeiro.
+13. **Chamadas desligadas logo a seguir** (decidido 18/11): religar a mesma empresa antes de guardar o resultado põe a contagem em pausa (não recomeça); chamadas com menos de **5 s** (configurável) não contam no rating; religar conta como 1 chamada; CE e Administrador veem «chamadas curtas» na Equipa comercial. Sem códigos nem avisos.
+
+### Respostas do Leonardo (18/11)
+- **Ex-cliente:** todos os perfis podem mudar, **com justificação** (auditoria e histórico). Sai das campanhas de clientes atuais, **perde a carteira NC/FC** e entra nas campanhas de ex-clientes (ex.: «NN | Ex-Cliente»). Só existe uma opção: **Ex-cliente** (não há «mudar para NN» separado).
+- **Insatisfeito NOS:** motivo dentro de **Recusa**; sai de todas as campanhas; **12 meses configurável**; a ficha mostra «Insatisfeito NOS até dd/mm/aaaa»; o Administrador pode retirar antes; volta sozinha no fim do prazo.
+- **Recusas:** no «O meu dia» e na Equipa comercial (por pessoa).
+- **Próxima ação:** **só a lista** (Follow-up SMS · email · WhatsApp · chamada) + data, sem texto. Em Proposta (Guardar e fechar), Interessado e Em negociação. No dia: **Follow-up chamada → fila do comercial** (como os callbacks); SMS/email/WhatsApp → **Agenda** (com o botão Mensagem).
+- **Números que não atendem:** **4 tentativas** (não atende ou voicemail; configurável) → o número fica em quarentena («Não atende permanentemente» / «Voicemail permanente») e passa ao seguinte. Sem mais números: a empresa **vai para o fim da fila** e só volta a sair quando já não houver empresas por contactar (não é por tempo).
+- **Abrir ficha:** botão pequeno **ao lado do nome da empresa**, no resultado, na proposta e no Em cliente; abre por cima sem perder o que já escreveu.
+- **Chamadas em simultâneo:** o CRM **segue o telemóvel**; só quando houver dúvida pergunta ao comercial («Está a falar com X ou com Y?»). A marcação cancelada por uma chamada a entrar volta ao **início da fila, sem contar tentativa**. Chamada em espera atendida: muda para quem ligou e volta à primeira se continuar.
+- **Abrir script no aviso:** abre logo a **janela da chamada** (cliente + resultados), mesmo antes de atender; com várias empresas no número, escolhe primeiro a empresa.
+- **Número/email na ficha:** menu primeiro (número: Ligar · Copiar · Cancelar; email: Abrir email · Copiar · Cancelar). Na janela da chamada, **«Fechar sem registar» só se não foi atendida**; essa chamada não conta no dia.
+
 Prints recebidos: feedback anterior com linhas vazias; O meu dia (tema escuro); caixa NC/FC (tema escuro); Agenda ainda cheia de callbacks de 17/11.
 
-Ainda pendente de antes: assinaturas do WhatsApp (à espera); chamadas desligadas logo a seguir (por decidir).
+Ainda pendente de antes: assinaturas do WhatsApp (à espera).
