@@ -197,7 +197,7 @@ function MyDayPanel({ onAgenda, onOpps, onOpenCompany }: { onAgenda: () => void;
         })()}
         {/* Painel do dia (desenho 18): cada número na sua caixa com um tom suave. */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
-          {([["Chamadas", d.calls, tone.sage], ["Atendidas", d.effective, tone.blue], ["Propostas", d.proposals, tone.plum], ["Vendas", d.sales, tone.teal]] as const).map(([k, v, col]) => (
+          {([["Chamadas", d.calls, tone.sage], ["Atendidas", d.effective, tone.blue], ["Recusas", d.refusals ?? 0, tone.rose], ["Propostas", d.proposals, tone.plum], ["Vendas", d.sales, tone.teal]] as const).map(([k, v, col]) => (
             <div key={k} style={{ borderRadius: 10, padding: "8px 9px", background: tint(col, 0.1), border: `1px solid ${tint(col, 0.25)}` }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: col }}>{k}</div>
               <div style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{v}</div>

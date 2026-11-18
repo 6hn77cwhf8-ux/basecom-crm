@@ -9,7 +9,7 @@ export type AuditEntry = { id: string; action: string; userName: string; targetN
 export type Settings = {
   messages: { templates: { id: string; label: string; text: string; active: boolean }[] };
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
-  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number };
+  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number; resultAlertSeconds: number; shortCallSeconds: number };
 };
 export type CompanyRow = {
   id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null; district: string | null; sector: string | null;
@@ -23,19 +23,19 @@ export type FilterOptions = { municipalities: string[]; districts: string[]; sec
 export type CampaignFilters = Partial<{ accountType: "client" | "prospect"; districts: string[]; municipalities: string[]; sectors: string[]; operators: string[]; sizes: string[]; products: string[]; technologies: string[]; portalStatus: string[]; loyaltyEndFrom: string; loyaltyEndTo: string; onlyWithoutOwner: boolean; nboCampaigns: string[]; l2bRanges: [number, number | null][]; l2bMin: number; l2bMax: number; loyaltyMonths: ("le9" | "le21" | "gt21")[]; takeFromOtherCampaigns: boolean }>;
 export type CampaignPreview = { matching: number; total: number; clients: number; in_wallet: number; blocked: number; cooldown: number; no_phone: number; other_wallet: number; other_campaign: number };
 export type Campaign = { id: string; name: string; mode: "new" | "current"; status: "active" | "paused" | "ended"; script: string; scriptPitchNew: string | null; scriptPitchCurrent: string | null; dialMode: "power" | "preview"; filters: CampaignFilters; createdAt: string; members: { id: string; name: string }[]; total: number; pending: number; ready: number; done: number; exhausted: number };
-export type Contact = { id: string; kind: "phone" | "email" | "person"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string };
+export type Contact = { id: string; kind: "phone" | "email" | "person"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string ; statusNote?: string | null };
 export type Note = { id: string; kind: string; text: string; at: string; user: string | null; batchId: string | null };
 export type CompanyDetail = {
   company: CompanyRow & { size: string | null; employeesBand: string | null; l2bMonthly: string | null; address: string | null; postalCode: string | null; economicGroup: string | null; lastSourceYear: number | null; sources: string | null; createdAt: string; updatedAt: string;
     annualRevenue: string | null; locationsPotential: string | null; rgu: Record<string, number> | null; product: string | null; technology: string | null;
-    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null; addressEditedAt: string | null; contactsLockedAt: string | null };
+    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null; addressEditedAt: string | null; contactsLockedAt: string | null; dissatisfiedUntil?: string | null; l2bEditedAt?: string | null };
   contacts: Contact[]; notes: Note[];
   wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };
 export type Outcome = { id: string; label: string; group: "refuse" | "callback" | "noanswer" | "proposal" | "sale" | "other"; effect: string; active: boolean };
-export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "other"; days?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; active: boolean };
+export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "dissatisfied" | "other"; days?: number; months?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; active: boolean };
 /** «Guardar e fechar» do Em cliente (17 nov): tipos e valor; na proposta, canal, próxima ação e data. */
-export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; nextAction?: string; at?: string; comment?: string };
+export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; followUp?: "call" | "sms" | "email" | "whatsapp"; at?: string; comment?: string };
 export type ReceivedCall = { id: string; number: string; ringingAt: string; answered: boolean | null; durationSeconds: number | null; endedAt: string | null; returned: boolean; missed: boolean; companies: { id: string; name: string; nif: string }[] };
 export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[]; opportunities?: { channels?: string[] } }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
 export type DialerEntry = {
@@ -47,11 +47,13 @@ export type DialerEntry = {
   script: string; decisors: string[];
   scripts: { opening: string; pitch: string }; vars: Record<string, string>; people: { salutation: string | null; name: string }[];
   history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
+  /** 18 nov: ainda não houve nenhum não atende nesta empresa (SMS «Tentámos ligar»). */
+  firstNoAnswer?: boolean;
 };
-export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC"; newDecisor?: { salutation?: string | null; name: string }; opCode?: string; saleTypes?: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>> };
+export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC" | "NN"; followUp?: "call" | "sms" | "email" | "whatsapp"; newDecisor?: { salutation?: string | null; name: string }; opCode?: string; saleTypes?: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>> };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
-export type MyDay = { incoming: IncomingStats; ponto: Ponto; oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; points: { cycle: string; confirmed: number; forecast: number; next: { points: number; bonus: number } | null }; clientSeconds: number; officeSeconds: number; officeLimit: number; supportSeconds: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
+export type MyDay = { refusals: number; incoming: IncomingStats; ponto: Ponto; oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; points: { cycle: string; confirmed: number; forecast: number; next: { points: number; bonus: number } | null }; clientSeconds: number; officeSeconds: number; officeLimit: number; supportSeconds: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
 export type Opportunity = { id: string; stage: string; stageLabel: string; services: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; nosOp: string | null; proposedValue: string | null; saleTypes: Record<string, number> | null; ownerPhoto: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null; alert: { days: number; level: "ok" | "warn" | "late" } | null };
 export type WalletRow = { id: string; name: string; nif: string; walletKind: string; l2bMonthly: string | null; loyaltyEnd: string | null; owner: string; lines: number; decisor: string | null; phone: string | null; lastContact: string | null; openTasks: number; nextAction: { type: string; dueAt: string } | null };
 export type PhoneDevice = { id: string; model: string | null; pairedAt: string; lastSeenAt: string | null; online: boolean };
@@ -79,6 +81,9 @@ export type ImportRow = { id: string; sheet: string; rowNumber: number; nif: str
 export type Batch = { id: string; number: number; kind: string; fileName: string; status: string; summary: { preview?: PreviewSummary; committed?: { created: number; updated: number } }; createdAt: string; committedAt: string | null; revertedAt: string | null; createdBy: string | null };
 
 /** Avisa os ecrãs abertos (faixa «Em cliente», barra de estados) de que o estado mudou. */
+/** Chamada recebida em curso (a tocar ou atendida): o Ligar não marca a seguinte e pergunta se a sua chamada continua (18 nov). */
+export const INCOMING_EVENT = "bc-incoming";
+export const INCOMING_DISMISS = "bc-incoming-dismiss";
 export const WORK_EVENT = "bc-work-changed";
 function workChanged<T>(x: T): T { try { window.dispatchEvent(new Event(WORK_EVENT)); } catch { /* fora do navegador */ } return x; }
 
@@ -173,7 +178,7 @@ export const api = {
   dialerNext: (campaignId: string) => call<{ next: DialerEntry | null }>("/dialer/next", { method: "POST", body: JSON.stringify({ campaignId }) }).then((r) => r.next),
   dialerSkip: (entryId: string, reason: string) => call(`/dialer/entries/${entryId}/skip`, { method: "POST", body: JSON.stringify({ reason }) }),
   dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
-  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean; phone?: string }) => call<{ id: string; startedAt: string; viaPhone: boolean }>("/calls", { method: "POST", body: JSON.stringify(b) }),
+  startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean; phone?: string }) => call<{ id: string; startedAt: string; viaPhone: boolean; priorResultSeconds?: number }>("/calls", { method: "POST", body: JSON.stringify(b) }),
   endCall: (id: string) => call<{ endedAt: string }>(`/calls/${id}/end`, { method: "POST", body: "{}" }),
   saveResult: (id: string, b: ResultInput) => call<{ outcome: string; resultSeconds: number; summary: string[]; clientWork: boolean }>(`/calls/${id}/result`, { method: "POST", body: JSON.stringify(b) }).then(workChanged),
   agenda: (userId?: string) => call<{ tasks: AgendaTask[] }>(`/agenda${qs({ userId })}`).then((r) => r.tasks),
@@ -212,10 +217,14 @@ export const api = {
   phoneMute: (on: boolean) => call<{ ok: boolean; on: boolean }>("/phone/mute", { method: "POST", body: JSON.stringify({ on }) }),
   receivedCalls: () => call<{ calls: ReceivedCall[] }>("/phone/received").then((r) => r.calls),
   badges: () => call<{ agenda: number; novos: number; oportunidades: number }>("/me/badges"),
+  discardCall: (id: string) => call<{ ok: boolean }>(`/calls/${id}/discard`, { method: "POST", body: "{}" }),
+  formerClient: (id: string, reason: string) => call<{ left: string[]; joined: string[] }>(`/companies/${id}/former-client`, { method: "POST", body: JSON.stringify({ reason }) }),
+  editL2B: (id: string, b: { l2bMonthly?: number | null; loyaltyMonths?: number | null }) => call<{ left: string[]; joined: string[] }>(`/companies/${id}/l2b`, { method: "PATCH", body: JSON.stringify(b) }),
+  liftDissatisfied: (id: string) => call<{ left: string[]; joined: string[] }>(`/companies/${id}/dissatisfied`, { method: "DELETE" }),
   missedCount: () => call<{ n: number }>("/phone/missed-count").then((r) => r.n),
   endClient: (d: CloseClient) => call<DaySummary>("/time/client/end", { method: "POST", body: JSON.stringify(d) }).then(workChanged),
   today: (userId?: string) => call<DaySummary>(`/time/today${userId ? `?userId=${userId}` : ""}`),
-  teamTime: () => call<{ people: (DaySummary & { id: string; name: string; role: Role; incoming: IncomingStats })[] }>("/time/team").then((r) => r.people),
+  teamTime: () => call<{ people: (DaySummary & { id: string; name: string; role: Role; incoming: IncomingStats; calls: { calls: number; refusals: number; short: number } })[] }>("/time/team").then((r) => r.people),
   /** Descarrega o Excel do ponto (o pedido leva a sessão; o ficheiro é guardado pelo navegador). */
   exportPonto: async (from: string, to: string) => {
     const res = await fetch(`${API_URL}/time/export?from=${from}&to=${to}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });

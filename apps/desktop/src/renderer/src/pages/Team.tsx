@@ -144,7 +144,7 @@ function Ponto({ canExport }: { canExport: boolean }) {
       <ErrorText>{error}</ErrorText>
       <div style={{ overflow: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ background: c.sunken, color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Em cliente", "Office", "Apoio", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <thead><tr style={{ background: c.sunken, color: c.muted }}>{["Nome", "Agora", "Entrada", "Saída almoço", "Regresso", "Saída", "Presença", "Saldo", "Saída prevista", "Intervalo", "Formação", "Em cliente", "Office", "Apoio", "Chamadas", "Recusas", "Curtas", "Recebidas · por retribuir", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
         <tbody>{rows?.map((r) => {
           const p = r.ponto;
           return (
@@ -160,6 +160,9 @@ function Ponto({ canExport }: { canExport: boolean }) {
               <td style={{ ...td, fontWeight: r.seconds.client ? 700 : 400 }}>{mmss(r.seconds.client ?? 0)}</td>
               <td style={td}>{mmss(r.seconds.office ?? 0)}</td>
               <td style={td}>{mmss(r.seconds.support ?? 0)}</td>
+              <td style={td}>{r.calls?.calls ?? 0}</td>
+              <td style={td}>{r.calls?.refusals ?? 0}</td>
+              <td style={td} title="Chamadas com menos de 5 s ou repetidas antes de guardar: não contam">{r.calls?.short ?? 0}</td>
               <td style={td}>{r.incoming.received} · <span style={red(r.incoming.toReturn > 0)}>{r.incoming.toReturn}</span>{r.incoming.returned ? ` (${r.incoming.returned} retribuídas)` : ""}</td>
               <td style={{ ...td, textAlign: "right" }}>{r.state === "training"
                 ? <button style={{ ...btn, height: 28, fontSize: 12 }} onClick={() => api.setWorkState("working", r.id).then(load).catch((e) => setError(e.message))}>Terminar formação</button>

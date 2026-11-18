@@ -161,7 +161,7 @@ export async function deviceEvent(db: Db, device: { id: string; userId: string }
   if (!ic || ic.userId !== device.userId) throw new AuthError(404, "Chamada recebida não encontrada.");
   await db.update(incomingCalls).set({ endedAt: new Date(ev.endedAt), durationSeconds: ev.durationSeconds, answered: ev.durationSeconds > 0 || !!ic.answeredAt }).where(eq(incomingCalls.id, ic.id));
   // Resultado aberto no CRM para esta chamada recebida: o fim conta para os 15 s.
-  await db.execute(sql`update calls set ended_at = ${new Date(ev.endedAt).toISOString()}::timestamptz, duration_seconds = ${ev.durationSeconds}, answered = true, via = 'app'
+  await db.execute(sql`update calls set ended_at = ${new Date(ev.endedAt).toISOString()}::timestamptz, duration_seconds = ${ev.durationSeconds}, answered = ${ev.durationSeconds > 0 || !!ic.answeredAt}, via = 'app'
     where user_id = ${device.userId}::uuid and source = 'recebida' and ended_at is null and phone = ${ic.number} and started_at > ${ic.ringingAt.toISOString()}::timestamptz`);
   return { ok: true };
 }

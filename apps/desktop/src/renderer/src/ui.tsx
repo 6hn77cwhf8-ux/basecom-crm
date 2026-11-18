@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 /** Cores do Design System BASECOM. */
 /** Cores do Design System BASECOM, em variáveis do tema (claro ou escuro, escolhido por cada pessoa). */
@@ -126,3 +126,37 @@ export const tone = {
 /** Fundo suave de um tom (funciona no claro e no escuro). */
 export const tint = (hex: string, a = 0.12) => `${hex}${Math.round(a * 255).toString(16).padStart(2, "0")}`;
 export const Dot = ({ color, size = 7 }: { color: string; size?: number }) => <span aria-hidden="true" style={{ width: size, height: size, borderRadius: 999, background: color, flex: `0 0 ${size}px`, display: "inline-block" }} />;
+
+/**
+ * Menu pequeno ao carregar num número ou email (18 nov): não abre logo a chamada.
+ * Número: Ligar · Copiar · Cancelar. Email: Abrir email · Copiar · Cancelar.
+ */
+export function ContactAction({ kind, value, label, onCall, style }: { kind: "phone" | "email"; value: string; label: string; onCall?: () => void; style?: CSSProperties }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const out = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node) && !ref.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    window.addEventListener("mousedown", out); window.addEventListener("keydown", esc, true);
+    return () => { window.removeEventListener("mousedown", out); window.removeEventListener("keydown", esc, true); };
+  }, [open]);
+  const item = { border: 0, background: "transparent", textAlign: "left" as const, padding: "8px 12px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, color: c.ink, fontWeight: 600 };
+  return (
+    <>
+      <button ref={ref} type="button" title={kind === "phone" ? "Ligar ou copiar" : "Abrir email ou copiar"} onClick={() => { const r = ref.current?.getBoundingClientRect(); if (r) setPos({ top: r.bottom + 4, left: Math.min(r.left, window.innerWidth - 200) }); setOpen((o) => !o); setCopied(false); }}
+        style={{ border: 0, background: "none", padding: 0, cursor: "pointer", font: "inherit", color: c.ink, textDecoration: "underline", textUnderlineOffset: 3, ...style }}>{label}</button>
+      {open && (
+        <div ref={box} role="menu" style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 90, minWidth: 180, background: c.card, border: `1px solid ${c.line}`, borderRadius: 12, boxShadow: "0 8px 28px rgba(0,0,0,.16)", padding: 6, display: "flex", flexDirection: "column" }}>
+          {kind === "phone" ? onCall && <button role="menuitem" style={item} onClick={() => { setOpen(false); onCall(); }}>Ligar (abrir script)</button>
+            : <button role="menuitem" style={item} onClick={() => { setOpen(false); window.open(`mailto:${value}`); }}>Abrir email</button>}
+          <button role="menuitem" style={item} onClick={() => { navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setOpen(false), 700); }).catch(() => undefined); }}>{copied ? "Copiado ✓" : "Copiar"}</button>
+          <button role="menuitem" style={{ ...item, color: c.muted, fontWeight: 500 }} onClick={() => setOpen(false)}>Cancelar</button>
+        </div>
+      )}
+    </>
+  );
+}

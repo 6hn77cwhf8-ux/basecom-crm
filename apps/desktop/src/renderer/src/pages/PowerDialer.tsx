@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPhone, renderScript, spokenName } from "@basecom/shared";
-import { api, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input, dialOnComputer } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
 import { PhoneDialog, useCallEnd, usePhone } from "./Phone";
 import { ClientWorkCard } from "./ClientWork";
 import { FloatingCall, MuteButton } from "./FloatingCall";
+import { createPortal } from "react-dom";
 
 /** «review»: chamada terminada, a rever o script antes de voltar ao resultado (o tempo e o que já escreveu mantêm-se). */
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "review" | "countdown" | "empty";
@@ -64,6 +65,18 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   const pendingRef = useRef<ResultInput | null>(null);
   const [phoneDialog, setPhoneDialog] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [prior, setPrior] = useState(0);
+  // Chamadas em simultâneo (18 nov): o CRM segue o telemóvel; com uma recebida a tocar ou aberta, não marca a seguinte.
+  const [incoming, setIncoming] = useState<{ active: boolean; open: boolean; id: string | null; who: string | null }>({ active: false, open: false, id: null, who: null });
+  const [askedFor, setAskedFor] = useState<string | null>(null);
+  const reloadAfter = useRef(false);
+  useEffect(() => {
+    const h = (e: Event) => setIncoming((e as CustomEvent).detail);
+    window.addEventListener(INCOMING_EVENT, h);
+    return () => window.removeEventListener(INCOMING_EVENT, h);
+  }, []);
+  // Acabou a recebida e a marcação tinha sido cancelada: a empresa volta (início da fila), sem marcar sozinho.
+  useEffect(() => { if (!incoming.active && reloadAfter.current) { reloadAfter.current = false; load(false); } }, [incoming.active]);
   const toggleMute = () => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message));
   useEffect(() => { setMuted(false); }, [callId]);
 
@@ -97,6 +110,8 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
     const preview = n.campaign.dialMode === "preview";
     const r = await api.startCall({ companyId: n.company.id, contactId: n.phone.id, entryId: n.entry.id, source: preview ? "current" : "new", consultedNos: preview ? consultedRef.current : undefined });
     if (!r.viaPhone) dialOnComputer(n.phone.value);
+    // Religar a mesma empresa antes de guardar: o tempo de registo continua de onde estava (18 nov).
+    setPrior(r.priorResultSeconds ?? 0);
     setCallId(r.id); setStartedAt(Date.now()); setViaPhone(r.viaPhone); setLive(false); setQueued(false); pendingRef.current = null; setPhase("calling");
   }
   /** Tecla ou botão de resultado durante a chamada. Pelo telemóvel não desliga: o comercial preenche enquanto fala. */
@@ -148,7 +163,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   const wait = cat?.timeLimits.nextCallSeconds ?? 10;
   const left = phase === "countdown" ? Math.max(0, wait - Math.floor((Date.now() - endedAt) / 1000)) : 0;
   // Fora do Ligar (noutra página) não marca a seguinte: espera que o comercial volte.
-  useEffect(() => { if (active && phase === "countdown" && left === 0 && working && !client && campaignId) load(true); }, [active, phase, left, load, working, client, campaignId]);
+  useEffect(() => { if (active && !incoming.active && phase === "countdown" && left === 0 && working && !client && campaignId) load(true); }, [active, incoming.active, phase, left, load, working, client, campaignId]);
   /** Terminou o trabalho em cliente: volta a A trabalhar e a seguinte é marcada depois dos 10 s habituais. */
   function clientEnded() {
     setClient(null); setWorking(true); setWsKey((k) => k + 1);
@@ -188,6 +203,8 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   const copyBtn = (key: string, t: string) => (
     <button style={{ ...small, transition: "background .2s, color .2s", ...(copied === key ? { background: c.ok, color: c.onInk, borderColor: c.ok } : {}) }} onClick={() => copy(key, t)}>{copied === key ? "Copiado ✓" : "Copiar"}</button>
   );
+  // SMS «Tentámos ligar»: para o número marcado se for telemóvel; se for fixo, para o primeiro telemóvel da empresa.
+  const smsTo = cur ? [cur.phone, ...cur.otherPhones].map((p) => p?.value).find((v) => !!v && /^9\d{8}$/.test(v)) : undefined;
   const callSecs = phase === "calling" ? Math.floor((Date.now() - startedAt) / 1000) : 0;
 
   return (
@@ -206,13 +223,28 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
         <WorkStates key={wsKey} role={me.role} disabled={phase === "calling" || phase === "result" || phase === "review"} onChange={(d) => { setWorking(d.state === null || d.state === "working" || d.state === "switch"); setClient(d.client); }} />
       </header>
       <ErrorText>{error}</ErrorText>
+      {/* Dúvida (recebida aberta a meio de uma chamada feita): pergunta com quem está a falar. */}
+      {incoming.open && incoming.id && askedFor !== incoming.id && phase === "calling" && cur && createPortal(
+        <div role="alertdialog" aria-label="Com quem está a falar?" style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(11,11,11,0.35)", display: "grid", placeItems: "center" }}>
+          <div style={{ ...card, width: 520, maxWidth: "92vw", padding: 22, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 18px 44px rgba(0,0,0,.25)" }}>
+            <b style={{ fontSize: 18 }}>Entrou uma chamada{incoming.who ? ` de ${incoming.who}` : ""}. Com quem está a falar?</b>
+            <span style={{ fontSize: 13, color: c.muted }}>O feedback fica no cliente com quem está a falar.</span>
+            <button style={{ ...btnDark, height: 46 }} onClick={() => {
+              setAskedFor(incoming.id); reloadAfter.current = true;
+              if (callId) api.discardCall(callId).catch(() => undefined);
+              setCallId(null); setPhase("idle"); setLive(false);
+            }}>Com quem ligou{incoming.who ? ` (${incoming.who})` : ""} — cancelar a minha chamada</button>
+            <button style={{ ...btn, height: 46 }} onClick={() => { setAskedFor(incoming.id); window.dispatchEvent(new CustomEvent(INCOMING_DISMISS, { detail: incoming.id })); }}>Com {cur.company.name} — continuar a minha chamada</button>
+            <span style={{ fontSize: 12, color: c.muted }}>Se cancelar, {cur.company.name} volta ao início da fila (não conta como tentativa).</span>
+          </div>
+        </div>, document.body)}
       {!active && cur && (phase === "calling" || (phase === "result" && live)) && (
         <FloatingCall company={cur.company.name} phone={cur.phone ? formatPhone(cur.phone.value) : undefined} secs={Math.floor((Date.now() - startedAt) / 1000)}
           muted={muted} canMute={viaPhone} onMute={toggleMute} onBack={() => onShow?.()} onHangUp={() => (live ? hangUpLive() : hangUp())} />
       )}
       {!active && cur && (phase === "review" || (phase === "result" && !live)) && (
         <FloatingCall company={cur.company.name} secs={0} muted={false} canMute={false} onMute={() => undefined} onHangUp={() => undefined}
-          onBack={() => { if (phase === "review") setPhase("result"); onShow?.(); }} pending={{ left: (cat?.timeLimits.resultSeconds ?? 15) - Math.floor((Date.now() - endedAt) / 1000) }} />
+          onBack={() => { if (phase === "review") setPhase("result"); onShow?.(); }} pending={{ left: (cat?.timeLimits.resultSeconds ?? 15) - prior - Math.floor((Date.now() - endedAt) / 1000) }} />
       )}
 
       {!client && !campaignId && <Empty text={isAdmin ? (list.length ? "Escolha a campanha para começar." : "Ainda não há campanhas ativas.") : (list.length ? "Escolha a campanha para começar." : "Ainda não tem campanhas. O Administrador atribui em Configurações → Campanhas e scripts.")} />}
@@ -360,7 +392,10 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       )}
 
       {!client && cur && cat && (phase === "result" || phase === "review") && (
-        <ResultPanel key={resultKey} hidden={phase === "review" || !active} needsKind={cur.company.needsKind} walletKind={cur.company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt}
+        <ResultPanel key={resultKey} hidden={phase === "review" || !active} needsKind={cur.company.needsKind} walletKind={cur.company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt - prior * 1000}
+          onOpenCompany={() => onOpenCompany(cur.company.id)}
+          triedSms={cur.firstNoAnswer && smsTo ? { to: smsTo, vars: { decisor: cur.decisors[0] || undefined, empresa: cur.company.name, comercial: me.name } } : undefined}
+          onSms={(text) => { if (smsTo) api.logMessage(cur.company.id, { channel: "sms", templateId: "tried_call", to: smsTo, text }).catch((e) => setError(`SMS não enviada: ${(e as Error).message}`)); }}
           live={live ? { secs: Math.floor((Date.now() - startedAt) / 1000), queued, onHangUp: () => { hangUpLive(); } } : undefined}
           company={{ name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
           onBack={() => setPhase("review")} onSave={save} />

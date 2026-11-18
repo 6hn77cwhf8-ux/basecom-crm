@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatPhone } from "@basecom/shared";
-import { api, type Incoming, type PhoneDevice, type SearchHit } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, type Incoming, type PhoneDevice, type SearchHit } from "../api";
 import { QuickCall } from "./QuickCall";
 import { btn, btnDark, c, ErrorText } from "../ui";
 import { Modal } from "./Wallet";
@@ -81,6 +81,17 @@ export function IncomingBanner({ onOpenCompany }: { onOpenCompany: (id: string) 
     return () => clearInterval(t);
   }, []);
   useEffect(() => { if (inc?.answeredAt && inc.id !== dismissed && answered?.id !== inc.id) setAnswered(inc); }, [inc?.id, inc?.answeredAt]);
+  // Avisa o Ligar (18 nov): há uma chamada recebida a tocar ou aberta — não marca a seguinte e, se estiver a meio de uma, pergunta.
+  const active = !!answered || (!!inc && inc.id !== dismissed && !inc.endedAt);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(INCOMING_EVENT, { detail: { active, open: !!answered, id: answered?.id ?? inc?.id ?? null, who: answered?.company ?? inc?.company ?? inc?.number ?? null } }));
+  }, [active, !!answered, answered?.id, inc?.id]);
+  // O Ligar decidiu continuar a sua chamada: fecha a janela da recebida.
+  useEffect(() => {
+    const h = (e: Event) => { const id = (e as CustomEvent<string>).detail; setDismissed(id); setAnswered((a) => (a?.id === id ? null : a)); };
+    window.addEventListener(INCOMING_DISMISS, h);
+    return () => window.removeEventListener(INCOMING_DISMISS, h);
+  }, []);
   if (answered) return <IncomingCall inc={answered} onDone={() => { setDismissed(answered.id); setAnswered(null); }} />;
   if (!inc || inc.id === dismissed) return null;
   return (
@@ -90,7 +101,8 @@ export function IncomingBanner({ onOpenCompany }: { onOpenCompany: (id: string) 
       <span style={{ fontSize: 14, fontVariantNumeric: "tabular-nums" }}>{/^\d{9}$/.test(inc.number) ? formatPhone(inc.number) : inc.number}{inc.owner ? ` · carteira de ${inc.owner}` : ""}{inc.companyId ? ` · ${inc.openTasks} tarefa(s) aberta(s)` : ""}</span>
       <span style={{ fontSize: 12, color: c.muted }}>Ao atender no telemóvel, abre a janela da chamada.</span>
       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-        {inc.companyId && <button style={{ ...btnDark, height: 32, fontSize: 13 }} onClick={() => { onOpenCompany(inc.companyId!); }}>Abrir ficha</button>}
+        <button style={{ ...btnDark, height: 32, fontSize: 13 }} onClick={() => setAnswered(inc)}>Abrir script</button>
+        {inc.companyId && <button style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => { onOpenCompany(inc.companyId!); }}>Abrir ficha</button>}
         <button style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => setDismissed(inc.id)}>Fechar</button>
       </div>
     </div>

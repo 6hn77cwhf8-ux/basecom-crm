@@ -19,6 +19,8 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved, recei
   received?: boolean;
 }) {
   const [muted, setMuted] = useState(false);
+  // «Fechar sem registar» (18 nov): só enquanto a chamada não foi atendida.
+  const [answered, setAnswered] = useState<boolean | null>(null);
   const [cat, setCat] = useState<Catalogs | null>(null);
   const [call, setCall] = useState<{ id: string; startedAt: number; viaPhone: boolean } | null>(null);
   const [endedAt, setEndedAt] = useState<number | null>(null);
@@ -53,7 +55,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved, recei
   }, [endedAt]);
 
   useCallEnd(call?.id ?? null, !!call && endedAt === null, (end, answered) => {
-    setEndedAt(end);
+    setEndedAt(end); setAnswered(answered);
     if (!resultOpen) { setGroup(answered === false ? "noanswer" : "refuse"); setResultOpen(true); }
   });
   async function hangUp() {
@@ -84,6 +86,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved, recei
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {!call && error && <button style={btn} onClick={onClose}>Fechar</button>}
+                {call && !received && answered !== true && <button style={btn} title="Marcada por engano ou não atendeu: fecha sem registar resultado (não conta no dia)" onClick={() => api.discardCall(call.id).then(onClose).catch((e) => setError((e as Error).message))}>Fechar sem registar</button>}
                 {call && call.viaPhone && live && <MuteButton muted={muted} onClick={() => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message))} />}
                 {call && <button style={{ ...btnDark, height: 48, padding: "0 24px", background: "#D70015", borderColor: "#D70015" }} onClick={hangUp}>Desligar · {mmss(secs)}</button>}
               </div>

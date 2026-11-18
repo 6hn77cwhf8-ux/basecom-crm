@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { formatPhone } from "@basecom/shared";
 import { api, type CompanyDetail, type Contact, type User } from "../api";
-import { btn, btnDark, c, card, Chip, CopyButton, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
+import { btn, btnDark, c, card, Chip, ContactAction, CopyButton, ErrorText, fmtDate, fmtDateTime, fmtEur, input } from "../ui";
 import { StatusChips } from "./Companies";
 import { QuickCall } from "./QuickCall";
 import { DeleteDialog, KIND_LABEL, Modal, ReasonDialog, StatusChip, TransferDialog } from "./Wallet";
@@ -50,7 +50,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
   // Ligar pela app BASECOM do telemóvel (botão «Ligar» e números da ficha).
   const [oppsKey, setOppsKey] = useState(0);
   const [calling, setCalling] = useState<{ id: string; value: string } | null>(null);
-  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | "message" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "kind" | "dnc" | "undnc" | "opp" | "delete" | "address" | "message" | "former" | "l2b" | null>(null);
   const load = () => api.company(id).then(setD).catch((e) => setError(e.message));
   useEffect(() => { setD(null); setTab("resumo"); load(); }, [id]);
   const after = () => { setDialog(null); load(); };
@@ -102,6 +102,8 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {me.role === "admin" && <button style={small} onClick={() => setDialog("transfer")}>Transferir carteira</button>}
               {co.ownerId && (me.role === "admin" || co.ownerId === me.id) && <button style={small} onClick={() => setDialog("kind")}>Mudar para {co.walletKind === "NC" ? "FC" : "NC"}</button>}
+              {/* 18 nov: a base pode estar desatualizada — qualquer perfil passa um cliente a ex-cliente, com justificação. */}
+              {co.accountType === "client" && <button style={small} onClick={() => setDialog("former")}>Passar a ex-cliente</button>}
               {!co.doNotContact && <button style={small} onClick={() => setDialog("dnc")}>Marcar «Não contactar»</button>}
               {co.doNotContact && me.role === "admin" && <button style={small} onClick={() => setDialog("undnc")}>Retirar «Não contactar»</button>}
               {me.role === "admin" && <button style={{ ...small, color: c.danger }} onClick={() => setDialog("delete")}>Apagar empresa</button>}
@@ -116,6 +118,10 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             {dialog === "kind" && <ReasonDialog title={`Mudar a carteira para ${co.walletKind === "NC" ? "FC" : "NC"}`} confirm="Confirmar"
               text={co.walletKind === "NC" ? "Em FC, a empresa conta 50 % em tudo (pontos, valor concluído). Só por alteração manual." : "Volta a contar 100 %."}
               onClose={() => setDialog(null)} onConfirm={async (r) => { await api.setWalletKind(co.id, co.walletKind === "NC" ? "FC" : "NC", r); after(); }} />}
+            {dialog === "former" && <ReasonDialog title="Passar a ex-cliente" confirm="Passar a ex-cliente"
+              text="Deixa de ser cliente NOS: perde a carteira (NC/FC), sai das campanhas de clientes atuais e entra nas de ex-clientes. As importações não voltam atrás. Indique o motivo."
+              onClose={() => setDialog(null)} onConfirm={async (r) => { await api.formerClient(co.id, r); after(); }} />}
+            {dialog === "l2b" && <L2BDialog co={co} onClose={() => setDialog(null)} onDone={after} />}
             {dialog === "dnc" && <ReasonDialog title="Marcar «Não contactar»" danger confirm="Marcar" text="Oposição ao contacto (RGPD). A empresa sai das campanhas e nenhuma importação a reativa. Só o Administrador pode retirar."
               onClose={() => setDialog(null)} onConfirm={async (r) => { await api.setDoNotContact(co.id, true, r); after(); }} />}
             {dialog === "undnc" && <ReasonDialog title="Retirar «Não contactar»" confirm="Retirar" text="Use só com prova de que a oposição foi retirada (fica em auditoria)."
@@ -124,11 +130,15 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
               <div role="note" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", borderRadius: 10, background: c.warnSoft, color: c.warn, fontSize: 14 }}>
                 <b>Cliente NOS sem NC/FC. Identifique:</b>
                 {(["NC", "FC"] as const).map((k) => <button key={k} style={{ ...small, minWidth: 56 }} onClick={() => api.identifyKind(co.id, k).then(load).catch((e) => setError(e.message))}>{k}</button>)}
+                <button style={{ ...small, minWidth: 56 }} title="Já não é cliente NOS: passa a ex-cliente" onClick={() => setDialog("former")}>NN</button>
                 <span style={{ fontSize: 12 }}>Fica registado; depois só muda por alteração manual com justificação.</span>
               </div>
             )}
             {co.needsReview && <Notice tone="warn">{co.needsReview}</Notice>}
             {co.doNotContact && <Notice tone="bad">Empresa marcada «Não contactar» (RGPD). Não entra em campanhas e nenhuma importação a reativa.</Notice>}
+            {co.dissatisfiedUntil && co.dissatisfiedUntil >= new Date().toISOString().slice(0, 10) && (
+              <Notice tone="bad">Insatisfeito NOS até {fmtDate(co.dissatisfiedUntil)}: fora de todas as campanhas até essa data.{me.role === "admin" && <> <button style={{ ...small, height: 26, marginLeft: 8 }} onClick={() => api.liftDissatisfied(co.id).then(load).catch((e) => setError(e.message))}>Retirar antes do prazo</button></>}</Notice>
+            )}
 
             <nav role="tablist" style={{ display: "flex", gap: 2, padding: 4, background: c.line, borderRadius: 12, alignSelf: "flex-start" }}>
               {TABS.map((t) => (
@@ -150,8 +160,8 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                 </Card>
                 <Card title="Contacto principal" action={canEditContacts ? <button style={{ ...small, height: 26 }} onClick={() => setDialog("address")}>Editar morada</button> : undefined}>
                   <Row k="Decisor" v={decisor?.personName ? `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.personName}` : "—"} />
-                  <Row k="Telefone" v={main ? <><button style={{ ...link, border: 0, background: "none", padding: 0, cursor: "pointer", font: "inherit" }} title="Ligar pelo telemóvel BASECOM" onClick={() => setCalling(main)}>{formatPhone(main.value)}</button> · {main.phoneType === "mobile" ? "Móvel" : "Fixo"}</> : "—"} />
-                  <Row k="Email" v={mainEmail ? <a href={`mailto:${mainEmail.value}`} style={link} title="Abrir no email (Outlook)">{mainEmail.value}</a> : "—"} />
+                  <Row k="Telefone" v={main ? <><ContactAction kind="phone" value={main.value} label={formatPhone(main.value)} onCall={() => setCalling(main)} /> · {main.phoneType === "mobile" ? "Móvel" : "Fixo"}</> : "—"} />
+                  <Row k="Email" v={mainEmail ? <ContactAction kind="email" value={mainEmail.value} label={mainEmail.value} /> : "—"} />
                   <Row k="Morada" v={co.address ?? "—"} />
                   <Row k="Código postal" v={[co.postalCode, co.locality].filter(Boolean).join(" ") || "—"} />
                   <Row k="Concelho · Distrito" v={[co.municipality, co.district].filter(Boolean).join(" · ") || "—"} />
@@ -159,7 +169,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                 </Card>
                 <Card title="Serviços NOS">
                   <Row k="Operadora atual" v={co.operator ?? "—"} />
-                  <Row k="Valor L2B" v={co.l2bMonthly ? `${fmtEur(co.l2bMonthly)}/mês` : "—"} />
+                  <Row k="Valor L2B" v={<span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>{co.l2bMonthly ? `${fmtEur(co.l2bMonthly)}/mês` : "—"}{co.l2bEditedAt && <Chip>corrigido no CRM</Chip>}<button title="Corrigir o L2B e os meses de permanência" onClick={() => setDialog("l2b")} style={{ border: 0, background: "none", cursor: "pointer", color: c.muted, fontSize: 13, padding: 0 }}>✎</button></span>} />
                   <Row k="Fim de fidelização" v={fmtDate(co.loyaltyEnd)} />
                   <Row k="Meses de permanência" v={co.loyaltyMonths != null ? String(co.loyaltyMonths) : "—"} />
                   <Row k="Produto · Tecnologia" v={[co.product, co.technology].filter(Boolean).join(" · ") || "—"} />
@@ -250,12 +260,12 @@ function Contacts({ d, canEdit, onChange, onCall }: { d: CompanyDetail; canEdit:
         </span>
       )}
       <span style={{ textDecoration: x.status === "incorrect" ? "line-through" : "none" }}>
-        {x.kind === "phone" ? <>{x.status === "incorrect" ? formatPhone(x.value) : <button style={{ ...link, border: 0, background: "none", padding: 0, cursor: "pointer", font: "inherit" }} title="Ligar pelo telemóvel BASECOM" onClick={() => onCall(x)}>{formatPhone(x.value)}</button>} · {x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}</>
+        {x.kind === "phone" ? <>{x.status === "incorrect" ? formatPhone(x.value) : <ContactAction kind="phone" value={x.value} label={formatPhone(x.value)} onCall={() => onCall(x)} />} · {x.phoneType === "mobile" ? "Móvel" : x.phoneType === "landline" ? "Fixo" : "Outro"}</>
           : x.kind === "person" ? <span style={{ color: c.muted }}>Sem telefone nem email</span>
-          : x.status === "incorrect" ? x.value : <a href={`mailto:${x.value}`} style={link}>{x.value}</a>}
+          : x.status === "incorrect" ? x.value : <ContactAction kind="email" value={x.value} label={x.value} />}
         {x.isPrimary && x.status !== "incorrect" && " · principal"}
       </span>
-      {x.kind === "person" ? <Chip tone={x.isPrimary ? "brand" : "neutral"}>{x.isPrimary ? "Decisor principal" : "2.º decisor"}</Chip> : x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : <Chip tone="ok">Válido</Chip>}
+      {x.kind === "person" ? <Chip tone={x.isPrimary ? "brand" : "neutral"}>{x.isPrimary ? "Decisor principal" : "2.º decisor"}</Chip> : x.status === "incorrect" ? <Chip tone="bad">Incorreto</Chip> : x.status === "exhausted" ? <Chip tone="warn">{x.statusNote ?? "Em quarentena"}</Chip> : <Chip tone="ok">Válido</Chip>}
       {canEdit && x.kind !== "person" ? <button style={{ ...small, height: 26 }} onClick={() => api.setContactStatus(x.id, x.status === "incorrect" ? "valid" : "incorrect").then(onChange)}>{x.status === "incorrect" ? "Marcar válido" : "Marcar incorreto"}</button> : <span />}
     </div>
   );
@@ -401,6 +411,32 @@ function AddressDialog({ co, onClose, onDone }: { co: CompanyDetail["company"]; 
           <button style={btn} onClick={onClose}>Voltar</button>
           <button style={btnDark} onClick={() => api.editAddress(co.id, f).then(onDone).catch((e) => setErr(e.message))}>Guardar</button>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Corrigir o L2B (18 nov): mensalidade e meses de permanência; a empresa troca logo de campanha. */
+function L2BDialog({ co, onClose, onDone }: { co: CompanyDetail["company"]; onClose: () => void; onDone: () => void }) {
+  const [v, setV] = useState(co.l2bMonthly ? String(Number(co.l2bMonthly)).replace(".", ",") : "");
+  const [m, setM] = useState(co.loyaltyMonths != null ? String(co.loyaltyMonths) : "");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const num = (x: string) => (x.trim() === "" ? null : Number(x.replace(",", ".")));
+  const bad = (num(v) != null && Number.isNaN(num(v))) || (num(m) != null && (!Number.isInteger(num(m)) || num(m)! < 0));
+  return (
+    <Modal title="Corrigir o L2B" onClose={onClose} width={480}>
+      <span style={{ fontSize: 13, color: c.muted }}>Ex.: o cliente paga 200 € mas o L2B em Vpro é 130 €. Fica no histórico e a empresa troca logo para as campanhas certas. As importações não apagam a correção.</span>
+      <div style={{ display: "flex", gap: 12 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600 }}>Mensalidade L2B (€/mês)
+          <input aria-label="Mensalidade L2B" inputMode="decimal" style={{ ...input, width: 180 }} value={v} onChange={(e) => setV(e.target.value.replace(/[^0-9,.]/g, ""))} /></label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600 }}>Meses de permanência
+          <input aria-label="Meses de permanência" inputMode="numeric" style={{ ...input, width: 140 }} value={m} onChange={(e) => setM(e.target.value.replace(/\D/g, ""))} /></label>
+      </div>
+      <ErrorText>{err}</ErrorText>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button style={btn} onClick={onClose}>Cancelar</button>
+        <button style={btnDark} disabled={bad || busy} onClick={() => { setBusy(true); api.editL2B(co.id, { l2bMonthly: num(v), loyaltyMonths: num(m) }).then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>Guardar</button>
       </div>
     </Modal>
   );

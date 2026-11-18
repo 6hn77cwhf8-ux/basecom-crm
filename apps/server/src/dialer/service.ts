@@ -237,7 +237,8 @@ export async function discardCall(db: Db, user: PublicUser, callId: string) {
   if (c.answered) throw new AuthError(409, "A chamada foi atendida: registe o resultado.");
   if (!c.endedAt) await queueHangup(db, user.id, callId);
   await db.update(calls).set({ endedAt: c.endedAt ?? new Date(), savedAt: new Date(), effect: "discarded" }).where(eq(calls.id, callId));
-  if (c.entryId) await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null }).where(and(eq(campaignEntries.id, c.entryId), eq(campaignEntries.lockedBy, user.id)));
+  // Volta ao início da fila, sem contar tentativa (ex.: cancelada porque entrou uma chamada).
+  if (c.entryId) await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: new Date() }).where(and(eq(campaignEntries.id, c.entryId), eq(campaignEntries.status, "pending")));
 }
 
 export type ResultInput = {

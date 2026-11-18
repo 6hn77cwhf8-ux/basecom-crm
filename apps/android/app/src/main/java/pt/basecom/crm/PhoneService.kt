@@ -220,7 +220,8 @@ class PhoneService : Service() {
     private fun onState(state: String, number: String?) {
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
-                if (outCallId != null || number.isNullOrBlank() || inRinging) return
+                // 18 nov: também durante uma chamada feita pelo CRM (o CRM segue o telemóvel e pergunta se houver dúvida).
+                if (number.isNullOrBlank() || inRinging) return
                 inRinging = true; inNumber = number
                 events.execute {
                     try {
@@ -231,7 +232,8 @@ class PhoneService : Service() {
             }
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                 if (busySince == 0L) busySince = System.currentTimeMillis()
-                if (outCallId != null) outOffhook = true
+                // Atender uma recebida antes de a chamada do CRM ligar não conta como a chamada do CRM.
+                if (outCallId != null && !(inRinging && !inAnswered && !outOffhook)) outOffhook = true
                 // Chamada recebida atendida: o CRM abre a janela da chamada com a empresa.
                 if (inRinging && !inAnswered) {
                     inAnswered = true

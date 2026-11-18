@@ -1,6 +1,6 @@
-import { callbackLimit, operatorRefusalNote, quickCallbackAt, saleTypesError, type QuickCallback } from "@basecom/shared";
+import { callbackLimit, FOLLOW_UPS, type FollowUp, operatorRefusalNote, quickCallbackAt, renderMessage, saleTypesError, type QuickCallback } from "@basecom/shared";
 import { useEffect, useMemo, useState } from "react";
-import type { Catalogs, Outcome, Reason, ResultInput } from "../api";
+import { api, type Catalogs, type Outcome, type Reason, type ResultInput } from "../api";
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
 import { OpField, opValid, SaleTypesPicker, typesToNumbers, type TypesDraft } from "./ClientWork";
 import { DatePicker } from "./DatePicker";
@@ -23,7 +23,12 @@ const QUICK: [QuickCallback, string][] = [["1h", "1 hora"], ["1d", "1 dia"], ["1
  * Ecrã do resultado (maquetas «Resultado»): botões do grupo, opções, motivo, comentários e feedback de outra operadora.
  * Mostra o tempo que falta para registar (15 s por omissão); ultrapassar não bloqueia, mas fica registado.
  */
-export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, walletKind, live, backLabel, onGroup, onBack, onSave }: {
+export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden, needsKind, walletKind, live, backLabel, onGroup, onBack, onSave, onOpenCompany, triedSms, onSms }: {
+  /** Botão «Abrir ficha» ao lado do nome (18 nov). */
+  onOpenCompany?: () => void;
+  /** SMS «Tentámos ligar» no 1.º não atende (18 nov): telemóvel do cliente e campos do modelo. */
+  triedSms?: { to: string; vars: { decisor?: string; empresa?: string; comercial?: string } };
+  onSms?: (text: string) => void;
   /** NC/FC da empresa (FC conta 50 % na previsão de pontos). */
   walletKind?: "NC" | "FC";
   backLabel?: string;
@@ -38,11 +43,12 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [comment, setComment] = useState("");
   const [date, setDate] = useState("");
   const [at, setAt] = useState("");
-  const [nextAction, setNextAction] = useState("");
   const [services, setServices] = useState("");
   const [decisorName, setDecisorName] = useState("");
   const [comp, setComp] = useState<{ operator?: string; text?: string }>({});
-  const [kind, setKind] = useState<"NC" | "FC" | null>(null);
+  const [kind, setKind] = useState<"NC" | "FC" | "NN" | null>(null);
+  const [followUp, setFollowUp] = useState<FollowUp | null>(null);
+  const [smsText, setSmsText] = useState("");
   const [op, setOp] = useState("");
   // Tipos de venda e valor de cada um (€/mês): até 2 (FID + XSell ou FID + Upsell; NN sozinho).
   const [types, setTypes] = useState<TypesDraft>({});
@@ -66,7 +72,13 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const saleTypes = typesToNumbers(types);
   const typesErr = withTypes ? saleTypesError(saleTypes) : null;
   const ready = !typesErr && (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
-    && (eff !== "call_later" || !!at) && (!["interested", "negotiating"].includes(eff ?? "") || (!!at && nextAction.trim().length > 0));
+    && (eff !== "call_later" || !!at) && (!["interested", "negotiating"].includes(eff ?? "") || (!!at && !!followUp));
+  // SMS «Tentámos ligar»: só no «Não atendeu» do 1.º não atende, para telemóveis.
+  const showSms = !!triedSms && eff === "no_answer" && /^9\d{8}$/.test(triedSms.to.replace(/\D/g, ""));
+  useEffect(() => {
+    if (!showSms || smsText) return;
+    api.messageTemplates().then((t) => { const m = t.find((x) => x.id === "tried_call"); if (m) setSmsText(renderMessage(m.text, triedSms!.vars)); }).catch(() => undefined);
+  }, [showSms]);
 
   const nextContact = useMemo(() => {
     if (!reason) return null;
@@ -77,19 +89,20 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
     return "Defina a data da nova abordagem (opcional)";
   }, [reason, date]);
 
-  function save() {
+  function save(withSms = false) {
     if (!ready || !outcome) return;
+    if (withSms && smsText.trim()) onSms?.(smsText.trim());
     onSave({
       outcomeId: outcome.id, reasonId: reason?.id, comment: comment.trim() || undefined, date: date || undefined, at: toIso(at),
-      nextAction: nextAction.trim() || undefined, services: services.trim() || undefined,
-      decisorName: decisorName.trim() || undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
+      services: services.trim() || undefined,
+      decisorName: decisorName.trim() || undefined, followUp: followUp ?? undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
       opCode: workKind ? op : undefined,
       saleTypes: withTypes ? saleTypes : undefined,
     });
   }
   useEffect(() => {
     if (hidden) return;
-    const k = (e: KeyboardEvent) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName !== "TEXTAREA")) { e.preventDefault(); save(); } };
+    const k = (e: KeyboardEvent) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName !== "TEXTAREA")) { e.preventDefault(); save(showSms && !!smsText.trim()); } };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   });
@@ -100,7 +113,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: live ? c.ok : c.muted }}>{live ? "Em chamada" : "Chamada terminada"}</span>
-          <h2 style={{ margin: "2px 0", fontSize: 20 }}>{company.name}</h2>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <h2 style={{ margin: "2px 0", fontSize: 20 }}>{company.name}</h2>
+            {onOpenCompany && <button type="button" onClick={onOpenCompany} style={{ ...btn, height: 28, padding: "0 10px", fontSize: 12 }}>Abrir ficha ↗</button>}
+          </div>
           <span style={{ fontSize: 13, color: c.muted }}>NIF {company.nif}{company.phone ? ` · ${company.phone}` : ""}{company.decisor ? ` · ${company.decisor}` : ""}</span>
         </div>
         {live ? (
@@ -145,7 +161,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       {eff === "decisor_absent" && <Field label="Nome do decisor (se souber)"><input style={input} value={decisorName} onChange={(e) => setDecisorName(e.target.value)} /></Field>}
       {needsAt && (
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          {["interested", "negotiating"].includes(eff ?? "") && <Field label="Próxima ação"><input style={{ ...input, width: 300 }} value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="Ex.: enviar proposta 4P" /></Field>}
+          {/* Próxima ação (18 nov): só a lista de follow-ups, com a data ao lado. */}
+          {["interested", "negotiating"].includes(eff ?? "") && <Field label="Próxima ação">
+            <div role="radiogroup" aria-label="Próxima ação" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{FOLLOW_UPS.map((f) => <button key={f.id} type="button" role="radio" aria-checked={followUp === f.id} style={pill(followUp === f.id)} onClick={() => setFollowUp(f.id)}>{f.label}</button>)}</div>
+          </Field>}
           {/* Callback (17 nov): atalhos e calendário só até ao limite (1 mês, configurável). */}
           {eff === "call_later" && (
             <div role="group" aria-label="Atalhos" style={{ display: "flex", gap: 6, flexBasis: "100%" }}>
@@ -166,7 +185,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         </div>
       )}
       {eff === "negotiating" && <Field label="Serviços propostos"><input style={input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Ex.: 4 linhas móveis + internet fixa" /></Field>}
-      {withTypes && <SaleTypesPicker types={types} setTypes={setTypes} walletKind={kind ?? walletKind ?? "NC"} />}
+      {withTypes && <SaleTypesPicker types={types} setTypes={setTypes} walletKind={kind === "NN" ? "NC" : kind ?? walletKind ?? "NC"} />}
       {workKind && (
         <div style={{ border: `2px solid ${c.brand}`, background: c.brandSoft, borderRadius: 14, padding: "14px 16px", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
           <OpField value={op} onChange={setOp} />
@@ -175,6 +194,13 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       )}
       {eff === "sale" && <p style={{ margin: 0, fontSize: 13, padding: "8px 12px", background: c.okSoft, borderRadius: 10 }}>A empresa passa para a sua carteira (se ainda não tiver responsável).</p>}
 
+      {showSms && (
+        <div style={{ border: `1px solid ${c.line}`, borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 8, background: c.sunken }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><b style={{ fontSize: 14 }}>SMS «Tentámos ligar» · 1.º não atende desta empresa</b><span style={{ fontSize: 12, color: c.muted }}>Para {triedSms!.to} · pelo telemóvel BASECOM</span></div>
+          <textarea aria-label="Texto da SMS" style={{ ...input, height: 110, padding: 10, resize: "vertical", lineHeight: "20px" }} value={smsText} onChange={(e) => setSmsText(e.target.value)} />
+          <span style={{ fontSize: 12, color: c.muted }}>Pode alterar o texto. O modelo muda-se em Configurações → Mensagens rápidas.</span>
+        </div>
+      )}
       {!workKind && <Field label={reason?.effect === "other" ? "Comentários (obrigatório no motivo «Outro»)" : "Comentários"}>
         <textarea style={{ ...input, height: 64, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} />
       </Field>}
@@ -182,7 +208,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       {askKind && (
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 12px", background: c.warnSoft, borderRadius: 10 }}>
           <b style={{ fontSize: 13 }}>Cliente NOS sem NC/FC: identifique (obrigatório)</b>
-          {(["NC", "FC"] as const).map((k) => <button key={k} style={pill(kind === k)} onClick={() => setKind(k)}>{k}</button>)}
+          {(["NC", "FC", "NN"] as const).map((k) => <button key={k} style={pill(kind === k)} onClick={() => setKind(k)}>{k}</button>)}
+          {kind === "NN" && <span style={{ fontSize: 12, color: c.muted }}>Já não é cliente NOS: passa a ex-cliente (sai da base de clientes atuais).</span>}
         </div>
       )}
 
@@ -201,7 +228,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <button style={btn} onClick={onBack}>← {backLabel ?? "Voltar ao script"}</button>
         <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {live && <button style={{ ...btnDark, height: 44, background: "#D70015", borderColor: "#D70015" }} onClick={live.onHangUp}>Desligar</button>}
-          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={save}>{busy ? "A guardar…" : live ? "Desligar e guardar ⏎" : workKind ? `Começar ${workKind === "sale" ? "venda" : "proposta"} · fica em pausa ⏎` : "Guardar resultado ⏎"}</button>
+          {showSms && !live && <button style={{ ...btn, height: 44 }} disabled={!ready || busy} onClick={() => save(false)}>Guardar sem SMS</button>}
+          <button style={{ ...btnDark, height: 44, padding: "0 22px" }} disabled={!ready || busy} onClick={() => save(showSms && !!smsText.trim())}>{busy ? "A guardar…" : showSms && smsText.trim() ? `${live ? "Desligar · " : ""}Não atende + SMS ⏎` : live ? "Desligar e guardar ⏎" : workKind ? `Começar ${workKind === "sale" ? "venda" : "proposta"} · fica em pausa ⏎` : "Guardar resultado ⏎"}</button>
         </span>
       </footer>
     </section>

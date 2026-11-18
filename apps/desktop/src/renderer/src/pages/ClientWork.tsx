@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_PROPOSAL_CHANNELS, proposalPoints, saleTypesError, SALE_KINDS, type SaleKind } from "@basecom/shared";
+import { DEFAULT_PROPOSAL_CHANNELS, FOLLOW_UPS, type FollowUp, proposalPoints, saleTypesError, SALE_KINDS, type SaleKind } from "@basecom/shared";
 import { api, WORK_EVENT, type ClientWork, type DaySummary, type SearchHit, type User, type WorkKind } from "../api";
 import { btn, btnDark, c, card, CopyButton, ErrorText, Field, input } from "../ui";
 import { DatePicker } from "./DatePicker";
@@ -118,7 +118,10 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
           <div><dt style={eyebrow}>OP</dt><dd style={{ ...big, letterSpacing: ".08em", display: "flex", gap: 8, alignItems: "center" }}>{work.opCode ?? "—"}{work.opCode && <CopyButton text={work.opCode} />}</dd></div>
           <div><dt style={eyebrow}>Começou</dt><dd style={big}>{since}</dd></div>
         </dl>
-        <span style={{ fontSize: 16, fontWeight: 600 }}>{work.company}</span>
+        <span style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 16, fontWeight: 600 }}>{work.company}</span>
+          {work.companyId && <button style={{ ...btn, height: 28, padding: "0 10px", fontSize: 12 }} onClick={() => onOpenCompany(work.companyId!)}>Abrir ficha ↗</button>}
+        </span>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: "auto" }}>
           <button style={{ ...btnDark, height: 52, padding: "0 28px", fontSize: 15 }} disabled={busy} onClick={() => setClosing(true)}>Guardar e fechar</button>
@@ -205,7 +208,7 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   const [channels, setChannels] = useState<string[]>(DEFAULT_PROPOSAL_CHANNELS);
   const [types, setTypes] = useState<TypesDraft>({});
   const [channel, setChannel] = useState("");
-  const [nextAction, setNextAction] = useState("");
+  const [followUp, setFollowUp] = useState<FollowUp | null>(null);
   const [at, setAt] = useState("");
   const [comment, setComment] = useState("");
   const [err, setErr] = useState("");
@@ -213,13 +216,13 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   useEffect(() => { api.catalogs().then((x) => x.catalogs.opportunities?.channels?.length && setChannels(x.catalogs.opportunities.channels)).catch(() => undefined); }, []);
   const nums = typesToNumbers(types);
   const typesErr = saleTypesError(nums);
-  const ready = !typesErr && (!isProposal || (!!channel && !!at && nextAction.trim().length > 0));
+  const ready = !typesErr && (!isProposal || (!!channel && !!at && !!followUp));
   const mins = Math.max(1, Math.round((Date.now() - new Date(work.since).getTime()) / 60_000));
   const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
   function save() {
     if (!ready || busy) return;
     setBusy(true); setErr("");
-    api.endClient({ saleTypes: nums, channel: isProposal ? channel : undefined, nextAction: nextAction.trim() || undefined, at: at ? new Date(at).toISOString() : undefined, comment: comment.trim() || undefined })
+    api.endClient({ saleTypes: nums, channel: isProposal ? channel : undefined, followUp: followUp ?? undefined, at: at ? new Date(at).toISOString() : undefined, comment: comment.trim() || undefined })
       .then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false));
   }
   return (
@@ -233,7 +236,9 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
         </Field>
       )}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <Field label={`Próxima ação${isProposal ? " · obrigatório" : ""}`}><input style={{ ...input, width: 300 }} value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="Ex.: confirmar receção da proposta" /></Field>
+        <Field label={`Próxima ação${isProposal ? " · obrigatório" : ""}`}>
+          <div role="radiogroup" aria-label="Próxima ação" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{FOLLOW_UPS.map((f) => <button key={f.id} type="button" role="radio" aria-checked={followUp === f.id} style={pill(followUp === f.id)} onClick={() => setFollowUp(f.id)}>{f.label}</button>)}</div>
+        </Field>
         <Field label={`Data${isProposal ? " · obrigatório" : ""}`}><DatePicker withTime workdaysOnly value={at} onChange={setAt} width={240} ariaLabel="Data da próxima ação" min={toLocal(new Date()).slice(0, 10)} /></Field>
       </div>
       <Field label="Comentários"><textarea style={{ ...input, height: 60, padding: 10, resize: "vertical" }} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>

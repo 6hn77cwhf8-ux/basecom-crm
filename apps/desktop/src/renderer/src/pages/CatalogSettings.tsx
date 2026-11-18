@@ -12,12 +12,12 @@ type Cat = {
 const GROUP: Record<string, string> = { refuse: "Recusa", callback: "Callback", noanswer: "Não atende", proposal: "Proposta", sale: "Venda", other: "Outro" };
 const EFFECT: Record<Reason["effect"], string> = {
   cooldown: "Volta às campanhas após X dias", loyalty_end: "Outro operador: fidelizado (data do cliente)", new_contract: "Outro operador: renovou (data do cliente)",
-  followup_task: "Tarefa de seguimento após X dias", company_closed: "Empresa encerrada (sai de tudo)", other: "Outro (descrição obrigatória)",
+  followup_task: "Tarefa de seguimento após X dias", company_closed: "Empresa encerrada (sai de tudo)", dissatisfied: "Insatisfeito NOS (sai de tudo durante X meses)", other: "Outro (descrição obrigatória)",
 };
 const ATTEMPTS: [keyof Cat["attempts"], string, string][] = [
   ["noAnswerRetryMinutes", "Não atendeu: nova tentativa após", "min"], ["busyRetryMinutes", "Ocupado: nova tentativa após", "min"],
-  ["maxAttemptsPerDay", "Máximo de tentativas por dia", "vezes"], ["maxAttemptsTotal", "Máximo de tentativas na campanha", "vezes"],
-  ["maxVoicemailsPerNumber", "Voicemails até o número ficar esgotado", "vezes"],
+  ["maxAttemptsPerDay", "Máximo de tentativas por dia", "vezes"], ["maxAttemptsTotal", "Tentativas até ir para o fim da fila", "vezes"],
+  ["maxVoicemailsPerNumber", "Sem resposta (não atende ou voicemail) até o número ficar em quarentena", "vezes"],
 ];
 const OPPS: ["warnDays" | "lateDays" | "lostReopenDays", string, string][] = [
   ["warnDays", "Alerta preventivo ao fim de", "dias"], ["lateDays", "Atrasada ao fim de", "dias"], ["lostReopenDays", "Perdida: volta às campanhas após", "dias"],
@@ -77,7 +77,7 @@ export function CatalogSettings() {
                 : (r.effect === "loyalty_end" || r.effect === "new_contract") ? <span title="Contacto X meses antes do fim da fidelização; se o cliente não referir (NS/NR), daqui a Y meses" style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>{num(r.monthsBefore ?? 4, (n) => upd({ monthsBefore: n }))} meses antes</span>
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }}>{num(r.unknownMonths ?? 6, (n) => upd({ unknownMonths: n }))} meses se NS/NR</span>
-                </span> : null}</span>
+                </span> : r.effect === "dissatisfied" ? <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>{num(r.months ?? 12, (n) => upd({ months: n }))} meses</span> : null}</span>
               <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={r.active} onChange={(e) => upd({ active: e.target.checked })} /> Ativo</label>
             </div>
           );
