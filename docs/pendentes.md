@@ -91,6 +91,10 @@ O Leonardo vai juntando correções durante o dia; só se constrói quando ele d
 6. **Não atende / voicemail: passar ao número seguinte.** Quando um número esgota o ciclo de não atende ou voicemail, fica em quarentena com a nota «Não atende permanentemente» / «Voicemail permanente» (não «incorreto») e entra o número seguinte. Ligar a todos os números. Sem mais números: a empresa fica em quarentena.
 7. **Botão «Abrir ficha» sempre à mão** enquanto se trata um cliente: no resultado (feedback), na proposta, no Em cliente. Num canto, sem atrapalhar.
 
+8. **Chamadas em simultâneo (muito importante).** O CRM tem de mostrar sempre o cliente que está de facto no telemóvel, seja recebida ou feita. Já aconteceu: o script ia avançar para o cliente seguinte, entrou uma chamada, o comercial falou com quem ligou, desligou e deu o feedback — e o feedback ficou no cliente que ia ser marcado, não no que ligou.
+9. **Botão «Abrir script» no aviso de chamada a entrar.**
+10. **Carregar num número ou email não abre logo o script.** Hoje, carregar num número abre a janela da chamada e não há forma de voltar atrás: é obrigatório pôr «Não atende» para fechar. Tem de perguntar primeiro (ex.: «Ligar e abrir script» · «Copiar» · «Cancelar»; no email «Abrir email» · «Copiar») e deixar fechar sem registar resultado quando ainda não se falou.
+
 Prints recebidos: feedback anterior com linhas vazias; O meu dia (tema escuro); caixa NC/FC (tema escuro); Agenda ainda cheia de callbacks de 17/11.
 
 Ainda pendente de antes: assinaturas do WhatsApp (à espera); chamadas desligadas logo a seguir (por decidir).
