@@ -85,7 +85,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
             <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <Chip>{co.accountType === "client" ? "Cliente" : "NN"}</Chip>
+                  <Chip>{co.accountType === "client" ? "Cliente" : co.portalStatus?.toUpperCase() === "EX-CLIENTE" ? "Ex-cliente" : "NN"}</Chip>
                   <StatusChips r={co} />
                 </span>
                 <h1 style={{ margin: 0, fontSize: 28, lineHeight: "34px", fontWeight: 800 }}>{co.name}</h1>
