@@ -1,3 +1,4 @@
+import { DEFAULT_SIGNATURE } from "@basecom/shared";
 import { useEffect, useState } from "react";
 import { api, type AuditEntry, type Settings as S } from "../api";
 import { btn, btnDark, c, card, ErrorText, fmtDateTime, input, PageHeader } from "../ui";
@@ -153,9 +154,10 @@ function Audit() {
 /** Modelos das mensagens rápidas: o Administrador muda nomes e textos. Campos automáticos: {decisor} {empresa} {op} {comercial}. */
 function MessageSettings() {
   const [list, setList] = useState<S["messages"]["templates"] | null>(null);
+  const [signature, setSignature] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  useEffect(() => { api.settings().then((s) => setList(s.messages.templates)).catch((e) => setError(e.message)); }, []);
+  useEffect(() => { api.settings().then((s) => { setList(s.messages.templates); setSignature((s.messages as { signature?: string }).signature ?? DEFAULT_SIGNATURE); }).catch((e) => setError(e.message)); }, []);
   if (!list) return <section style={{ ...card, padding: 24 }}>{error ? <ErrorText>{error}</ErrorText> : "A carregar…"}</section>;
   const upd = (i: number, p: Partial<S["messages"]["templates"][number]>) => { setList(list.map((x, j) => (j === i ? { ...x, ...p } : x))); setSaved(false); };
   return (
@@ -171,11 +173,16 @@ function MessageSettings() {
           <textarea style={{ ...input, minHeight: 72, padding: "8px 10px", lineHeight: "20px", resize: "vertical" }} value={t.text} onChange={(e) => upd(i, { text: e.target.value })} />
         </div>
       ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${c.line}`, paddingTop: 10 }}>
+        <b style={{ fontSize: 14 }}>Assinatura (WhatsApp e email)</b>
+        <span style={{ fontSize: 12, color: c.muted }}>Campos: {"{comercial}"} {"{cargo}"} {"{telemovel}"} {"{email}"}. O cargo, o telemóvel e o email de cada pessoa preenchem-se em Equipa comercial → «assinatura».</span>
+        <textarea style={{ ...input, minHeight: 110, padding: "8px 10px", lineHeight: "20px", resize: "vertical" }} value={signature} onChange={(e) => { setSignature(e.target.value); setSaved(false); }} />
+      </div>
       <button style={{ ...btn, height: 32, fontSize: 13, alignSelf: "flex-start" }} onClick={() => { setList([...list, { id: `modelo_${Date.now().toString(36)}`, label: "Novo modelo", text: "Bom dia, {decisor}. Fala {comercial}, da BASECOM.", active: true }]); setSaved(false); }}>+ Acrescentar modelo</button>
       <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end" }}>
         <ErrorText>{error}</ErrorText>
         {saved && <span role="status" style={{ color: c.ok, fontSize: 13, fontWeight: 600 }}>Guardado.</span>}
-        <button style={btnDark} onClick={() => api.saveSetting("messages", { templates: list }).then(() => setSaved(true)).catch((e) => setError(e.message))}>Guardar mensagens</button>
+        <button style={btnDark} onClick={() => api.saveSetting("messages", { templates: list, signature }).then(() => setSaved(true)).catch((e) => setError(e.message))}>Guardar mensagens</button>
       </div>
     </section>
   );

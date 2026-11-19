@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fmtBalance } from "@basecom/shared";
 import { api, ROLE_LABEL, type Role, type TeamMember, type User } from "../api";
+import { SignatureDialog } from "./Signature";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th, Avatar, resizePhoto } from "../ui";
 import { mmss, STATE_LABEL } from "./WorkState";
 import type { DaySummary } from "../api";
@@ -11,6 +12,7 @@ export function Team({ me }: { me: User }) {
   const [list, setList] = useState<TeamMember[]>([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [signing, setSigning] = useState<TeamMember | null>(null);
   const [secret, setSecret] = useState<{ who: string; password: string } | null>(null);
 
   const load = () => api.users().then(setList).catch((e) => setError(e.message));
@@ -34,6 +36,7 @@ export function Team({ me }: { me: User }) {
           <button style={btn} onClick={() => setSecret(null)}>Fechar</button>
         </section>
       )}
+      {signing && <SignatureDialog user={signing} onClose={() => setSigning(null)} onDone={() => { setSigning(null); load(); }} />}
       {creating && <NewUser onCancel={() => setCreating(false)} onCreated={(who, password) => { setCreating(false); setSecret({ who, password }); load(); }} />}
       <ErrorText>{error}</ErrorText>
       <section style={{ ...card, overflow: "hidden" }}>
@@ -52,6 +55,7 @@ export function Team({ me }: { me: User }) {
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) act(() => resizePhoto(f).then((ph) => api.setPhoto(u.id, ph))); }} />
                       </label>
                     )}
+                    {isAdmin && <button title={u.mobile ? "Assinatura das mensagens" : "Sem assinatura: carregue para preencher"} onClick={() => setSigning(u)} style={{ border: 0, background: "none", padding: 0, fontSize: 12, fontWeight: 500, color: u.mobile ? c.muted : c.brand, textDecoration: "underline", cursor: "pointer", fontFamily: "inherit" }}>assinatura</button>}
                   </span>
                 </td>
                 <td style={{ padding: "10px 12px" }}>

@@ -17,6 +17,10 @@ export const users = pgTable("users", {
   theme: text("theme").notNull().default("light"),
   /** Foto da pessoa (imagem pequena em data URL, até ~150 KB), usada no Pipeline e no menu. */
   photo: text("photo"),
+  /** Assinatura das mensagens (19 nov): cargo, telemóvel e email profissional, como no cartão de visita. */
+  jobTitle: text("job_title"),
+  mobile: text("mobile"),
+  workEmail: text("work_email"),
   passwordHash: text("password_hash"),
   /** Segredo do Microsoft Authenticator, encriptado. Nulo até a 2FA estar ativa. */
   totpSecretEnc: text("totp_secret_enc"),

@@ -12,7 +12,7 @@ const CHALLENGE_MINUTES = 5;
 const MAX_CODE_ATTEMPTS = 5;
 export const MIN_PASSWORD_LENGTH = 10;
 
-export type PublicUser = { id: string; name: string; email: string; role: "admin" | "team_lead" | "sales"; mustChangePassword: boolean; theme: string; photo: string | null };
+export type PublicUser = { id: string; name: string; email: string; role: "admin" | "team_lead" | "sales"; mustChangePassword: boolean; theme: string; photo: string | null; jobTitle: string | null; mobile: string | null; workEmail: string | null };
 import { AuthError } from "./errors.js";
 export { AuthError };
 
@@ -110,7 +110,7 @@ export async function changePassword(db: Db, userId: string, current: string, ne
 }
 
 export function toPublic(u: typeof users.$inferSelect): PublicUser {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, mustChangePassword: u.mustChangePassword, theme: u.theme, photo: u.photo };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, mustChangePassword: u.mustChangePassword, theme: u.theme, photo: u.photo, jobTitle: u.jobTitle ?? null, mobile: u.mobile ?? null, workEmail: u.workEmail ?? null };
 }
 
 /**

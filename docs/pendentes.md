@@ -116,4 +116,4 @@ O Leonardo vai juntando correções durante o dia; só se constrói quando ele d
 
 Prints recebidos: feedback anterior com linhas vazias; O meu dia (tema escuro); caixa NC/FC (tema escuro); Agenda ainda cheia de callbacks de 17/11.
 
-Ainda pendente de antes: assinaturas do WhatsApp (à espera).
+Assinaturas recebidas a 19/11 (Ângela e Leonardo): construídas (cargo, telemóvel e email profissional por pessoa; modelo nas Configurações). Catarina ainda sem assinatura.

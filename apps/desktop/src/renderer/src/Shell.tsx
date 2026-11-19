@@ -9,6 +9,7 @@ import logoNeg from "./assets/logo-negativo.webp";
 import simbolo from "./assets/simbolo.webp";
 import { applyTheme, type ThemePref } from "./theme";
 import { Modal } from "./pages/Wallet";
+import { SignatureDialog } from "./pages/Signature";
 
 export type PageId = "painel" | "agenda" | "empresas" | "novos" | "recebidas" | "atuais" | "carteira" | "pendencias" | "tickets" | "oportunidades" | "vendas" | "equipa" | "objetivos" | "relatorios" | "config";
 
@@ -269,6 +270,7 @@ function Bell({ open, onOpenCompany }: { open: boolean; onOpenCompany: (id: stri
 /** Aparência (desenho 6): tema por pessoa e foto. */
 function Appearance({ user, onClose, onUser }: { user: User; onClose: () => void; onUser: (u: User) => void }) {
   const [theme, setThemeState] = useState<ThemePref>(user.theme ?? "light");
+  const [signing, setSigning] = useState(false);
   const [err, setErr] = useState("");
   const pick = (t: ThemePref) => { setThemeState(t); applyTheme(t); api.setTheme(t).then(() => onUser({ ...user, theme: t })).catch((e) => setErr(e.message)); };
   const card = (t: ThemePref, label: string, preview: ReactNode, note?: string) => (
@@ -302,6 +304,12 @@ function Appearance({ user, onClose, onUser }: { user: User; onClose: () => void
           </span>
         </div>
       </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, borderTop: `1px solid ${c.line}`, paddingTop: 14 }}>
+        <span style={{ display: "flex", flexDirection: "column", gap: 2 }}><b style={{ fontSize: 14 }}>A sua assinatura</b>
+          <span style={{ fontSize: 12, color: c.muted }}>{user.mobile ? `${user.jobTitle ?? ""} · ${user.mobile}` : "Ainda sem assinatura nas mensagens de WhatsApp e email."}</span></span>
+        <button style={{ ...btn, height: 34, fontSize: 13 }} onClick={() => setSigning(true)}>{user.mobile ? "Alterar" : "Preencher"}</button>
+      </div>
+      {signing && <SignatureDialog user={user} onClose={() => setSigning(false)} onDone={() => { setSigning(false); api.me().then((u) => u && onUser(u)).catch(() => undefined); }} />}
       {user.role === "admin" && <DialPref />}
       <ErrorText>{err}</ErrorText>
       <div style={{ display: "flex", justifyContent: "flex-end" }}><button style={btnDark} onClick={onClose}>Fechar</button></div>

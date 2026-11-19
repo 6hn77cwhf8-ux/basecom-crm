@@ -16,6 +16,8 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
   const [d, setD] = useState<CompanyDetail | null>(null);
   const [op, setOp] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string; label: string; text: string }[]>([]);
+  // Assinatura do comercial (19 nov): no WhatsApp e no email, igual ao cartão de visita.
+  const [signature, setSignature] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel>("whatsapp");
   const [tpl, setTpl] = useState(initialTemplate ?? "");
   const [to, setTo] = useState("");
@@ -24,10 +26,13 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
   const [done, setDone] = useState("");
   const [copied, setCopied] = useState(false);
   useEffect(() => {
-    Promise.all([api.company(companyId), api.messageTemplates(), api.companyOpportunities(companyId)]).then(([cd, t, opps]) => {
-      setD(cd); setTemplates(t);
+    Promise.all([api.company(companyId), api.messageKit(), api.companyOpportunities(companyId)]).then(([cd, kit, opps]) => {
+      const t = kit.templates;
+      setD(cd); setTemplates(t); setSignature(kit.signature);
       setOp(opps.find((o) => !o.closedAt && o.nosOp)?.nosOp ?? null);
-      if (!initialTemplate && t[0]) setTpl(t[0].id);
+      // «Tentámos ligar» é a SMS do 1.º não atende: não é o modelo por omissão aqui.
+      const first = t.find((x) => x.id !== "tried_call") ?? t[0];
+      if (!initialTemplate && first) setTpl(first.id);
     }).catch((e) => setErr(e.message));
   }, [companyId]);
 
@@ -36,7 +41,10 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
   // Destinos: WhatsApp e SMS só para telemóveis; email só para emails válidos.
   const options = useMemo(() => (d?.contacts ?? []).filter((x) => x.status !== "incorrect" && (channel === "email" ? x.kind === "email" : x.kind === "phone" && /^9/.test(x.value))), [d, channel]);
   useEffect(() => { setTo(options.find((x) => x.isPrimary)?.value ?? options[0]?.value ?? ""); }, [options]);
-  useEffect(() => { const t = templates.find((x) => x.id === tpl); if (t && d) setText(renderMessage(t.text, vars)); }, [tpl, templates, d, op]);
+  useEffect(() => {
+    const t = templates.find((x) => x.id === tpl);
+    if (t && d) setText(renderMessage(t.text, vars) + (signature && channel !== "sms" && t.id !== "tried_call" ? `\n\n${signature}` : ""));
+  }, [tpl, templates, d, op, signature, channel]);
 
   const label = (v: string) => { const x = options.find((o) => o.value === v); return `${channel === "email" ? v : formatPhone(v)}${x?.personName ? ` · ${x.salutation ? x.salutation + " " : ""}${x.personName}` : ""}`; };
   async function send() {

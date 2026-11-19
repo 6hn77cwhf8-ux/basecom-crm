@@ -48,6 +48,17 @@ export async function adminRoutes(app: FastifyInstance, opts: { db: Db }) {
     await db.update(users).set({ photo }).where(eq(users.id, uid));
     return { ok: true };
   });
+  // Assinatura das mensagens (19 nov): cargo, telemóvel e email profissional — a própria pessoa ou o Administrador.
+  app.put("/users/:id/profile", { preHandler: requireAuth(db) }, async (req) => {
+    const uid = id.parse(req.params).id;
+    if (req.user!.id !== uid && req.user!.role !== "admin") throw new AuthError(403, "Só a própria pessoa ou o Administrador mudam a assinatura.");
+    const t = z.string().trim().max(120).nullable().optional();
+    const b = z.object({ jobTitle: t, mobile: z.string().trim().max(20).regex(/^(\+?351)?\s?9[\d\s]{8,10}$|^$/, "Telemóvel inválido.").nullable().optional(), workEmail: z.string().trim().max(120).email().or(z.literal("")).nullable().optional() }).parse(req.body);
+    const patch: Record<string, string | null> = {};
+    for (const k of ["jobTitle", "mobile", "workEmail"] as const) if (b[k] !== undefined) patch[k] = b[k] || null;
+    if (Object.keys(patch).length) await db.update(users).set(patch).where(eq(users.id, uid));
+    return { ok: true };
+  });
   app.get("/settings", admin, async () => ({ settings: await getAllSettings(db) }));
   // Catálogos e limites de tempo: todos os perfis precisam deles para trabalhar (Power Dialer, resultados).
   app.get("/catalogs", { preHandler: requireAuth(db) }, async () => ({ catalogs: await getSetting(db, "catalogs"), timeLimits: await getSetting(db, "timeLimits") }));

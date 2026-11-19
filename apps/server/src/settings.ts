@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES, DEFAULT_PROPOSAL_CHANNELS } from "@basecom/shared";
+import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES, DEFAULT_PROPOSAL_CHANNELS, DEFAULT_SIGNATURE } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
 import { AuthError } from "./auth/errors.js";
@@ -87,8 +87,9 @@ export const SETTINGS = {
   messages: {
     schema: z.object({
       templates: z.array(z.object({ id: z.string().min(1).max(40), label: z.string().trim().min(2).max(60), text: z.string().trim().min(5).max(1000), active: z.boolean() })).min(1),
+      signature: z.string().max(600).default(DEFAULT_SIGNATURE),
     }),
-    defaults: { templates: DEFAULT_MESSAGE_TEMPLATES },
+    defaults: { templates: DEFAULT_MESSAGE_TEMPLATES, signature: DEFAULT_SIGNATURE },
   },
 } as const;
 

@@ -3,11 +3,11 @@
 export const API_URL: string = import.meta.env.VITE_API_URL || (location.protocol.startsWith("http") && location.pathname.startsWith("/app") ? location.origin : "http://localhost:3000");
 
 export type Role = "admin" | "team_lead" | "sales";
-export type User = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean; theme?: "light" | "dark" | "auto"; photo?: string | null };
-export type TeamMember = { photo?: string | null; id: string; name: string; email: string; role: Role; active: boolean; hiredAt: string | null; totpEnabled: boolean; mustChangePassword: boolean; locked: boolean };
+export type User = { id: string; name: string; email: string; role: Role; mustChangePassword: boolean; theme?: "light" | "dark" | "auto"; photo?: string | null; jobTitle?: string | null; mobile?: string | null; workEmail?: string | null };
+export type TeamMember = { photo?: string | null; jobTitle?: string | null; mobile?: string | null; workEmail?: string | null; id: string; name: string; email: string; role: Role; active: boolean; hiredAt: string | null; totpEnabled: boolean; mustChangePassword: boolean; locked: boolean };
 export type AuditEntry = { id: string; action: string; userName: string; targetName: string | null; details: string | null; at: string };
 export type Settings = {
-  messages: { templates: { id: string; label: string; text: string; active: boolean }[] };
+  messages: { templates: { id: string; label: string; text: string; active: boolean }[]; signature?: string };
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
   timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number; resultAlertSeconds: number; shortCallSeconds: number };
 };
@@ -148,7 +148,10 @@ export const api = {
   company: (id: string) => call<CompanyDetail>(`/companies/${id}`),
   setTheme: (theme: "light" | "dark" | "auto") => call<{ theme: string }>("/me/theme", { method: "PUT", body: JSON.stringify({ theme }) }),
   setPhoto: (userId: string, photo: string | null) => call<{ ok: boolean }>(`/users/${userId}/photo`, { method: "PUT", body: JSON.stringify({ photo }) }),
-  messageTemplates: () => call<{ templates: { id: string; label: string; text: string }[] }>("/messages/templates").then((r) => r.templates),
+  messageTemplates: () => call<{ templates: { id: string; label: string; text: string }[]; signature: string | null }>("/messages/templates").then((r) => r.templates),
+  /** Modelos e a assinatura de quem está a enviar (19 nov). */
+  messageKit: () => call<{ templates: { id: string; label: string; text: string }[]; signature: string | null }>("/messages/templates"),
+  setProfile: (userId: string, b: { jobTitle?: string | null; mobile?: string | null; workEmail?: string | null }) => call<{ ok: boolean }>(`/users/${userId}/profile`, { method: "PUT", body: JSON.stringify(b) }),
   logMessage: (companyId: string, b: { channel: "whatsapp" | "sms" | "email"; templateId?: string; to: string; text: string }) => call<{ ok: boolean; viaPhone: boolean }>(`/companies/${companyId}/messages`, { method: "POST", body: JSON.stringify(b) }),
   search: (q: string) => call<{ results: SearchHit[] }>(`/search${qs({ q })}`).then((r) => r.results),
 

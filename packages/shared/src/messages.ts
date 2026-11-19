@@ -36,3 +36,20 @@ export function renderMessage(text: string, v: MessageVars): string {
     .replace(/ ,/g, ",")
     .replace(/ {2,}/g, " ").replace(/ ,/g, ",").replace(/ \./g, ".").replace(/,\./g, ".").trim();
 }
+
+/** Assinatura do comercial no WhatsApp e no email (19 nov), igual ao cartão de visita. Configurável pelo Administrador. */
+export const DEFAULT_SIGNATURE = "{comercial} · {cargo}\nBASECOM · Intermediário exclusivo NOS\n{telemovel} · {email}\nSuporte: 926 543 124 · suporte@basecom.pt\nbasecom.pt";
+export type SignatureVars = { comercial: string; cargo?: string | null; telemovel?: string | null; email?: string | null };
+/** Sem cargo nem telemóvel, a pessoa ainda não tem assinatura (devolve null). Linhas com campos vazios desaparecem. */
+export function renderSignature(tpl: string, v: SignatureVars): string | null {
+  if (!v.cargo && !v.telemovel) return null;
+  const tel = (v.telemovel ?? "").replace(/\D/g, "").replace(/^351/, "");
+  const fmt = /^\d{9}$/.test(tel) ? `${tel.slice(0, 3)} ${tel.slice(3, 6)} ${tel.slice(6)}` : v.telemovel ?? "";
+  const vals: Record<string, string> = { comercial: v.comercial, cargo: v.cargo ?? "", telemovel: fmt, email: v.email ?? "" };
+  return tpl.split("\n").map((line) => {
+    const fields = [...line.matchAll(/\{(comercial|cargo|telemovel|email)\}/g)].map((m) => m[1]!);
+    let out = line.replace(/\{(comercial|cargo|telemovel|email)\}/g, (_, k: string) => vals[k] ?? "");
+    out = out.replace(/(\s·\s)+$/, "").replace(/^(\s·\s)+/, "").replace(/\s·\s(\s·\s)+/g, " · ").trim();
+    return fields.length && fields.every((k) => !vals[k]) ? "" : out;
+  }).filter((l) => l.length > 0).join("\n");
+}
