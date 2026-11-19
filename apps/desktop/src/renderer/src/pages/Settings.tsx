@@ -163,7 +163,7 @@ function MessageSettings() {
   return (
     <section style={{ ...card, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
       <h2 style={{ margin: 0, fontSize: 15 }}>Mensagens rápidas</h2>
-      <span style={{ fontSize: 13, color: c.muted }}>Campos automáticos: {"{decisor}"} {"{empresa}"} {"{op}"} {"{comercial}"}. Sem OP, a «(referência …)» desaparece sozinha.</span>
+      <span style={{ fontSize: 13, color: c.muted }}>Campos automáticos: {"{saudacao}"} {"{decisor}"} {"{empresa}"} {"{op}"} {"{comercial}"} {"{telemovel}"}. Sem OP, a «(referência …)» desaparece sozinha.</span>
       {list.map((t, i) => (
         <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${c.line}`, paddingTop: 10 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

@@ -27,7 +27,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   /** Botão «Abrir ficha» ao lado do nome (18 nov). */
   onOpenCompany?: () => void;
   /** SMS «Tentámos ligar» no 1.º não atende (18 nov): telemóvel do cliente e campos do modelo. */
-  triedSms?: { to: string; vars: { decisor?: string; empresa?: string; comercial?: string } };
+  triedSms?: { to: string; vars: { decisor?: string; empresa?: string; comercial?: string; telemovel?: string } };
   onSms?: (text: string) => void;
   /** NC/FC da empresa (FC conta 50 % na previsão de pontos). */
   walletKind?: "NC" | "FC";

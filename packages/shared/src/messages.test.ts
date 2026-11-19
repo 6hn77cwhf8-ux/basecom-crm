@@ -20,3 +20,13 @@ describe("assinatura (19 nov)", () => {
     expect(renderSignature(DEFAULT_SIGNATURE, { comercial: "X", cargo: "Comercial" })!.split("\n")[2]).toBe("Suporte: 926 543 124 · suporte@basecom.pt");
   });
 });
+
+describe("SMS «Tentámos ligar» (19 nov)", () => {
+  const t = DEFAULT_MESSAGE_TEMPLATES.find((x) => x.id === "tried_call")!.text;
+  it("termina com nome · telemóvel · NOS Empresas", () => {
+    expect(renderMessage(t, { decisor: "Sr. Rui", empresa: "X, LDA", comercial: "Joana Teste", telemovel: "931045933" }).split("\n").pop()).toBe("Joana Teste · 931 045 933 · NOS Empresas");
+  });
+  it("sem telemóvel, fica nome · NOS Empresas", () => {
+    expect(renderMessage(t, { comercial: "Joana Teste" }).split("\n").pop()).toBe("Joana Teste · NOS Empresas");
+  });
+});

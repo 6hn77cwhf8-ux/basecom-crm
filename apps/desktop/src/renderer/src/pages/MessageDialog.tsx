@@ -12,7 +12,7 @@ const CHANNELS: [Channel, string][] = [["whatsapp", "WhatsApp"], ["sms", "SMS"],
  * WhatsApp abre o WhatsApp do computador (ou o WhatsApp Web) com o texto; Email abre o programa de email;
  * SMS abre a mensagem no telemóvel BASECOM emparelhado. Quem envia é sempre o comercial. Fica no histórico.
  */
-export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent }: { companyId: string; me: { name: string }; initialTemplate?: string; onClose: () => void; onSent?: () => void }) {
+export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent }: { companyId: string; me: { name: string; mobile?: string | null }; initialTemplate?: string; onClose: () => void; onSent?: () => void }) {
   const [d, setD] = useState<CompanyDetail | null>(null);
   const [op, setOp] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string; label: string; text: string }[]>([]);
@@ -37,7 +37,7 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
   }, [companyId]);
 
   const decisor = d?.contacts.find((x) => x.isPrimary && x.personName) ?? d?.contacts.find((x) => x.personName);
-  const vars = { decisor: decisor ? `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.personName}` : undefined, empresa: d?.company.name, op: op ?? undefined, comercial: me.name };
+  const vars = { decisor: decisor ? `${decisor.salutation ? decisor.salutation + " " : ""}${decisor.personName}` : undefined, empresa: d?.company.name, op: op ?? undefined, comercial: me.name, telemovel: me.mobile ?? undefined };
   // Destinos: WhatsApp e SMS só para telemóveis; email só para emails válidos.
   const options = useMemo(() => (d?.contacts ?? []).filter((x) => x.status !== "incorrect" && (channel === "email" ? x.kind === "email" : x.kind === "phone" && /^9/.test(x.value))), [d, channel]);
   useEffect(() => { setTo(options.find((x) => x.isPrimary)?.value ?? options[0]?.value ?? ""); }, [options]);

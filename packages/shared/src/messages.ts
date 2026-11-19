@@ -3,13 +3,13 @@
  * Campos automáticos: {decisor} {empresa} {op} {comercial}. Um campo sem valor desaparece da frase com o espaço à volta.
  */
 export type MessageTemplate = { id: string; label: string; text: string; active: boolean };
-export const MESSAGE_FIELDS = ["decisor", "empresa", "op", "comercial", "saudacao"] as const;
+export const MESSAGE_FIELDS = ["decisor", "empresa", "op", "comercial", "saudacao", "telemovel"] as const;
 export type MessageVars = Partial<Record<(typeof MESSAGE_FIELDS)[number], string>>;
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplate[] = [
   // SMS automática no 1.º não atende (18 nov): só «NOS Empresas», com o pedido para devolver a chamada.
   { id: "tried_call", label: "Tentámos ligar (1.º não atende)", active: true,
-    text: "{saudacao}, {decisor}. Tentámos ligar-lhe da NOS Empresas sobre as comunicações da {empresa}.\n\nLigue-nos para este número quando lhe der jeito — são 2 minutos.\n\n{comercial} · NOS Empresas" },
+    text: "{saudacao}, {decisor}. Tentámos ligar-lhe da NOS Empresas sobre as comunicações da {empresa}.\n\nLigue-nos para este número quando lhe der jeito — são 2 minutos.\n\n{comercial} · {telemovel} · NOS Empresas" },
   { id: "no_answer", label: "Não conseguimos falar consigo", active: true,
     text: "Bom dia, {decisor}. Fala {comercial}, da BASECOM – parceiro NOS Empresas. Tentei contactá-lo(a) por telefone sobre os serviços da {empresa}. Quando lhe der jeito falarmos?" },
   { id: "proposal", label: "Proposta enviada", active: true,
@@ -29,10 +29,13 @@ export function greeting(now = new Date()): string {
 }
 
 export function renderMessage(text: string, v: MessageVars): string {
-  const vars = { saudacao: greeting(), ...v } as Record<string, string | undefined>;
+  const tel = (v.telemovel ?? "").replace(/\D/g, "").replace(/^351/, "");
+  const vars = { saudacao: greeting(), ...v, telemovel: /^\d{9}$/.test(tel) ? `${tel.slice(0, 3)} ${tel.slice(3, 6)} ${tel.slice(6)}` : v.telemovel } as Record<string, string | undefined>;
   return text
     .replace(/\s*\(referência \{op\}\)/g, v.op ? ` (referência ${v.op})` : "")
-    .replace(/\{(decisor|empresa|op|comercial|saudacao)\}/g, (_, k: string) => vars[k] ?? "")
+    .replace(/\{(decisor|empresa|op|comercial|saudacao|telemovel)\}/g, (_, k: string) => vars[k] ?? "")
+    // Campo vazio entre separadores (ex.: sem telemóvel): «Nome ·  · NOS Empresas» → «Nome · NOS Empresas».
+    .replace(/ · +·/g, " ·")
     .replace(/ ,/g, ",")
     .replace(/ {2,}/g, " ").replace(/ ,/g, ",").replace(/ \./g, ".").replace(/,\./g, ".").trim();
 }
