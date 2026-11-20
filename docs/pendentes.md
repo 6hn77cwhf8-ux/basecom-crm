@@ -117,3 +117,19 @@ O Leonardo vai juntando correções durante o dia; só se constrói quando ele d
 Prints recebidos: feedback anterior com linhas vazias; O meu dia (tema escuro); caixa NC/FC (tema escuro); Agenda ainda cheia de callbacks de 17/11.
 
 Assinaturas recebidas a 19/11 (Ângela e Leonardo): construídas (cargo, telemóvel e email profissional por pessoa; modelo nas Configurações). Catarina ainda sem assinatura.
+
+## Erros e pedidos de 20/11/2026 (investigados, por decidir/construir)
+
+1. **Contador dos 10 s chega a 0 e não marca** (Ângela, 2 vezes). Causa provável: com uma chamada a entrar (aviso aberto) o Ligar pausa a marcação (0.13). Na app Android, uma chamada em espera que deixa de tocar durante outra chamada pode ser lida como «atendida» (o telemóvel volta ao estado «em chamada»), o que abre a janela da recebida e mantém o Ligar em pausa. A confirmar com a Ângela (viu o aviso «Chamada a entrar»?).
+2. **Empresas recusadas voltaram a cair** (NIF 508657695 e 508898102). Causa provável: o resultado foi registado numa chamada fora da campanha (ex.: o cliente devolveu a chamada depois da SMS e a recusa foi dada na janela da chamada recebida, ou pela ficha). Nesse caso a entrada da campanha não é fechada e a empresa volta a ser marcada. Corrigir: um resultado com conversa, registado fora da campanha, fecha também as entradas por trabalhar dessa empresa em todas as campanhas.
+   - No 508898102 o fim de fidelização ficou 19/11/2026 (o próprio dia) com o comentário «mais um ano»: o calendário deixa escolher datas passadas/hoje.
+3. **Pipeline do comercial:** n.º de OPs, valor em pontos (pontos do plano: NN 6, XSell 3, FID 1, Upsell 0,5; FC 50 %), ganhos, perdidos, em atraso.
+4. **Criar empresa diretamente no CRM.**
+5. **Pipeline do Chefe de Equipa:** os mesmos números, por comercial e por equipa.
+6. **Pipeline do Administrador:** n.º de OPs, valor em € ponderado pelos multiplicadores NOS (FID 1,5×, Upsell 1,5×, XSell 4,5×, NN 7,5×; FC ÷ 2), ganhos, perdidos, em atraso; por comercial, por equipa e total.
+7. **Administrador começa no Pipeline** e não usa o Ligar.
+8. **Chamada recebida: botão para abrir o script grande no Ligar.**
+9. **O Administrador chama-se «Incognit Truth, Unipessoal Lda»**, não Leonardo.
+10. **A SMS «Tentámos ligar» não é automática**: hoje abre a mensagem no telemóvel e é preciso carregar em enviar. Possível: a app envia sozinha (permissão de SMS na app BASECOM, que não está na Play Store).
+
+Por publicar (feito a 19/11): assinatura no WhatsApp/email e telemóvel no fim da SMS.
