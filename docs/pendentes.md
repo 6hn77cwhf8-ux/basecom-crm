@@ -133,3 +133,13 @@ Assinaturas recebidas a 19/11 (Ângela e Leonardo): construídas (cargo, telemó
 10. **A SMS «Tentámos ligar» não é automática**: hoje abre a mensagem no telemóvel e é preciso carregar em enviar. Possível: a app envia sozinha (permissão de SMS na app BASECOM, que não está na Play Store).
 
 Por publicar (feito a 19/11): assinatura no WhatsApp/email e telemóvel no fim da SMS.
+
+### Respostas do Leonardo (20–21/11)
+- **1. Contador:** ficou no ecrã da contagem, parado no 0 (sem aviso visível). Fazer: o Ligar volta a tentar sozinho se ficar parado no 0, mostra a razão quando está em pausa e guarda um registo de cada vez que devia marcar e não marcou; corrigir também a app (chamada em espera não atendida não conta como atendida).
+- **2. Recusas:** um resultado com conversa registado fora da campanha fecha a empresa em todas as campanhas; o fim de fidelização só aceita datas a partir de amanhã.
+- **3/5/6. Pipeline:** «N.º de OPs» e «Em atraso» = abertas agora; «Ganhos» e «Perdidos» = ciclo atual, quantidade e valor. Comercial em pontos (NN 6, XSell 3, FID 1, Upsell 0,5; FC 50 %); Administrador em € com os multiplicadores NOS (FID 1,5×, Upsell 1,5×, XSell 4,5×, NN 7,5×; FC ÷ 2), configuráveis e só visíveis ao Administrador (NN 8,5× fica para o Arranque B). CE: por comercial e por equipa; Administrador: por comercial, por equipa e total.
+- **4. Criar empresa:** todos os perfis; pode preencher tudo; NN, NC ou FC; NIF validado e sem duplicados; fica sem carteira; abre logo a ficha, sem campanha.
+- **7. Administrador:** começa no Pipeline e não tem o Ligar; pode ligar pela ficha.
+- **8. Abrir script (chamada recebida):** abre o Ligar com o script grande dessa empresa — o da campanha onde está, ou o por omissão (NN / Cliente NOS); o resultado fecha a entrada da campanha.
+- **9. Administrador** passa a chamar-se «Incognit Truth, Unipessoal Lda»; o Leonardo tem login próprio como Chefe de Equipa (assinatura e «Ligar pelo computador» nesse login).
+- **10. SMS «Tentámos ligar»:** enviada sozinha pela app (autorização de SMS dada uma vez em cada telemóvel); histórico com «SMS enviada» / «falhou».
