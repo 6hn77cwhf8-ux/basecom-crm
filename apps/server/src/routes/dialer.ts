@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { discardCall, skipEntry, completeTask, dialerAssignments, myDialerCampaign, setDialerCampaign, endCall, entryView, myTasks, nextEntry, releaseEntry, saveResult, startCall } from "../dialer/service.js";
+import { auditLog } from "../db/schema.js";
+import { companyScriptView, discardCall, skipEntry, completeTask, dialerAssignments, myDialerCampaign, setDialerCampaign, endCall, entryView, myTasks, nextEntry, releaseEntry, saveResult, startCall } from "../dialer/service.js";
 
 /** Power Dialer, chamadas e Agenda: todos os perfis (cada um sobre o seu trabalho). */
 export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -28,6 +29,13 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
     return startCall(db, req.user!, b);
   });
   app.post("/calls/:id/end", any, async (req) => endCall(db, req.user!, id.parse(req.params).id));
+  // 20 nov: o Ligar ficou parado no 0 sem marcar — regista o estado do ecrã para se perceber a causa.
+  app.get("/companies/:id/script-view", any, async (req) => companyScriptView(db, req.user!, id.parse(req.params).id));
+  app.post("/dialer/stall", any, async (req) => {
+    const b = z.object({ reason: z.string().max(80), state: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional() }).parse(req.body);
+    await db.insert(auditLog).values({ userId: req.user!.id, action: "dialer_parado", entity: "user", entityId: req.user!.id, details: `${b.reason} · ${JSON.stringify(b.state ?? {})}`.slice(0, 1000) });
+    return { ok: true };
+  });
   app.post("/calls/:id/discard", any, async (req) => { await discardCall(db, req.user!, id.parse(req.params).id); return { ok: true }; });
   app.post("/calls/:id/result", any, async (req) => {
     const b = z.object({

@@ -69,6 +69,28 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   if (!e) throw new AuthError(404, "Empresa não encontrada na campanha.");
   const k = (await db.query.campaigns.findFirst({ where: eq(campaigns.id, e.campaignId) }))!;
   const co = (await db.query.companies.findFirst({ where: eq(companies.id, e.companyId) }))!;
+  return buildView(db, user, co, e, k);
+}
+
+/**
+ * Script grande para uma chamada recebida (20 nov): o da campanha onde a empresa está por trabalhar (a entrada fica
+ * reservada a quem atendeu e o resultado conta nela) ou, sem campanha, o script por omissão (NN ou Cliente NOS).
+ */
+export async function companyScriptView(db: Db, user: PublicUser, companyId: string) {
+  const co = await db.query.companies.findFirst({ where: eq(companies.id, companyId) });
+  if (!co) throw new AuthError(404, "Empresa não encontrada.");
+  const r = await db.execute(sql`select e.id from campaign_entries e join campaigns k on k.id = e.campaign_id
+    where e.company_id = ${companyId}::uuid and e.status = 'pending' and k.status = 'active' and k.filters->>'system' is null
+    order by (e.locked_by = ${user.id}::uuid) desc, (e.assigned_to = ${user.id}::uuid) desc, e.created_at limit 1`);
+  const id = (r.rows[0] as { id?: string } | undefined)?.id;
+  if (id) {
+    await db.update(campaignEntries).set({ lockedBy: user.id, lockedUntil: minutes(LOCK_MINUTES) }).where(eq(campaignEntries.id, id));
+    return entryView(db, user, id);
+  }
+  return buildView(db, user, co, null, null);
+}
+
+async function buildView(db: Db, user: PublicUser, co: typeof companies.$inferSelect, e: typeof campaignEntries.$inferSelect | null, k: typeof campaigns.$inferSelect | null) {
   const contacts = await db.select().from(companyContacts).where(eq(companyContacts.companyId, co.id)).orderBy(desc(companyContacts.isPrimary), companyContacts.createdAt);
   const phones = contacts.filter((x) => x.kind === "phone" && x.status === "valid");
   // Decisor principal: o indicado na chamada (contacto «pessoa» principal) vem primeiro.
@@ -80,21 +102,21 @@ export async function entryView(db: Db, user: PublicUser, entryId: string) {
   const decisor1 = people[0] ? `${people[0].salutation ? people[0].salutation + " " : ""}${people[0].personName}` : "";
   const decisor2 = people.find((p) => p.personName !== people[0]?.personName);
   const vars = {
-    comercial: user.name, empresa: co.name, campanha: k.name, nbo: nboHead(co.nboCampaign),
+    comercial: user.name, empresa: co.name, campanha: k?.name ?? "", nbo: nboHead(co.nboCampaign),
     decisor1, decisor2: decisor2 ? `${decisor2.salutation ? decisor2.salutation + " " : ""}${decisor2.personName}` : "",
   };
   return {
-    entry: { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id },
-    campaign: { id: k.id, name: k.name, mode: k.mode, dialMode: k.dialMode },
+    entry: e ? { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id } : { id: "", attempts: 0, lastOutcome: null, assignedToMe: false },
+    campaign: k ? { id: k.id, name: k.name, mode: k.mode, dialMode: k.dialMode } : { id: "", name: "Sem campanha", mode: co.accountType === "client" ? "current" : "new", dialMode: "power" },
     company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly, district: co.district, loyaltyMonths: co.loyaltyMonths, walletKindConfirmed: co.walletKindConfirmed,
       needsKind: co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed },
     phone: phones[0] ? { id: phones[0].id, value: phones[0].value, type: phones[0].phoneType } : null,
     otherPhones: phones.slice(1).map((p) => ({ id: p.id, value: p.value, type: p.phoneType })),
-    script: renderScript(k.script || DEFAULT_SCRIPTS.opening, { ...vars, decisor: spokenName(people[0]?.salutation, people[0]?.personName) }),
+    script: renderScript(k?.script || DEFAULT_SCRIPTS.opening, { ...vars, decisor: spokenName(people[0]?.salutation, people[0]?.personName) }),
     // Dois passos: o ecrã mostra a abertura, confirma (ou muda) o decisor e passa à apresentação.
     scripts: {
-      opening: k.script || DEFAULT_SCRIPTS.opening,
-      pitch: co.accountType === "client" ? k.scriptPitchCurrent || DEFAULT_SCRIPTS.pitchCurrent : k.scriptPitchNew || DEFAULT_SCRIPTS.pitchNew,
+      opening: k?.script || DEFAULT_SCRIPTS.opening,
+      pitch: co.accountType === "client" ? k?.scriptPitchCurrent || DEFAULT_SCRIPTS.pitchCurrent : k?.scriptPitchNew || DEFAULT_SCRIPTS.pitchNew,
     },
     vars,
     people: [...new Map(people.map((p) => [p.personName!.toLowerCase(), { salutation: p.salutation, name: p.personName! }])).values()],
@@ -291,6 +313,8 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   if (reason && OPERATOR_REASONS.includes(reason.effect)) {
     if (!input.competitor?.operator) throw new AuthError(400, "Indique a operadora atual do cliente.");
     if (!input.date) throw new AuthError(400, "Indique a data de fim da fidelização.");
+    // 20 nov: o fim de fidelização é sempre uma data futura (a partir de amanhã), exceto NS/NR.
+    if (input.date !== NSNR && input.date <= lisbonDay(new Date())) throw new AuthError(400, "O fim de fidelização tem de ser uma data futura.");
   }
 
   const now = new Date();
@@ -334,6 +358,12 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
     if (entry && !NO_CONTACT.includes(outcome.effect)) {
       await tx.update(campaignEntries).set({ status: "removed", lockedBy: null, lockedUntil: null })
         .where(and(eq(campaignEntries.companyId, co.id), eq(campaignEntries.status, "pending"), sql`${campaignEntries.id} <> ${entry.id}::uuid`));
+    }
+    // 20 nov: resultado com conversa fora da campanha (ficha, chamada recebida): a empresa sai de todas as campanhas
+    // (como se fosse no Ligar). Um callback ou follow-up criado neste resultado entra a seguir.
+    if (!entry && !NO_CONTACT.includes(outcome.effect)) {
+      await tx.update(campaignEntries).set({ status: "done", lastOutcome: outcome.id, lastAttemptAt: now, lockedBy: null, lockedUntil: null })
+        .where(and(eq(campaignEntries.companyId, co.id), eq(campaignEntries.status, "pending")));
     }
     const note = [outcome.label, reason?.label, input.comment?.trim()].filter(Boolean).join(" · ");
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "call", text: note, userId: user.id });

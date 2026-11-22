@@ -39,3 +39,14 @@ export function nextTier(points: number): { points: number; bonus: number } | nu
   const t = TIERS.find(([p]) => p > points);
   return t ? { points: t[0], bonus: t[1] } : null;
 }
+
+/**
+ * Receita NOS da empresa (documento de faturação, só gerência): a NOS paga um multiplicador sobre o valor mensal do aditivo.
+ * FID 1,5× · Upsell 1,5× · XSell 4,5× · NN 7,5× (o NN 8,5× por escalão de volume chega no Arranque B); FC conta metade.
+ */
+export const DEFAULT_NOS_MULTIPLIERS: Record<SaleKind, number> = { FID: 1.5, Upsell: 1.5, XSell: 4.5, NN: 7.5 };
+export function nosRevenue(t: SaleTypes, walletKind: "NC" | "FC" = "NC", m: Record<SaleKind, number> = DEFAULT_NOS_MULTIPLIERS): number {
+  let v = 0;
+  for (const k of SALE_KINDS) if (t[k]) v += (t[k] as number) * (m[k] ?? 0);
+  return Math.round(v * (walletKind === "FC" ? 0.5 : 1) * 100) / 100;
+}

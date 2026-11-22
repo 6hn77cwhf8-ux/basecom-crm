@@ -34,6 +34,7 @@ export async function phoneRoutes(app: FastifyInstance, opts: { db: Db }) {
     const ev = z.discriminatedUnion("type", [
       z.object({ type: z.literal("outgoing_ended"), callId: z.string().uuid(), endedAt: z.string().datetime({ offset: true }), durationSeconds: z.number().int().min(0).max(86400) }),
       z.object({ type: z.literal("incoming_ringing"), number: z.string().max(40), at: z.string().datetime({ offset: true }) }),
+      z.object({ type: z.literal("sms_result"), commandId: z.string().uuid(), result: z.enum(["sent", "failed", "opened"]), error: z.string().max(300).optional() }),
       z.object({ type: z.literal("incoming_answered"), incomingId: z.string().uuid(), at: z.string().datetime({ offset: true }) }),
       z.object({ type: z.literal("incoming_missed"), number: z.string().max(40), at: z.string().datetime({ offset: true }) }),
       z.object({ type: z.literal("incoming_ended"), incomingId: z.string().uuid(), endedAt: z.string().datetime({ offset: true }), durationSeconds: z.number().int().min(0).max(86400) }),

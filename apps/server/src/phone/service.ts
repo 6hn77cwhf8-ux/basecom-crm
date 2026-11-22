@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { normalizePhone } from "@basecom/shared";
 import type { Db } from "../db/client.js";
-import { auditLog, calls, companyContacts, devices, incomingCalls, pairingCodes, phoneCommands, users } from "../db/schema.js";
+import { auditLog, calls, companyContacts, companyNotes, devices, incomingCalls, pairingCodes, phoneCommands, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { hashToken, newToken } from "../auth/crypto.js";
 
@@ -73,10 +73,10 @@ export async function queueDial(db: Db, userId: string, callId: string, number: 
 }
 
 /** SMS (17 nov): o telemóvel BASECOM abre a app de mensagens com o número e o texto; o comercial envia no telemóvel. */
-export async function queueSms(db: Db, userId: string, number: string, text: string) {
+export async function queueSms(db: Db, userId: string, number: string, text: string, companyId?: string) {
   const d = await myDevice(db, userId);
   if (!d?.online) return false;
-  await db.insert(phoneCommands).values({ deviceId: d.id, number, kind: "sms", text });
+  await db.insert(phoneCommands).values({ deviceId: d.id, number, kind: "sms", text, companyId: companyId ?? null });
   return true;
 }
 
@@ -118,7 +118,9 @@ export type DeviceEvent =
   | { type: "incoming_answered"; incomingId: string; at: string }
   /** Chamada que entrou durante outra chamada e não foi atendida (lida do registo do telemóvel no fim da chamada). */
   | { type: "incoming_missed"; number: string; at: string }
-  | { type: "incoming_ended"; incomingId: string; endedAt: string; durationSeconds: number };
+  | { type: "incoming_ended"; incomingId: string; endedAt: string; durationSeconds: number }
+  /** 20 nov: a app enviou a SMS sozinha (ou falhou, ou abriu a mensagem por falta de autorização). */
+  | { type: "sms_result"; commandId: string; result: "sent" | "failed" | "opened"; error?: string };
 
 /** Empresas com este número (pode haver mais de uma). */
 async function companiesFor(db: Db, national: string) {
@@ -150,6 +152,16 @@ export async function deviceEvent(db: Db, device: { id: string; userId: string }
     }
     const [row] = await db.insert(incomingCalls).values({ userId: device.userId, number, companyId: company?.id ?? null, ringingAt: at }).returning({ id: incomingCalls.id });
     return { incomingId: row!.id };
+  }
+  if (ev.type === "sms_result") {
+    const c = await db.query.phoneCommands.findFirst({ where: eq(phoneCommands.id, ev.commandId) });
+    if (!c || c.deviceId !== device.id) throw new AuthError(404, "Pedido de SMS não encontrado.");
+    await db.update(phoneCommands).set({ status: "done" }).where(eq(phoneCommands.id, c.id));
+    if (c.companyId) {
+      const text = ev.result === "sent" ? `SMS enviada pelo telemóvel BASECOM para ${c.number}` : ev.result === "failed" ? `SMS não enviada para ${c.number}${ev.error ? ` (${ev.error.slice(0, 120)})` : ""}` : `SMS aberta no telemóvel para ${c.number} (sem autorização para enviar sozinha)`;
+      await db.insert(companyNotes).values({ companyId: c.companyId, kind: "message", userId: device.userId, text });
+    }
+    return { ok: true };
   }
   if (ev.type === "incoming_answered") {
     const ic = await db.query.incomingCalls.findFirst({ where: eq(incomingCalls.id, ev.incomingId) });

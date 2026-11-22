@@ -21,7 +21,7 @@ export async function logMessage(db: Db, user: PublicUser, companyId: string, in
   if (input.channel === "sms") {
     const number = input.to.replace(/\D/g, "").replace(/^351/, "");
     if (!/^9\d{8}$/.test(number)) throw new AuthError(400, "A SMS só vai para números móveis (9 algarismos começados por 9).");
-    viaPhone = await queueSms(db, user.id, number, text);
+    viaPhone = await queueSms(db, user.id, number, text, companyId);
     if (!viaPhone) throw new AuthError(409, "Telemóvel BASECOM sem ligação: abra a app no telemóvel e tente de novo.");
   }
   const tpl = input.templateId ? (await getSetting(db, "messages")).templates.find((t) => t.id === input.templateId) : undefined;

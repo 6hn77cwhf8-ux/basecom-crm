@@ -2,12 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { companyOpportunities, createOpportunity, listOpportunities, logOpportunityActivity, loseOpportunity, moveOpportunity, winOpportunity } from "../opportunities/service.js";
+import { pipelineStats, companyOpportunities, createOpportunity, listOpportunities, logOpportunityActivity, loseOpportunity, moveOpportunity, winOpportunity } from "../opportunities/service.js";
 
 export async function opportunityRoutes(app: FastifyInstance, opts: { db: Db }) {
   const { db } = opts;
   const any = { preHandler: requireAuth(db) };
   const id = z.object({ id: z.string().uuid() });
+  app.get("/opportunities/stats", any, async (req) => pipelineStats(db, req.user!));
   app.get("/opportunities", any, async (req) => {
     const q = z.object({ ownerId: z.string().uuid().optional(), closed: z.enum(["1"]).optional() }).parse(req.query);
     return { opportunities: await listOpportunities(db, req.user!, { ownerId: q.ownerId, closed: !!q.closed }) };

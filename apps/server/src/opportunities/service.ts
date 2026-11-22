@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { NSNR, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
+import { cycleForDate, NSNR, nosRevenue, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, companies, companyNotes, opportunities, tasks, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -145,4 +145,52 @@ export async function openProposalPoints(db: Db, userId: string) {
   const r = await db.execute(sql`select o.sale_types as "saleTypes", c.wallet_kind as "walletKind" from opportunities o join companies c on c.id = o.company_id
     where o.owner_id = ${userId}::uuid and o.stage not in ('won', 'lost') and o.sale_types is not null`);
   return (r.rows as { saleTypes: SaleTypes; walletKind: "NC" | "FC" }[]).reduce((a, x) => a + proposalPoints(x.saleTypes, x.walletKind), 0);
+}
+
+/**
+ * Números do Pipeline (20 nov): OPs abertas, em atraso, ganhas e perdidas no ciclo atual — quantidade e valor.
+ * Comercial e Chefe de Equipa: valor em pontos (NN 6 · XSell 3 · FID 1 · Upsell 0,5; FC 50 %).
+ * Administrador: valor em € pela Receita NOS (multiplicadores configuráveis; FC metade). Por pessoa, por equipa e total.
+ */
+export async function pipelineStats(db: Db, user: PublicUser) {
+  const visible = await visibleUserIds(db, user);
+  const rules = (await getSetting(db, "catalogs")).opportunities as OpportunityRules;
+  const cycle = cycleForDate(new Date());
+  const metric: "eur" | "points" = user.role === "admin" ? "eur" : "points";
+  const mult = metric === "eur" ? await getSetting(db, "nosRevenue") : null;
+  const r = await db.execute(sql`select o.stage, o.sale_types as "saleTypes", c.wallet_kind as "walletKind", o.closed_at as "closedAt", o.last_activity_at as "lastActivityAt",
+      o.owner_id as "ownerId", u.name as owner, u.photo, t.name as team
+    from opportunities o join companies c on c.id = o.company_id join users u on u.id = o.owner_id
+      left join team_members tm on tm.user_id = o.owner_id left join teams t on t.id = tm.team_id
+    where (o.stage not in ('won', 'lost') or o.closed_at >= ${cycle.start.toISOString()}::timestamptz)
+      ${visible ? sql`and o.owner_id in (${sql.join(visible.map((w) => sql`${w}::uuid`), sql`, `)})` : sql``}`);
+  type Row = { stage: string; saleTypes: SaleTypes | null; walletKind: "NC" | "FC"; closedAt: string | null; lastActivityAt: string; ownerId: string; owner: string; photo: string | null; team: string | null };
+  type Agg = { open: number; openValue: number; late: number; won: number; wonValue: number; lost: number; lostValue: number };
+  const empty = (): Agg => ({ open: 0, openValue: 0, late: 0, won: 0, wonValue: 0, lost: 0, lostValue: 0 });
+  const total = empty();
+  const byUser = new Map<string, Agg & { id: string; name: string; photo: string | null; team: string | null }>();
+  const byTeam = new Map<string, Agg & { name: string }>();
+  const now = new Date();
+  for (const x of r.rows as Row[]) {
+    const value = !x.saleTypes ? 0 : metric === "eur" ? nosRevenue(x.saleTypes, x.walletKind, mult!) : proposalPoints(x.saleTypes, x.walletKind);
+    const u = byUser.get(x.ownerId) ?? { ...empty(), id: x.ownerId, name: x.owner, photo: x.photo, team: x.team };
+    byUser.set(x.ownerId, u);
+    const teamName = x.team ?? "Sem equipa";
+    const tm = byTeam.get(teamName) ?? { ...empty(), name: teamName };
+    byTeam.set(teamName, tm);
+    for (const a of [total, u, tm]) {
+      if (x.stage === "won") { a.won++; a.wonValue += value; }
+      else if (x.stage === "lost") { a.lost++; a.lostValue += value; }
+      else {
+        a.open++; a.openValue += value;
+        if (opportunityAlert(new Date(x.lastActivityAt), now, rules).level === "late") a.late++;
+      }
+    }
+  }
+  const round = <T extends Agg>(a: T) => ({ ...a, openValue: Math.round(a.openValue * 100) / 100, wonValue: Math.round(a.wonValue * 100) / 100, lostValue: Math.round(a.lostValue * 100) / 100 });
+  return {
+    metric, cycle: cycle.label, total: round(total),
+    byUser: [...byUser.values()].map(round).sort((a, b) => a.name.localeCompare(b.name)),
+    byTeam: user.role === "sales" ? [] : [...byTeam.values()].map(round).sort((a, b) => a.name.localeCompare(b.name)),
+  };
 }

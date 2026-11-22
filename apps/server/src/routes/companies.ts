@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { editL2B, liftDissatisfied, markFormerClient } from "../companies/status.js";
+import { createCompany } from "../companies/create.js";
 import { companyKpis, listCompanyIds, filterOptions, getCompany, listCompanies, quickSearch, SORT_KEYS } from "../companies/service.js";
 import { addContact, editAddress, editContact, auditForeignView, identifyWalletKind, cancelScheduled, listScheduled, scheduleTransfer, setContactStatus, setDoNotContact, setWalletKind, walletHistory } from "../companies/wallet.js";
 
@@ -64,6 +65,14 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
     if (b.status) await setContactStatus(db, req.user!, cid, b.status);
     if (b.personName !== undefined || b.salutation !== undefined) await editContact(db, req.user!, cid, b);
     return { ok: true };
+  });
+  // 20 nov: criar empresa no CRM (qualquer perfil).
+  app.post("/companies", any, async (req) => {
+    const s = z.string().max(200).nullable().optional();
+    const b = z.object({ nif: z.string().max(20), name: z.string().max(200), kind: z.enum(["NN", "NC", "FC"]), phones: z.array(z.string().max(30)).max(4).optional(), email: s, decisor: s,
+      address: s, postalCode: s, locality: s, municipality: s, district: s, sector: s, operator: s, l2bMonthly: z.number().min(0).max(100_000).nullable().optional(),
+      loyaltyMonths: z.number().int().min(0).max(120).nullable().optional(), loyaltyEnd: z.string().date().nullable().optional(), note: z.string().max(1000).nullable().optional() }).parse(req.body);
+    return createCompany(db, req.user!, b);
   });
   // 18 nov: passar a ex-cliente (com justificação), corrigir o L2B e retirar o «Insatisfeito NOS».
   app.post("/companies/:id/former-client", any, async (req) => markFormerClient(db, req.user!, z.object({ id: z.string().uuid() }).parse(req.params).id, z.object({ reason: z.string().max(500) }).parse(req.body).reason));

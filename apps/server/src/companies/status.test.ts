@@ -4,7 +4,10 @@ import { createDb } from "../db/client.js";
 import { calls, campaignEntries, campaigns, companies, companyContacts, companyNotes, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
 import { createCampaign } from "../campaigns/service.js";
-import { endCall, nextEntry, saveResult, startCall } from "../dialer/service.js";
+import { companyScriptView, endCall, nextEntry, saveResult, startCall } from "../dialer/service.js";
+import { createCompany } from "./create.js";
+import { pipelineStats } from "../opportunities/service.js";
+import { opportunities } from "../db/schema.js";
 import { callStats } from "../time/service.js";
 import { editL2B, liftDissatisfied, markFormerClient } from "./status.js";
 
@@ -25,6 +28,8 @@ describe.skipIf(!url)("correções de 18/11: ex-cliente, L2B, Insatisfeito NOS, 
     coIds.push(c!.id);
     return c!.id;
   }
+  /** NIF válido e único para cada corrida (dígito de controlo certo). */
+  const validNif = (p: string) => { const d = p.split("").map(Number); const r = 11 - (d.reduce((a, x, i) => a + x * (9 - i), 0) % 11); return p + (r >= 10 ? 0 : r); };
   const entries = async (coId: string) => (await db.select().from(campaignEntries).where(and(eq(campaignEntries.companyId, coId), eq(campaignEntries.status, "pending")))).map((e) => e.campaignId);
 
   beforeAll(async () => {
@@ -103,5 +108,51 @@ describe.skipIf(!url)("correções de 18/11: ex-cliente, L2B, Insatisfeito NOS, 
     const after = await callStats(db, ana.id);
     expect(after.calls - before.calls).toBe(1);
     expect(after.short - before.short).toBe(1); // a primeira (religada) fica em «chamadas curtas»
+  });
+
+  it("recusa dada fora da campanha (ficha/recebida) fecha a empresa em todas as campanhas; fim de fidelização tem de ser futuro", async () => {
+    const co = await company(5);
+    const k = (await createCampaign(db, toPublic(admin), { name: `Fora ${tag}`, mode: "new", script: "", filters: { districts: [district], accountType: "prospect" }, memberIds: [ana.id] })).id;
+    campIds.push(k);
+    expect(await entries(co)).toContain(k);
+    const c = await startCall(db, toPublic(ana), { companyId: co, source: "ficha" });
+    await endCall(db, toPublic(ana), c.id);
+    await expect(saveResult(db, toPublic(ana), c.id, { outcomeId: "not_interested", reasonId: "loyal_other", competitor: { operator: "MEO" }, date: new Date().toISOString().slice(0, 10) })).rejects.toThrow(/futura/);
+    await saveResult(db, toPublic(ana), c.id, { outcomeId: "not_interested", reasonId: "price" });
+    expect(await entries(co)).toEqual([]);
+  });
+
+  it("script grande de uma recebida: usa a campanha onde a empresa está; sem campanha, o script por omissão", async () => {
+    const co = await company(6);
+    const k = (await createCampaign(db, toPublic(admin), { name: `Rec ${tag}`, mode: "new", script: "Olá da campanha {empresa}", filters: { districts: [district], accountType: "prospect" }, memberIds: [ana.id] })).id;
+    campIds.push(k);
+    const v = await companyScriptView(db, toPublic(ana), co);
+    expect(v.campaign.id).toBe(k);
+    expect(v.entry.id).not.toBe("");
+    const lone = (await createCompany(db, toPublic(ana), { nif: validNif(`5${tag}1`), name: `Sem campanha ${tag}`, kind: "NN", phones: ["912345678"] })).id;
+    coIds.push(lone);
+    const v2 = await companyScriptView(db, toPublic(ana), lone);
+    expect(v2.entry.id).toBe("");
+    expect(v2.scripts.opening.length).toBeGreaterThan(10);
+  });
+
+  it("criar empresa: NIF válido e sem duplicados; NC fica sem carteira e com NC confirmado", async () => {
+    await expect(createCompany(db, toPublic(ana), { nif: "123456788", name: "X", kind: "NN" })).rejects.toThrow(/NIF/);
+    const r = await createCompany(db, toPublic(ana), { nif: validNif(`5${tag}2`), name: `Nova ${tag}`, kind: "FC", phones: ["931 000 111"], email: "a@b.pt", decisor: "Sr. Rui Exemplo", l2bMonthly: 80 });
+    coIds.push(r.id);
+    const c = (await db.query.companies.findFirst({ where: eq(companies.id, r.id) }))!;
+    expect(c).toMatchObject({ accountType: "client", walletKind: "FC", walletKindConfirmed: true, ownerId: null });
+    expect((await createCompany(db, toPublic(ana), { nif: validNif(`5${tag}2`), name: "Outra", kind: "NN" }))).toEqual({ id: r.id, existed: true });
+  });
+
+  it("Pipeline: comercial em pontos, Administrador em € pela Receita NOS", async () => {
+    const co = await company(7, { walletKind: "NC" });
+    await db.insert(opportunities).values({ companyId: co, ownerId: ana.id, stage: "proposal", saleTypes: { NN: 100 }, proposedValue: "100" });
+    const s1 = await pipelineStats(db, toPublic(ana));
+    expect(s1.metric).toBe("points");
+    expect(s1.byUser.find((u) => u.id === ana.id)).toMatchObject({ open: 1, openValue: 600 });
+    const s2 = await pipelineStats(db, toPublic(admin));
+    expect(s2.metric).toBe("eur");
+    expect(s2.byUser.find((u) => u.id === ana.id)).toMatchObject({ open: 1, openValue: 750 });
   });
 });

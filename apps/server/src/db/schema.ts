@@ -443,6 +443,8 @@ export const phoneCommands = pgTable("phone_commands", {
   kind: text("kind").notNull().default("dial"),
   /** Texto da SMS (só em kind = sms). */
   text: text("text"),
+  /** Empresa da SMS (20 nov: a app envia sozinha e o resultado fica no histórico desta empresa). */
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   /** pending | sent | done | expired */
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
