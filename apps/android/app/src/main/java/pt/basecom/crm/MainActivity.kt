@@ -52,6 +52,8 @@ class MainActivity : Activity() {
         add(Manifest.permission.READ_PHONE_STATE)
         add(Manifest.permission.READ_CALL_LOG)
         add(Manifest.permission.ANSWER_PHONE_CALLS)
+        // 20 nov: a SMS «Tentámos ligar» é enviada sozinha.
+        add(Manifest.permission.SEND_SMS)
         if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
     }.toTypedArray()
 

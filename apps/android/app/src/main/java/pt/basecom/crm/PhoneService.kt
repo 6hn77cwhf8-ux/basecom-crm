@@ -21,6 +21,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.provider.CallLog
 import android.telecom.TelecomManager
+import android.telephony.SmsManager
 import android.telephony.TelephonyManager
 import org.json.JSONObject
 import java.time.Instant
@@ -57,6 +58,8 @@ class PhoneService : Service() {
     @Volatile private var inNumber: String? = null
     @Volatile private var inRinging = false
     @Volatile private var inAnswered = false
+    // A recebida tocou com outra chamada já em curso (chamada em espera): voltar a «em chamada» não quer dizer atendida.
+    @Volatile private var inWhileBusy = false
     // Início da chamada em curso (para ler as não atendidas que entraram durante ela).
     @Volatile private var busySince = 0L
 
@@ -138,7 +141,7 @@ class PhoneService : Service() {
                     when (cmd.optString("kind")) {
                         "hangup" -> hangUp()
                         "mute" -> mute(cmd.optString("text") == "1")
-                        "sms" -> openSms(cmd.getString("number"), cmd.optString("text"))
+                        "sms" -> sendSms(cmd.optString("id"), cmd.getString("number"), cmd.optString("text"))
                         else -> dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
                     }
                 }
@@ -148,6 +151,31 @@ class PhoneService : Service() {
             } catch (_: Exception) {
                 Thread.sleep(backoff); backoff = (backoff * 2).coerceAtMost(30_000)
             }
+        }
+    }
+
+    /**
+     * SMS pedida no CRM (20 nov): com autorização, o telemóvel envia sozinho e informa o CRM («enviada» ou «falhou»).
+     * Sem autorização, abre a mensagem como antes (o comercial carrega em enviar).
+     */
+    private fun sendSms(commandId: String, number: String, text: String) {
+        if (checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            openSms(number, text); report(commandId, "opened", null); return
+        }
+        try {
+            val sms = if (Build.VERSION.SDK_INT >= 31) getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
+            val parts = sms.divideMessage(text)
+            sms.sendMultipartTextMessage(number, null, parts, null, null)
+            report(commandId, "sent", null)
+        } catch (e: Exception) {
+            report(commandId, "failed", e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    private fun report(commandId: String, result: String, error: String?) {
+        if (commandId.isBlank()) return
+        events.execute {
+            try { api.event(JSONObject().put("type", "sms_result").put("commandId", commandId).put("result", result).apply { if (error != null) put("error", error) }) } catch (_: Exception) {}
         }
     }
 
@@ -222,7 +250,7 @@ class PhoneService : Service() {
             TelephonyManager.EXTRA_STATE_RINGING -> {
                 // 18 nov: também durante uma chamada feita pelo CRM (o CRM segue o telemóvel e pergunta se houver dúvida).
                 if (number.isNullOrBlank() || inRinging) return
-                inRinging = true; inNumber = number
+                inRinging = true; inNumber = number; inWhileBusy = busySince > 0
                 events.execute {
                     try {
                         val r = api.event(JSONObject().put("type", "incoming_ringing").put("number", number).put("at", Instant.now().toString()))
@@ -235,7 +263,7 @@ class PhoneService : Service() {
                 // Atender uma recebida antes de a chamada do CRM ligar não conta como a chamada do CRM.
                 if (outCallId != null && !(inRinging && !inAnswered && !outOffhook)) outOffhook = true
                 // Chamada recebida atendida: o CRM abre a janela da chamada com a empresa.
-                if (inRinging && !inAnswered) {
+                if (inRinging && !inAnswered && !inWhileBusy) {
                     inAnswered = true
                     events.execute {
                         var tries = 0
