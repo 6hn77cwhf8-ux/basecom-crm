@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPhone, renderScript, spokenName } from "@basecom/shared";
-import { api, INCOMING_DISMISS, INCOMING_EVENT, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input, dialOnComputer } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
@@ -75,6 +75,29 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
     window.addEventListener(INCOMING_EVENT, h);
     return () => window.removeEventListener(INCOMING_EVENT, h);
   }, []);
+  // 20 nov: «Abrir script» numa chamada recebida — mostra o script grande dessa empresa e regista o resultado aqui
+  // (na entrada da campanha onde ela está). Uma chamada feita que ainda estava a marcar é cancelada (o CRM segue o telemóvel).
+  const [received, setReceived] = useState(false);
+  const openReceivedRef = useRef<(companyId: string, number: string) => void>(() => undefined);
+  openReceivedRef.current = async (companyId: string, number: string) => {
+    if (phase === "result" || phase === "review") { setError(`Registe primeiro o resultado de ${cur?.company.name ?? "a chamada anterior"}; depois abra o script da chamada recebida.`); return; }
+    setError("");
+    if (phase === "calling" && callId) await api.discardCall(callId).catch(() => undefined);
+    try {
+      const v = await api.companyScriptView(companyId);
+      setCur(v); setConsulted(false); consultedRef.current = false; setSkipping(false); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
+      const r = await api.startCall({ companyId, entryId: v.entry.id || null, source: "recebida", phone: number })
+        .catch(() => api.startCall({ companyId, source: "recebida", phone: number }));
+      setPrior(r.priorResultSeconds ?? 0);
+      setCallId(r.id); setStartedAt(Date.now()); setViaPhone(true); setLive(false); setQueued(false); pendingRef.current = null; setReceived(true); setPhase("calling");
+    } catch (e) { setError((e as Error).message); }
+  };
+  useEffect(() => {
+    const h = (e: Event) => { const d = (e as CustomEvent<{ companyId: string; number: string }>).detail; openReceivedRef.current(d.companyId, d.number); };
+    window.addEventListener(OPEN_SCRIPT_EVENT, h);
+    return () => window.removeEventListener(OPEN_SCRIPT_EVENT, h);
+  }, []);
+  useEffect(() => { if (phase === "countdown" || phase === "ready" || phase === "idle") setReceived(false); }, [phase]);
   // Acabou a recebida e a marcação tinha sido cancelada: a empresa volta (início da fila), sem marcar sozinho.
   useEffect(() => { if (!incoming.active && reloadAfter.current) { reloadAfter.current = false; load(false); } }, [incoming.active]);
   const toggleMute = () => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message));
@@ -164,6 +187,16 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   const left = phase === "countdown" ? Math.max(0, wait - Math.floor((Date.now() - endedAt) / 1000)) : 0;
   // Fora do Ligar (noutra página) não marca a seguinte: espera que o comercial volte.
   useEffect(() => { if (active && !incoming.active && phase === "countdown" && left === 0 && working && !client && campaignId) load(true); }, [active, incoming.active, phase, left, load, working, client, campaignId]);
+  // 20 nov: vigilância — se ficar parado no 0 mais de 3 s, volta a tentar e regista o estado (para se saber a causa).
+  const pauseReason = !active ? "fora do ecrã Ligar" : incoming.active ? "chamada a entrar" : !working ? "fora de «A trabalhar»" : client ? "em cliente" : !campaignId ? "sem campanha" : null;
+  useEffect(() => {
+    if (phase !== "countdown" || left !== 0) return;
+    const t = setTimeout(() => {
+      api.dialerStall(pauseReason ?? "parado sem razão — nova tentativa", { active, incoming: incoming.active, working, client: !!client, campaign: !!campaignId, phase }).catch(() => undefined);
+      if (!pauseReason) load(true);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [phase, left === 0, pauseReason]);
   /** Terminou o trabalho em cliente: volta a A trabalhar e a seguinte é marcada depois dos 10 s habituais. */
   function clientEnded() {
     setClient(null); setWorking(true); setWsKey((k) => k + 1);
@@ -260,7 +293,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
                 {cur.entry.assignedToMe && cur.entry.lastOutcome === "call_later" && phase !== "calling" && <Chip tone="brand">Callback{cur.campaign.id !== campaignId ? ` · ${cur.campaign.name}` : ""}</Chip>}
-                {phase === "calling" && <Chip tone="brand">Em chamada · {mmss(callSecs)}</Chip>}
+                {phase === "calling" && <Chip tone="brand">{received ? "Chamada recebida" : "Em chamada"} · {mmss(callSecs)}</Chip>}
                 {phase === "review" && <Chip tone="warn">Chamada terminada · resultado por registar</Chip>}
               </div>
 {(() => {
@@ -406,7 +439,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
           <span style={{ fontSize: 14, color: c.muted }}>Resultado guardado: {lastSummary}</span>
           {working ? <>
             <span style={{ fontSize: 40, fontWeight: 800 }}>{left}</span>
-            <span style={{ fontSize: 14 }}>Próxima empresa em {left} s</span>
+            <span style={{ fontSize: 14 }}>{left === 0 && pauseReason ? `Em pausa: ${pauseReason}` : `Próxima empresa em ${left} s`}</span>
             <button style={btnDark} onClick={() => load(true)}>Ligar já</button>
           </> : <span style={{ fontSize: 16, fontWeight: 600 }}>Em pausa: a próxima empresa é marcada quando voltar a «A trabalhar».</span>}
         </section>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type User } from "./api";
+import { OPEN_SCRIPT_EVENT, api, type User } from "./api";
 import { Login } from "./Login";
 import { ChangePassword } from "./ChangePassword";
 import { NAV, Shell, type PageId } from "./Shell";
@@ -30,9 +30,15 @@ export function App() {
 
   useEffect(() => {
     if (!api.hasToken()) return;
-    api.me().then((u) => { setUser(u); if (u?.theme) applyTheme(u.theme); }).catch(() => undefined).finally(() => setChecking(false));
+    api.me().then((u) => { setUser(u); if (u?.theme) applyTheme(u.theme); if (u?.role === "admin") setPage("oportunidades"); }).catch(() => undefined).finally(() => setChecking(false));
   }, []);
 
+  // «Abrir script» numa chamada a entrar: vai para o Ligar (o Ligar abre a empresa).
+  useEffect(() => {
+    const h = () => { setPage("novos"); setImporting(false); };
+    window.addEventListener(OPEN_SCRIPT_EVENT, h);
+    return () => window.removeEventListener(OPEN_SCRIPT_EVENT, h);
+  }, []);
   const logout = () => api.logout().then(() => setUser(null));
   // Sinal de vida a cada minuto: regista a entrada e mantém o ponto certo; se a aplicação fechar, o período termina no último sinal.
   useEffect(() => {
@@ -42,7 +48,8 @@ export function App() {
     return () => clearInterval(t);
   }, [user?.id, user?.mustChangePassword]);
   if (checking) return null;
-  if (!user) return <Login onDone={(u) => { setUser(u); if (u.theme) applyTheme(u.theme); setPage("novos"); }} />;
+  // 20 nov: o Administrador começa no Pipeline (não usa o Ligar); os outros no Ligar.
+  if (!user) return <Login onDone={(u) => { setUser(u); if (u.theme) applyTheme(u.theme); setPage(u.role === "admin" ? "oportunidades" : "novos"); }} />;
   if (user.mustChangePassword) return <ChangePassword onLogout={logout} onDone={() => setUser({ ...user, mustChangePassword: false })} />;
 
   const label = NAV.find((n) => n.id === page)?.label ?? "";
@@ -57,10 +64,12 @@ export function App() {
         : page === "carteira" ? <Carteira me={user} onOpenCompany={setCompanyId} />
         : page === "oportunidades" ? <Opportunities me={user} onOpenCompany={setCompanyId} />
         : page === "equipa" ? <Team me={user} /> : page === "config" ? <Settings /> : <Placeholder title={label} phase={PHASE[page] ?? "Fase seguinte"} />}
+      {user.role !== "admin" && <>
       {/* O Ligar fica sempre montado: ao mudar de página a chamada continua e aparece o cartão flutuante. */}
       <div style={{ display: page === "novos" ? "contents" : "none" }}>
         <PowerDialer me={user} onOpenCompany={setCompanyId} active={page === "novos"} onShow={() => { setPage("novos"); setImporting(false); }} onReceived={() => setPage("recebidas")} />
       </div>
+      </>}
       {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
     </Shell>
   );

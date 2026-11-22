@@ -18,7 +18,7 @@ export const NAV: NavItem[] = [
   { id: "painel", label: "Painel de controlo", d: "M3 3h8v8H3zM13 3h8v5h-8zM13 11h8v10h-8zM3 14h8v7H3z", color: tone.indigo },
   { id: "agenda", label: "Agenda", d: "M4 5h16v16H4zM4 10h16M8 3v4M16 3v4", color: tone.blue },
   { id: "empresas", label: "Empresas", d: "M3 21h18M5 21V7l7-4 7 4v14M9 10h1M14 10h1M9 14h1M14 14h1M9 18h1M14 18h1", color: tone.slate },
-  { id: "novos", label: "Ligar", d: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2", color: tone.sage },
+  { id: "novos", label: "Ligar", d: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2", color: tone.sage, roles: ["sales", "team_lead"] },
   { id: "carteira", label: "C2C / Carteira", d: "M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18", color: tone.teal },
   { id: "pendencias", label: "Pendências", d: "M12 3l10 18H2zM12 10v4M12 17h.01", color: tone.sand },
   { id: "tickets", label: "Solicitações e tickets", d: "M3 7h18v4a2 2 0 0 0 0 4v4H3v-4a2 2 0 0 0 0-4zM14 7v12", color: tone.rose },
@@ -102,7 +102,7 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
       </nav>
       {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
       {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpps={() => onNavigate("oportunidades")} onOpenCompany={onOpenCompany} />}
-      <IncomingBanner onOpenCompany={onOpenCompany} />
+      <IncomingBanner onOpenCompany={onOpenCompany} bigScript={user.role !== "admin"} />
       <ClientBanner hidden={page === "novos"} onOpenCompany={onOpenCompany} />
       {phoneOpen && <PhoneDialog onClose={() => setPhoneOpen(false)} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
@@ -310,7 +310,7 @@ function Appearance({ user, onClose, onUser }: { user: User; onClose: () => void
         <button style={{ ...btn, height: 34, fontSize: 13 }} onClick={() => setSigning(true)}>{user.mobile ? "Alterar" : "Preencher"}</button>
       </div>
       {signing && <SignatureDialog user={user} onClose={() => setSigning(false)} onDone={() => { setSigning(false); api.me().then((u) => u && onUser(u)).catch(() => undefined); }} />}
-      {user.role === "admin" && <DialPref />}
+      {user.role !== "sales" && <DialPref />}
       <ErrorText>{err}</ErrorText>
       <div style={{ display: "flex", justifyContent: "flex-end" }}><button style={btnDark} onClick={onClose}>Fechar</button></div>
     </Modal>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatPhone } from "@basecom/shared";
-import { api, INCOMING_DISMISS, INCOMING_EVENT, type Incoming, type PhoneDevice, type SearchHit } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, type Incoming, type PhoneDevice, type SearchHit } from "../api";
 import { QuickCall } from "./QuickCall";
 import { btn, btnDark, c, ErrorText } from "../ui";
 import { Modal } from "./Wallet";
@@ -69,7 +69,7 @@ export function PhoneDialog({ onClose }: { onClose: () => void }) {
 }
 
 /** Aviso «Chamada a entrar» (maqueta 9): número, empresa, carteira e tarefas abertas, com «Abrir ficha». */
-export function IncomingBanner({ onOpenCompany }: { onOpenCompany: (id: string) => void }) {
+export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenCompany: (id: string) => void; bigScript?: boolean }) {
   const [inc, setInc] = useState<Incoming | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
   // Chamada atendida: janela da chamada (desenho 17), que fica aberta até guardar o resultado.
@@ -101,7 +101,11 @@ export function IncomingBanner({ onOpenCompany }: { onOpenCompany: (id: string) 
       <span style={{ fontSize: 14, fontVariantNumeric: "tabular-nums" }}>{/^\d{9}$/.test(inc.number) ? formatPhone(inc.number) : inc.number}{inc.owner ? ` · carteira de ${inc.owner}` : ""}{inc.companyId ? ` · ${inc.openTasks} tarefa(s) aberta(s)` : ""}</span>
       <span style={{ fontSize: 12, color: c.muted }}>Ao atender no telemóvel, abre a janela da chamada.</span>
       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-        <button style={{ ...btnDark, height: 32, fontSize: 13 }} onClick={() => setAnswered(inc)}>Abrir script</button>
+        <button style={{ ...btnDark, height: 32, fontSize: 13 }} onClick={() => {
+          // Uma só empresa com este número: abre o script grande no Ligar. Várias ou nenhuma: escolher primeiro (janela).
+          if (bigScript && inc.companies.length === 1) { window.dispatchEvent(new CustomEvent(OPEN_SCRIPT_EVENT, { detail: { companyId: inc.companies[0]!.id, number: inc.number } })); setDismissed(inc.id); }
+          else setAnswered(inc);
+        }}>Abrir script</button>
         {inc.companyId && <button style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => { onOpenCompany(inc.companyId!); }}>Abrir ficha</button>}
         <button style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => setDismissed(inc.id)}>Fechar</button>
       </div>

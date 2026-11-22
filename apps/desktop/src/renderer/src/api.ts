@@ -84,6 +84,8 @@ export type Batch = { id: string; number: number; kind: string; fileName: string
 /** Chamada recebida em curso (a tocar ou atendida): o Ligar não marca a seguinte e pergunta se a sua chamada continua (18 nov). */
 export const INCOMING_EVENT = "bc-incoming";
 export const INCOMING_DISMISS = "bc-incoming-dismiss";
+/** «Abrir script» numa chamada a entrar (20 nov): o Ligar abre o script grande dessa empresa. */
+export const OPEN_SCRIPT_EVENT = "bc-open-script";
 export const WORK_EVENT = "bc-work-changed";
 function workChanged<T>(x: T): T { try { window.dispatchEvent(new Event(WORK_EVENT)); } catch { /* fora do navegador */ } return x; }
 
@@ -179,6 +181,8 @@ export const api = {
   dialerAssignments: () => call<{ users: { id: string; name: string; role: Role; campaignId: string | null }[] }>("/dialer/assignments").then((r) => r.users),
   setDialerCampaign: (userId: string, campaignId: string | null) => call(`/users/${userId}/dialer-campaign`, { method: "PUT", body: JSON.stringify({ campaignId }) }),
   dialerNext: (campaignId: string) => call<{ next: DialerEntry | null }>("/dialer/next", { method: "POST", body: JSON.stringify({ campaignId }) }).then((r) => r.next),
+  dialerStall: (reason: string, state: Record<string, string | number | boolean | null>) => call<{ ok: boolean }>("/dialer/stall", { method: "POST", body: JSON.stringify({ reason, state }) }),
+  companyScriptView: (companyId: string) => call<DialerEntry>(`/companies/${companyId}/script-view`),
   dialerSkip: (entryId: string, reason: string) => call(`/dialer/entries/${entryId}/skip`, { method: "POST", body: JSON.stringify({ reason }) }),
   dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
   startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean; phone?: string }) => call<{ id: string; startedAt: string; viaPhone: boolean; priorResultSeconds?: number }>("/calls", { method: "POST", body: JSON.stringify(b) }),
