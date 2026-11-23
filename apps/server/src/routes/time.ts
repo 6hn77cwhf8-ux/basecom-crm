@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { AuthError } from "../auth/service.js";
-import { daySummary, endClient, heartbeat, pontoRows, setState, startClient, teamToday } from "../time/service.js";
+import { daySummary, endClient, giveUpClient, heartbeat, pontoRows, setState, startClient, teamToday } from "../time/service.js";
 import ExcelJS from "exceljs";
 import { canSee } from "../teams/service.js";
 
@@ -21,6 +21,10 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.post("/time/client", any, async (req) => {
     const b = z.object({ companyId: z.string().uuid(), kind: z.enum(["proposal", "sale"]), opCode: z.string() }).parse(req.body);
     return startClient(db, req.user!, { ...b, withOpportunity: true });
+  });
+  app.post("/time/client/give-up", any, async (req) => {
+    const b = z.object({ reasonId: z.string().min(1), comment: z.string().max(1000).optional(), operator: z.string().max(40).optional(), date: z.union([z.string().date(), z.literal("NS/NR")]).optional() }).parse(req.body);
+    return giveUpClient(db, req.user!, b);
   });
   app.post("/time/client/end", any, async (req) => {
     const b = z.object({
