@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb } from "../db/client.js";
 import { companies, companyNotes, notifications, opportunities, tasks, timeEntries, users } from "../db/schema.js";
 import { toPublic } from "../auth/service.js";
-import { daySummary, endClient, heartbeat, setState, startClient } from "./service.js";
+import { callStats, closedToday, daySummary, endClient, giveUpClient, heartbeat, setState, startClient } from "./service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -13,6 +13,7 @@ describe.skipIf(!url)("em cliente, office, apoio e formação", () => {
   const tag = String(Date.now()).slice(-6);
   type U = typeof users.$inferSelect;
   let admin: U, ana: U, coId: string;
+  const extra: string[] = [];
 
   beforeAll(async () => {
     const mk = (n: string, role: "admin" | "sales") => db.insert(users).values({ name: `${n} ${tag}`, email: `${n}-k${tag}@basecom.pt`, role, passwordHash: "x", mustChangePassword: false }).returning().then((r) => r[0]!);
@@ -23,7 +24,7 @@ describe.skipIf(!url)("em cliente, office, apoio e formação", () => {
   afterAll(async () => {
     await db.delete(notifications).where(inArray(notifications.aboutUserId, [ana.id]));
     await db.delete(timeEntries).where(inArray(timeEntries.userId, [ana.id, admin.id]));
-    await db.delete(companies).where(eq(companies.id, coId));
+    await db.delete(companies).where(inArray(companies.id, [coId, ...extra]));
     await db.execute(sql`delete from audit_log where user_id in (${admin.id}, ${ana.id})`);
     await db.delete(users).where(inArray(users.id, [admin.id, ana.id]));
     await pool.end();
@@ -68,6 +69,41 @@ describe.skipIf(!url)("em cliente, office, apoio e formação", () => {
     expect(sent.map((x) => x.text)).toContain("Proposta enviada · OP 7590457 · FID + XSell · 165,00 €/mês · por WhatsApp · Compara com a MEO");
     const notes = await db.select().from(companyNotes).where(and(eq(companyNotes.companyId, coId), eq(companyNotes.kind, "client_work")));
     expect(notes[0]!.text).toBe(`Proposta elaborada · 23 min · OP 7590457 · ana ${tag}`);
+  });
+
+  it("23 nov: mudar Proposta↔Venda não recomeça o tempo; só sai a guardar (venda ao cêntimo) ou «Cliente desistiu»; conta no dia", async () => {
+    const mkCo = async (k: string) => { const [c] = await db.insert(companies).values({ nif: `6${tag}${k}`, name: `Venda ${k} ${tag}`, nameKey: `venda ${k} ${tag}`, accountType: "client" }).returning(); extra.push(c!.id); return c!.id; };
+    const c1 = await mkCo("21"), c2 = await mkCo("22");
+    await startClient(db, toPublic(ana), { companyId: c1, kind: "proposal", opCode: "7000021", withOpportunity: true });
+    await db.update(opportunities).set({ saleTypes: { NN: 100 }, proposedValue: "100" }).where(eq(opportunities.companyId, c1));
+    const open = async () => (await db.select().from(timeEntries).where(and(eq(timeEntries.userId, ana.id), sql`${timeEntries.endedAt} is null`)))[0]!;
+    const first = await open();
+    await startClient(db, toPublic(ana), { companyId: c1, kind: "sale", opCode: "7000021", withOpportunity: true });
+    await startClient(db, toPublic(ana), { companyId: c1, kind: "proposal", opCode: "7000021", withOpportunity: true });
+    await startClient(db, toPublic(ana), { companyId: c1, kind: "sale", opCode: "7000021", withOpportunity: true });
+    const now = await open();
+    expect(now.id).toBe(first.id);
+    expect(now.startedAt.getTime()).toBe(first.startedAt.getTime());
+    expect(now.workKind).toBe("sale");
+    await expect(startClient(db, toPublic(ana), { companyId: c2, kind: "sale", opCode: "7000022" })).rejects.toThrow(/outra empresa/);
+    await expect(setState(db, toPublic(ana), ana.id, "break")).rejects.toThrow(/Guardar e fechar/);
+    await expect(setState(db, toPublic(ana), ana.id, "working")).rejects.toThrow(/Cliente desistiu/);
+
+    const before = await closedToday(db, ana.id);
+    await endClient(db, toPublic(ana), { saleTypes: { NN: 98.5 } });
+    const [won] = await db.select().from(opportunities).where(eq(opportunities.companyId, c1));
+    expect(won).toMatchObject({ stage: "won", proposedValue: "100.00", soldValue: "98.50", closedVia: "client" });
+    expect((await closedToday(db, ana.id)).won).toBe(before.won + 1);
+
+    await startClient(db, toPublic(ana), { companyId: c2, kind: "proposal", opCode: "7000022", withOpportunity: true });
+    const r0 = (await callStats(db, ana.id)).refusals;
+    await giveUpClient(db, toPublic(ana), { reasonId: "approach" });
+    expect((await daySummary(db, ana.id)).state).toBe("working");
+    const [lost] = await db.select().from(opportunities).where(eq(opportunities.companyId, c2));
+    expect(lost).toMatchObject({ stage: "lost", lostReasonId: "approach", closedVia: "client" });
+    expect((await callStats(db, ana.id)).refusals).toBe(r0 + 1);
+    const co2 = (await db.query.companies.findFirst({ where: eq(companies.id, c2) }))!;
+    expect(Math.round((new Date(co2.campaignEligibleFrom!).getTime() - Date.now()) / 86_400_000)).toBeGreaterThanOrEqual(119); // Recusa à abordagem: 120 dias
   });
 
   it("office: no limite do dia (15 min) o tempo fecha e passa sozinho a «A trabalhar»", async () => {

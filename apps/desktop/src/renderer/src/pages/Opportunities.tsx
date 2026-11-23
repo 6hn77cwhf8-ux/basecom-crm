@@ -4,6 +4,8 @@ import { type PipelineAgg, type PipelineStats, api, type Catalogs, type Opportun
 import { Avatar, btn, btnDark, c, card, Chip, CopyButton, ErrorText, Field, fmtDate, fmtEur, fmtInt, input, PageHeader } from "../ui";
 import { Modal } from "./Wallet";
 import { DatePicker } from "./DatePicker";
+import { SaleTypesPicker, typesToNumbers, type TypesDraft } from "./ClientWork";
+import { saleTypesError } from "@basecom/shared";
 
 const OPEN = OPPORTUNITY_STAGES.filter((s) => s.open);
 
@@ -33,7 +35,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
   const [owner, setOwner] = useState("");
   const [people, setPeople] = useState<{ id: string; name: string; role: string; photo: string | null }[]>([]);
   const [cat, setCat] = useState<Catalogs | null>(null);
-  const [dialog, setDialog] = useState<{ kind: "activity" | "lose" | "move"; o: Opportunity } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "activity" | "lose" | "move" | "win"; o: Opportunity; stage?: string } | null>(null);
   const [error, setError] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
   const cardProps = (o: Opportunity) => ({
     o, photo: o.ownerPhoto ?? photoOf(o.ownerId), showOwner: isAdmin, onDrag: (on: boolean) => setDragId(on ? o.id : null), dragging: dragId === o.id,
     onOpen: () => onOpenCompany(o.companyId), onAction: (kind: "activity" | "lose" | "move") => setDialog({ kind, o }),
-    onWin: () => { if (confirm(`Marcar «${o.company}» como Ganha? Se a empresa não tiver carteira, passa para a carteira de ${o.owner}.`)) api.winOpportunity(o.id).then(load).catch((e) => setError(e.message)); },
+    onWin: () => setDialog({ kind: "win", o }),
   });
   const pill = (on: boolean) => ({ border: 0, height: 32, padding: "0 12px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: on ? 700 : 600, background: on ? c.ink : "transparent", color: on ? c.onInk : c.muted });
 
@@ -101,6 +103,8 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
                   e.preventDefault(); setOver(null);
                   const o = rows?.find((x) => x.id === dragId); setDragId(null);
                   if (!o || o.stage === s.id) return;
+                  // 23 nov: sem OP não passa para Proposta enviada ou seguintes — pede-a primeiro.
+                  if (NEEDS_OP.includes(s.id) && !o.nosOp) { setDialog({ kind: "move", o, stage: s.id }); return; }
                   setRows((r) => r?.map((x) => (x.id === o.id ? { ...x, stage: s.id, stageLabel: s.label } : x)) ?? r);
                   api.moveOpportunity(o.id, s.id).then(load).catch((err) => { setError(err.message); load(); });
                 }}
@@ -117,7 +121,8 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
         </div>
       )}
       {dialog?.kind === "activity" && <Activity o={dialog.o} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
-      {dialog?.kind === "move" && <Move o={dialog.o} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
+      {dialog?.kind === "win" && <Win o={dialog.o} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
+      {dialog?.kind === "move" && <Move o={dialog.o} initial={dialog.stage} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "lose" && cat && <Lose o={dialog.o} reasons={cat.catalogs.reasons.filter((r) => r.active)} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
     </>
   );
@@ -232,28 +237,70 @@ function Activity({ o, onClose, onDone }: { o: Opportunity; onClose: () => void;
   );
 }
 
-function Move({ o, onClose, onDone }: { o: Opportunity; onClose: () => void; onDone: () => void }) {
-  const [stage, setStage] = useState(o.stage);
+const NEEDS_OP = ["proposal", "negotiation", "documents", "won"];
+/** OP da NOS: 7 algarismos. */
+function OpField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return <Field label="OP (7 algarismos) · obrigatória a partir de Proposta enviada"><input style={{ ...input, width: 180, letterSpacing: ".08em", fontWeight: 700 }} inputMode="numeric" maxLength={7} value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))} placeholder="7123456" /></Field>;
+}
+
+function Move({ o, initial, onClose, onDone }: { o: Opportunity; initial?: string; onClose: () => void; onDone: () => void }) {
+  const [stage, setStage] = useState(initial ?? o.stage);
   const [comment, setComment] = useState("");
+  const [op, setOp] = useState("");
   const [err, setErr] = useState("");
+  const askOp = NEEDS_OP.includes(stage) && !o.nosOp;
   return (
     <Modal title={`Mudar de etapa · ${o.company}`} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {OPEN.map((s) => <button key={s.id} onClick={() => setStage(s.id)} style={{ ...btn, height: 34, fontSize: 13, background: stage === s.id ? c.ink : c.card, color: stage === s.id ? c.onInk : c.ink }}>{s.label}</button>)}
         </div>
+        {askOp && <OpField value={op} onChange={setOp} />}
         <Field label="Comentário (opcional)"><input style={input} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={btnDark} disabled={stage === o.stage} onClick={() => api.moveOpportunity(o.id, stage, comment || undefined).then(onDone).catch((e) => setErr(e.message))}>Mudar</button>
+          <button style={btnDark} disabled={stage === o.stage || (askOp && op.length !== 7)} onClick={() => api.moveOpportunity(o.id, stage, comment || undefined, askOp ? op : undefined).then(onDone).catch((e) => setErr(e.message))}>Mudar</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function Lose({ o, reasons, onClose, onDone }: { o: Opportunity; reasons: Reason[]; onClose: () => void; onDone: () => void }) {
+/** Ganha (23 nov): OP e valor da venda ao cêntimo (vem da proposta; o comercial confirma ou corrige). */
+function Win({ o, onClose, onDone }: { o: Opportunity; onClose: () => void; onDone: () => void }) {
+  const fmt = (n: number) => n.toFixed(2).replace(".", ",");
+  const [types, setTypes] = useState<TypesDraft>(() => Object.fromEntries(Object.entries(o.saleTypes ?? {}).map(([k, v]) => [k, fmt(Number(v))])) as TypesDraft);
+  const [op, setOp] = useState("");
+  const [ok, setOk] = useState(false);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const nums = typesToNumbers(types);
+  const typesErr = saleTypesError(nums);
+  const total = Object.values(nums).reduce((a, v) => a + (v ?? 0), 0);
+  const ready = !typesErr && ok && (o.nosOp || op.length === 7);
+  return (
+    <Modal title={`Ganha · ${o.company}`} onClose={onClose} width={640}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {o.nosOp ? <span style={{ fontSize: 13 }}>OP <b>{o.nosOp}</b></span> : <OpField value={op} onChange={setOp} />}
+        {o.proposedValue && <span style={{ fontSize: 13, color: c.muted }}>Proposta: {eur(Number(o.proposedValue))}/mês. Confirme ou corrija os valores da venda, ao cêntimo.</span>}
+        <SaleTypesPicker types={types} setTypes={(f) => { setOk(false); setTypes(f); }} />
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 600 }}>
+          <input type="checkbox" checked={ok} disabled={!!typesErr} onChange={(e) => setOk(e.target.checked)} /> Confirmo a venda: {eur(total)}/mês
+        </label>
+        <span style={{ fontSize: 12, color: c.muted }}>Se a empresa não tiver carteira, passa para a carteira de {o.owner}. Conta como venda no dia de hoje.</span>
+        <ErrorText>{err}</ErrorText>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={btn} onClick={onClose}>Voltar</button>
+          <button style={btnDark} disabled={!ready || busy} onClick={() => { setBusy(true); api.winOpportunity(o.id, nums, o.nosOp ? undefined : op).then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>Marcar como Ganha</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+export function Lose({ o, reasons, onClose, onDone, title, submit, button = "Marcar como perdida" }: { o: { company: string; id?: string }; reasons: Reason[]; onClose: () => void; onDone: () => void; title?: string; button?: string;
+  submit?: (reasonId: string, comment: string | undefined, extra: { operator: string; date: string } | undefined) => Promise<unknown> }) {
   const [reason, setReason] = useState<Reason | null>(null);
   const [comment, setComment] = useState("");
   const [err, setErr] = useState("");
@@ -263,7 +310,7 @@ function Lose({ o, reasons, onClose, onDone }: { o: Opportunity; reasons: Reason
   const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
   const ok = !!reason && (reason.effect !== "other" || comment.trim().length > 0) && (!byOperator || (!!operator && !!date));
   return (
-    <Modal title={`Oportunidade perdida · ${o.company}`} onClose={onClose} width={620}>
+    <Modal title={title ?? `Oportunidade perdida · ${o.company}`} onClose={onClose} width={620}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <Field label="Motivo (obrigatório)">
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{reasons.map((r) => <button key={r.id} onClick={() => setReason(r)} style={{ ...btn, height: 32, fontSize: 12, background: reason?.id === r.id ? c.ink : c.card, color: reason?.id === r.id ? c.onInk : c.ink }}>{r.label}</button>)}</div>
@@ -283,7 +330,7 @@ function Lose({ o, reasons, onClose, onDone }: { o: Opportunity; reasons: Reason
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={!ok} onClick={() => api.loseOpportunity(o.id, reason!.id, comment || undefined, byOperator ? { operator, date } : undefined).then(onDone).catch((e) => setErr(e.message))}>Marcar como perdida</button>
+          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={!ok} onClick={() => (submit ?? ((r, cm, x) => api.loseOpportunity(o.id!, r, cm, x)))(reason!.id, comment || undefined, byOperator ? { operator, date } : undefined).then(onDone).catch((e) => setErr(e.message))}>{button}</button>
         </div>
       </div>
     </Modal>
