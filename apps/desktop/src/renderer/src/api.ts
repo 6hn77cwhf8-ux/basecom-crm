@@ -37,6 +37,8 @@ export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_
 /** «Guardar e fechar» do Em cliente (17 nov): tipos e valor; na proposta, canal, próxima ação e data. */
 export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; followUp?: "call" | "sms" | "email" | "whatsapp"; at?: string; comment?: string };
 export type ReceivedCall = { id: string; number: string; ringingAt: string; answered: boolean | null; durationSeconds: number | null; endedAt: string | null; returned: boolean; missed: boolean; companies: { id: string; name: string; nif: string }[] };
+export type PipelineAgg = { open: number; openValue: number; late: number; won: number; wonValue: number; lost: number; lostValue: number };
+export type PipelineStats = { metric: "eur" | "points"; cycle: string; total: PipelineAgg; byUser: (PipelineAgg & { id: string; name: string; photo: string | null; team: string | null })[]; byTeam: (PipelineAgg & { name: string })[] };
 export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[]; opportunities?: { channels?: string[] } }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
 export type DialerEntry = {
   entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };
@@ -181,6 +183,7 @@ export const api = {
   dialerAssignments: () => call<{ users: { id: string; name: string; role: Role; campaignId: string | null }[] }>("/dialer/assignments").then((r) => r.users),
   setDialerCampaign: (userId: string, campaignId: string | null) => call(`/users/${userId}/dialer-campaign`, { method: "PUT", body: JSON.stringify({ campaignId }) }),
   dialerNext: (campaignId: string) => call<{ next: DialerEntry | null }>("/dialer/next", { method: "POST", body: JSON.stringify({ campaignId }) }).then((r) => r.next),
+  pipelineStats: () => call<PipelineStats>("/opportunities/stats"),
   dialerStall: (reason: string, state: Record<string, string | number | boolean | null>) => call<{ ok: boolean }>("/dialer/stall", { method: "POST", body: JSON.stringify({ reason, state }) }),
   companyScriptView: (companyId: string) => call<DialerEntry>(`/companies/${companyId}/script-view`),
   dialerSkip: (entryId: string, reason: string) => call(`/dialer/entries/${entryId}/skip`, { method: "POST", body: JSON.stringify({ reason }) }),

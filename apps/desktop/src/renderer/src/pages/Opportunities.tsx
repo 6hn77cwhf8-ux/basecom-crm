@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { cycleForDate, OPPORTUNITY_STAGES, operatorRefusalNote } from "@basecom/shared";
-import { api, type Catalogs, type Opportunity, type Reason, type User } from "../api";
+import { type PipelineAgg, type PipelineStats, api, type Catalogs, type Opportunity, type Reason, type User } from "../api";
 import { Avatar, btn, btnDark, c, card, Chip, CopyButton, ErrorText, Field, fmtDate, fmtEur, input, PageHeader } from "../ui";
 import { Modal } from "./Wallet";
 import { DatePicker } from "./DatePicker";
@@ -71,22 +71,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
         )}
         <button style={btn} onClick={() => setClosed(!closed)}>{closed ? "Ver em curso" : "Ver fechadas (90 dias)"}</button>
       </>} />
-      {!closed && rows && (
-        <section aria-label="Resumo" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-          {[
-            ["Oportunidades abertas", String(rows.length), isAdmin && !owner ? `${new Set(rows.map((o) => o.ownerId)).size} comerciais` : "suas"],
-            ["Valor mensal em pipeline", eur(total), "soma dos valores propostos"],
-            ["Atrasadas (7 dias)", String(late), `${warn} em alerta (5 dias)`],
-            ["Ganhas no ciclo", String(wonCycle), cycleForDate(new Date()).label],
-          ].map(([l, v, h]) => (
-            <div key={l} style={{ ...card, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 12, color: c.muted }}>{l}</span>
-              <span style={{ fontSize: 24, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{v}</span>
-              <span style={{ fontSize: 12, color: c.muted }}>{h}</span>
-            </div>
-          ))}
-        </section>
-      )}
+      {!closed && <PipelineNumbers me={me} key={String(rows?.length ?? 0) + owner} />}
       <ErrorText>{error}</ErrorText>
       {closed ? (
         <section style={{ ...card, overflow: "hidden" }}>
@@ -302,5 +287,67 @@ function Lose({ o, reasons, onClose, onDone }: { o: Opportunity; reasons: Reason
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Números do Pipeline (20 nov): N.º de OPs abertas, valor, ganhos e perdidos do ciclo, em atraso.
+ * Comercial e Chefe de Equipa em pontos (plano comissional); Administrador em € pela Receita NOS.
+ * Chefe de Equipa: por comercial e por equipa. Administrador: por comercial, por equipa e total.
+ */
+function PipelineNumbers({ me }: { me: User }) {
+  const [s, setS] = useState<PipelineStats | null>(null);
+  const [by, setBy] = useState<"total" | "user" | "team">("total");
+  useEffect(() => { api.pipelineStats().then(setS).catch(() => undefined); }, []);
+  if (!s) return null;
+  const fmt = (v: number) => (s.metric === "eur" ? eur(v) : `${Math.round(v).toLocaleString("pt-PT")} pts`);
+  const unit = s.metric === "eur" ? "Receita NOS ponderada" : "pontos do plano";
+  const tiles: [string, string, string][] = [
+    ["N.º de OPs", String(s.total.open), `abertas · ${fmt(s.total.openValue)}`],
+    ["Valor em pipeline", fmt(s.total.openValue), unit],
+    ["Ganhos no ciclo", `${s.total.won} · ${fmt(s.total.wonValue)}`, s.cycle],
+    ["Perdidos no ciclo", `${s.total.lost} · ${fmt(s.total.lostValue)}`, s.cycle],
+    ["Em atraso", String(s.total.late), "sem atividade há 7 dias ou mais"],
+  ];
+  const lead = me.role !== "sales";
+  const rows: (PipelineAgg & { name: string; id?: string; team?: string | null })[] = by === "user" ? s.byUser : by === "team" ? s.byTeam : [];
+  const pill = (on: boolean) => ({ border: 0, height: 30, padding: "0 12px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: on ? 700 : 600, background: on ? c.ink : "transparent", color: on ? c.onInk : c.muted });
+  const th = { padding: "8px 12px", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" as const, color: c.muted, textAlign: "right" as const };
+  const td = { padding: "8px 12px", fontSize: 13, textAlign: "right" as const, fontVariantNumeric: "tabular-nums" as const };
+  return (
+    <section aria-label="Resumo" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 12 }}>
+        {tiles.map(([l, v, h]) => (
+          <div key={l} style={{ ...card, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 12, color: c.muted }}>{l}</span>
+            <span style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</span>
+            <span style={{ fontSize: 12, color: c.muted }}>{h}</span>
+          </div>
+        ))}
+      </div>
+      {lead && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div role="group" aria-label="Números por" style={{ display: "flex", alignSelf: "flex-start", padding: 3, borderRadius: 999, background: c.card, border: `1px solid ${c.line}` }}>
+            <button style={pill(by === "total")} onClick={() => setBy("total")}>Total</button>
+            <button style={pill(by === "user")} onClick={() => setBy("user")}>Por comercial</button>
+            <button style={pill(by === "team")} onClick={() => setBy("team")}>Por equipa</button>
+          </div>
+          {by !== "total" && (
+            <div style={{ ...card, overflow: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr style={{ background: c.sunken }}><th style={{ ...th, textAlign: "left" }}>{by === "user" ? "Comercial" : "Equipa"}</th><th style={th}>N.º de OPs</th><th style={th}>Valor em pipeline</th><th style={th}>Ganhos</th><th style={th}>Perdidos</th><th style={th}>Em atraso</th></tr></thead>
+                <tbody>{rows.map((r) => (
+                  <tr key={r.id ?? r.name} style={{ borderTop: `1px solid ${c.line}` }}>
+                    <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{r.name}{r.team ? <span style={{ color: c.muted, fontWeight: 400 }}> · {r.team}</span> : null}</td>
+                    <td style={td}>{r.open}</td><td style={td}>{fmt(r.openValue)}</td><td style={td}>{r.won} · {fmt(r.wonValue)}</td><td style={td}>{r.lost} · {fmt(r.lostValue)}</td>
+                    <td style={{ ...td, color: r.late ? c.danger : c.ink, fontWeight: r.late ? 700 : 400 }}>{r.late}</td>
+                  </tr>
+                ))}{!rows.length && <tr><td colSpan={6} style={{ ...td, textAlign: "left", color: c.muted }}>Sem oportunidades.</td></tr>}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
