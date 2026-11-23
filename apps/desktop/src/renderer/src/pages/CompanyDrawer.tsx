@@ -179,6 +179,7 @@ export function CompanyDrawer({ id, me, onClose }: { id: string; me: User; onClo
                   <Row k="Estado no portal" v={co.portalStatus ? <Chip tone={co.portalStatus === "CLIENTE" ? "ok" : co.portalStatus === "EX-CLIENTE" ? "warn" : "neutral"}>{PORTAL[co.portalStatus] ?? co.portalStatus}</Chip> : "—"} />
                   <Row k="Saída da NOS" v={co.nosExitMonth ? fmtMonth(co.nosExitMonth) : "—"} />
                   <Nbo value={co.nboCampaign} />
+                  <Row k="Tags" v={co.tags?.length ? <span style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>{co.tags.map((t) => <Chip key={t}>{t}</Chip>)}</span> : "—"} />
                 </Card>
                 <div style={{ gridColumn: "1 / -1" }}><Contacts d={d!} canEdit={canEditContacts} onChange={load} onCall={setCalling} /></div>
                 <div style={{ gridColumn: "1 / -1" }}><History d={d!} limit={5} onMore={() => setTab("historico")} /></div>

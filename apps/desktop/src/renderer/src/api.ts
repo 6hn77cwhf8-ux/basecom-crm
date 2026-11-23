@@ -11,6 +11,7 @@ export type Settings = {
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
   timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number; resultAlertSeconds: number; shortCallSeconds: number };
   nosRevenue: { NN: number; XSell: number; FID: number; Upsell: number };
+  tags: TagSettings;
 };
 export type CompanyRow = {
   id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null; district: string | null; sector: string | null;
@@ -19,9 +20,10 @@ export type CompanyRow = {
   l2bMonthly: string | null; portalStatus: string | null; walletKindConfirmed: boolean;
 };
 export type CompanyKpis = { total: number; noOwner: number; withOwner: number; nc: number; fc: number; clients: number; dnc: number; review: number; mismatch: number; unidentified: number };
-export type CompanyFilters = Partial<{ sort: string; dir: "asc" | "desc"; q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; offset: number; limit: number }>;
-export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[]; operators?: string[]; products?: string[]; technologies?: string[]; portalStatuses?: string[]; sizes?: string[]; municipalitiesByDistrict?: Record<string, string[]>; nboCampaigns?: { v: string; n: number }[]; l2bBuckets?: { b: number; n: number }[]; loyaltyBuckets?: { le9: number; le21: number; gt21: number } };
-export type CampaignFilters = Partial<{ accountType: "client" | "prospect"; districts: string[]; municipalities: string[]; sectors: string[]; operators: string[]; sizes: string[]; products: string[]; technologies: string[]; portalStatus: string[]; loyaltyEndFrom: string; loyaltyEndTo: string; onlyWithoutOwner: boolean; nboCampaigns: string[]; l2bRanges: [number, number | null][]; l2bMin: number; l2bMax: number; loyaltyMonths: ("le9" | "le21" | "gt21")[]; takeFromOtherCampaigns: boolean }>;
+export type CompanyFilters = Partial<{ sort: string; dir: "asc" | "desc"; q: string; accountType: string; owner: string; wallet: string; status: string; municipality: string; district: string; sector: string; tag: string; offset: number; limit: number }>;
+export type FilterOptions = { municipalities: string[]; districts: string[]; sectors: string[]; operators?: string[]; products?: string[]; technologies?: string[]; portalStatuses?: string[]; sizes?: string[]; municipalitiesByDistrict?: Record<string, string[]>; nboCampaigns?: { v: string; n: number }[]; l2bBuckets?: { b: number; n: number }[]; loyaltyBuckets?: { le9: number; le21: number; gt21: number }; tags?: { v: string; n: number }[]; tagConfig?: TagSettings };
+export type TagSettings = { groups: { name: string; tags: string[] }[]; minCompanies: number };
+export type CampaignFilters = Partial<{ accountType: "client" | "prospect"; districts: string[]; municipalities: string[]; sectors: string[]; operators: string[]; sizes: string[]; products: string[]; technologies: string[]; portalStatus: string[]; loyaltyEndFrom: string; loyaltyEndTo: string; onlyWithoutOwner: boolean; nboCampaigns: string[]; l2bRanges: [number, number | null][]; l2bMin: number; l2bMax: number; loyaltyMonths: ("le9" | "le21" | "gt21")[]; takeFromOtherCampaigns: boolean; tags: string[] }>;
 export type CampaignPreview = { matching: number; total: number; clients: number; in_wallet: number; blocked: number; cooldown: number; no_phone: number; other_wallet: number; other_campaign: number };
 export type Campaign = { id: string; name: string; mode: "new" | "current"; status: "active" | "paused" | "ended"; script: string; scriptPitchNew: string | null; scriptPitchCurrent: string | null; dialMode: "power" | "preview"; filters: CampaignFilters; createdAt: string; members: { id: string; name: string }[]; total: number; pending: number; ready: number; done: number; exhausted: number };
 export type Contact = { id: string; kind: "phone" | "email" | "person"; value: string; phoneType: string | null; personName: string | null; salutation: string | null; isPrimary: boolean; status: string ; statusNote?: string | null };
@@ -29,7 +31,7 @@ export type Note = { id: string; kind: string; text: string; at: string; user: s
 export type CompanyDetail = {
   company: CompanyRow & { size: string | null; employeesBand: string | null; l2bMonthly: string | null; address: string | null; postalCode: string | null; economicGroup: string | null; lastSourceYear: number | null; sources: string | null; createdAt: string; updatedAt: string;
     annualRevenue: string | null; locationsPotential: string | null; rgu: Record<string, number> | null; product: string | null; technology: string | null;
-    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null; addressEditedAt: string | null; contactsLockedAt: string | null; dissatisfiedUntil?: string | null; l2bEditedAt?: string | null };
+    loyaltyMonths: number | null; portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null; tags?: string[]; addressEditedAt: string | null; contactsLockedAt: string | null; dissatisfiedUntil?: string | null; l2bEditedAt?: string | null };
   contacts: Contact[]; notes: Note[];
   wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };

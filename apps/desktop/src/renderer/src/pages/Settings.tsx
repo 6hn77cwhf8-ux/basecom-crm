@@ -6,10 +6,11 @@ import { Campaigns } from "./Campaigns";
 import { CatalogSettings } from "./CatalogSettings";
 import { TeamsSettings } from "./TeamsSettings";
 
-type Section = "timeLimits" | "nosRevenue" | "catalogs" | "messages" | "campaigns" | "teams" | "auth" | "audit";
+type Section = "timeLimits" | "nosRevenue" | "tags" | "catalogs" | "messages" | "campaigns" | "teams" | "auth" | "audit";
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "timeLimits", label: "Limites de tempo" },
   { id: "nosRevenue", label: "Receita NOS (multiplicadores)" },
+  { id: "tags", label: "Tags de campanha" },
   { id: "catalogs", label: "Catálogos (resultados, motivos, prazos)" },
   { id: "messages", label: "Mensagens (WhatsApp, SMS, email)" },
   { id: "campaigns", label: "Campanhas e scripts" },
@@ -58,9 +59,48 @@ export function Settings() {
           ))}
           <span style={{ fontSize: 12, color: c.muted, padding: "8px 12px" }}>As restantes secções (ciclos, comissões…) chegam com o Arranque B.</span>
         </nav>
-        {section === "audit" ? <Audit /> : section === "catalogs" ? <CatalogSettings /> : section === "messages" ? <MessageSettings /> : section === "teams" ? <TeamsSettings /> : section === "campaigns" ? <Campaigns /> : <Limits key={section} kind={section as NumericKey} />}
+        {section === "audit" ? <Audit /> : section === "tags" ? <TagSettingsSection /> : section === "catalogs" ? <CatalogSettings /> : section === "messages" ? <MessageSettings /> : section === "teams" ? <TeamsSettings /> : section === "campaigns" ? <Campaigns /> : <Limits key={section} kind={section as NumericKey} />}
       </div>
     </>
+  );
+}
+
+/** Tags de campanha (23 nov): grupos e tags (separadas por vírgula) e mínimo de empresas para usar numa campanha. */
+function TagSettingsSection() {
+  const [groups, setGroups] = useState<{ name: string; text: string }[] | null>(null);
+  const [min, setMin] = useState(250);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { api.settings().then((s) => { setGroups(s.tags.groups.map((g) => ({ name: g.name, text: g.tags.join(", ") }))); setMin(s.tags.minCompanies); }).catch((e) => setError(e.message)); }, []);
+  if (!groups) return <ErrorText>{error}</ErrorText>;
+  const edit = (i: number, patch: Partial<{ name: string; text: string }>) => { setSaved(false); setGroups(groups.map((g, j) => (j === i ? { ...g, ...patch } : g))); };
+  async function save() {
+    setError(""); setSaved(false);
+    const value = { minCompanies: min, groups: groups!.filter((g) => g.name.trim()).map((g) => ({ name: g.name.trim(), tags: [...new Set(g.text.split(",").map((t) => t.trim()).filter(Boolean))] })) };
+    try { await api.saveSetting("tags", value); setSaved(true); } catch (e) { setError((e as Error).message); }
+  }
+  return (
+    <section style={{ ...card, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+      <b style={{ fontSize: 16 }}>Tags de campanha</b>
+      <span style={{ fontSize: 13, color: c.muted }}>As tags vêm na coluna «Tags» do ficheiro da base. Ao importar, as tags desta lista passam a ser as do ficheiro; as outras (ex.: «Nome via nif.pt») ficam como informação. Na campanha, entra quem tiver qualquer uma das tags escolhidas.</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "6px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
+        <span>Mínimo de empresas para usar uma tag numa campanha<span style={{ display: "block", fontSize: 12, color: c.muted }}>Abaixo disto, a tag aparece como «só informação»</span></span>
+        <input type="number" min={0} aria-label="Mínimo de empresas por tag" style={{ ...input, width: 100, textAlign: "right" }} value={min} onChange={(e) => { setSaved(false); setMin(Number(e.target.value)); }} />
+      </div>
+      {groups.map((g, i) => (
+        <div key={i} style={{ display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 8, alignItems: "start" }}>
+          <input style={input} aria-label="Grupo" value={g.name} onChange={(e) => edit(i, { name: e.target.value })} />
+          <textarea style={{ ...input, height: 60, padding: 8, resize: "vertical" }} aria-label={`Tags do grupo ${g.name}`} value={g.text} onChange={(e) => edit(i, { text: e.target.value })} placeholder="Tags separadas por vírgula" />
+          <button style={{ ...btn, height: 34, fontSize: 12 }} onClick={() => { setSaved(false); setGroups(groups.filter((_, j) => j !== i)); }}>Tirar</button>
+        </div>
+      ))}
+      <div><button style={btn} onClick={() => setGroups([...groups, { name: "", text: "" }])}>+ Grupo</button></div>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end", paddingTop: 4 }}>
+        {saved && <span role="status" style={{ color: c.ok, fontSize: 13, fontWeight: 600 }}>Guardado e registado na auditoria.</span>}
+        <ErrorText>{error}</ErrorText>
+        <button style={btnDark} onClick={save}>Guardar alterações</button>
+      </div>
+    </section>
   );
 }
 

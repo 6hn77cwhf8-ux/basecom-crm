@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, campaignMembers, campaigns, companies, users } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
+import { getSetting, tagNames } from "../settings.js";
 
 /**
  * Campanhas (Fase 3). Regras aprovadas aplicadas na escolha das empresas:
@@ -24,6 +25,8 @@ export const filtersSchema = z.object({
   portalStatus: z.array(z.string()).max(5).optional(),
   /** Campanha NBO da NOS, sem as ofertas (ex.: «SOMA | Adicionar fixo»). */
   nboCampaigns: z.array(z.string()).max(50).optional(),
+  /** Tags de campanha (23 nov): entra quem tiver qualquer uma das escolhidas. */
+  tags: z.array(z.string().max(60)).max(50).optional(),
   loyaltyEndFrom: z.string().date().optional(),
   loyaltyEndTo: z.string().date().optional(),
   /** Só empresas sem carteira (ignora as carteiras dos comerciais da campanha). */
@@ -49,6 +52,7 @@ function filterCond(f: CampaignFilters) {
     inList(sql`c.operator`, f.operators), inList(sql`c.size`, f.sizes), inList(sql`c.product`, f.products),
     inList(sql`c.technology`, f.technologies), inList(sql`c.portal_status`, f.portalStatus),
     inList(sql`trim(split_part(c.nbo_campaign, ' — ', 1))`, f.nboCampaigns),
+    f.tags?.length ? sql`c.tags && array(select jsonb_array_elements_text(${JSON.stringify(f.tags)}::jsonb))` : undefined,
     f.loyaltyEndFrom ? sql`c.loyalty_end >= ${f.loyaltyEndFrom}` : undefined,
     f.loyaltyEndTo ? sql`c.loyalty_end <= ${f.loyaltyEndTo}` : undefined,
     f.l2bRanges?.length ? sql`(${sql.join(f.l2bRanges.map(([a, b]) => (b == null ? sql`c.l2b_monthly >= ${a}` : sql`(c.l2b_monthly >= ${a} and c.l2b_monthly < ${b})`)), sql` or `)})` : undefined,
@@ -119,8 +123,22 @@ async function checkMembers(db: Db, ids: string[]) {
   if (rows.length !== ids.length) throw new AuthError(400, "Há comerciais inativos ou inexistentes na campanha.");
 }
 
+/** Só tags de campanha da lista e com o mínimo de empresas (abaixo disso são só informação). */
+async function checkTags(db: Db, chosen: string[] | undefined) {
+  if (!chosen?.length) return;
+  const cfg = await getSetting(db, "tags");
+  const known = new Set(tagNames(cfg));
+  const unknown = chosen.filter((t) => !known.has(t));
+  if (unknown.length) throw new AuthError(400, `Tag fora da lista de campanha: ${unknown.join(", ")}.`);
+  const counts = new Map(((await db.execute(sql`select t, count(*)::int as n from companies, unnest(tags) t
+    where t in (select jsonb_array_elements_text(${JSON.stringify(chosen)}::jsonb)) group by t`)).rows as { t: string; n: number }[]).map((r) => [r.t, r.n]));
+  const few = chosen.filter((t) => (counts.get(t) ?? 0) < cfg.minCompanies);
+  if (few.length) throw new AuthError(400, `Com menos de ${cfg.minCompanies} empresas (só informação): ${few.join(", ")}.`);
+}
+
 export async function createCampaign(db: Db, by: PublicUser, input: { name: string; mode: "new" | "current"; script: string; scriptPitchNew?: string | null; scriptPitchCurrent?: string | null; dialMode?: "power" | "preview"; filters: CampaignFilters; memberIds: string[] }) {
   await checkMembers(db, input.memberIds);
+  await checkTags(db, input.filters.tags);
   return db.transaction(async (tx) => {
     const [c] = await tx.insert(campaigns).values({ name: input.name.trim(), mode: input.mode, script: input.script, scriptPitchNew: input.scriptPitchNew || null, scriptPitchCurrent: input.scriptPitchCurrent || null, dialMode: input.mode === "current" ? input.dialMode ?? "power" : "power", filters: input.filters, createdBy: by.id }).returning();
     await tx.insert(campaignMembers).values(input.memberIds.map((userId) => ({ campaignId: c!.id, userId })));

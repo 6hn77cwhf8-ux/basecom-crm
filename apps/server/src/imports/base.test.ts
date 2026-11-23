@@ -55,7 +55,7 @@ describe.skipIf(!url)("importação da base de empresas", () => {
 
   it("analisa, pré-visualiza, grava e anula um lote seguindo as regras aprovadas", async () => {
     const data = await file([
-      [n(1), "Alfa Lda", "Cliente", 105, "962687579", "252622028", seller, "Sr. Paulo Rebelo", "GERAL@ALFA.PT", "4490-585", "VOD", "LIGAR 06/05 || SEM CONTATO", "C11/2026", "2026-10-16", "x"],
+      [n(1), "Alfa Lda", "Cliente", 105, "962687579", "252622028", seller, "Sr. Paulo Rebelo", "GERAL@ALFA.PT", "4490-585", "VOD", "LIGAR 06/05 || SEM CONTATO", "C11/2026", "2026-10-16", "Nome via nif.pt, MJ, Zona-Porto, MJ"],
       [n(2), "Beta Lda", "Cliente", 50, "912000001", "", "Rute Pereira", "Senhora Ana", "", "4000-001", "ODETE", "", "", "", ""],
       [n(3), "Gama Lda", "Cliente", "", "912000002", "", "Zé Desconhecido", "", "", "", "", "", "", "", ""],
       [n(4), "Delta Lda", "Prospect", "", "912000003", "", seller, "", "", "", "MEO", "", "", "", ""],
@@ -88,6 +88,7 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     expect(done).toMatchObject({ created: 5, updated: 0 });
     const alfa = (await db.select().from(companies).where(eq(companies.nif, n(1))))[0]!;
     expect(alfa).toMatchObject({ ownerId: sellerId, operator: "Vodafone", accountType: "client", walletKind: "NC", l2bMonthly: "105.00", loyaltyEnd: "2026-10-16" });
+    expect(alfa.tags).toEqual(["Nome via nif.pt", "MJ", "Zona-Porto"]);
     const contacts = await db.select().from(companyContacts).where(eq(companyContacts.companyId, alfa.id));
     expect(contacts.map((c) => [c.value, c.phoneType, c.isPrimary])).toEqual(expect.arrayContaining([["962687579", "mobile", true], ["252622028", "landline", false], ["geral@alfa.pt", null, true]]));
     expect(contacts.find((c) => c.value === "962687579")).toMatchObject({ salutation: "Sr.", personName: "Paulo Rebelo" });
@@ -100,7 +101,7 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     // Segunda importação: mesmo NIF atualiza sem mudar a carteira; empresa «Não contactar» fica bloqueada.
     await db.update(companies).set({ doNotContact: true }).where(eq(companies.nif, n(2)));
     const data2 = await file([
-      [n(1), "Alfa Nova Lda", "Cliente", 120, "962687579", "912999999", "Basecom", "", "", "", "", "LIGAR 06/05 || NOVO CONTACTO", "", "", ""],
+      [n(1), "Alfa Nova Lda", "Cliente", 120, "962687579", "912999999", "Basecom", "", "", "", "", "LIGAR 06/05 || NOVO CONTACTO", "", "", "Zona-Aveiro"],
       [n(2), "Beta Lda", "Cliente", 50, "912000009", "", "Basecom", "", "", "", "", "", "", "", ""],
     ]);
     const up2 = await uploadBase(db, adminId, "teste2.xlsx", data2);
@@ -110,6 +111,8 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     await commitBase(db, adminId, up2.id);
     const alfa2 = (await db.select().from(companies).where(eq(companies.nif, n(1))))[0]!;
     expect(alfa2).toMatchObject({ name: "Alfa Nova Lda", ownerId: sellerId, l2bMonthly: "120.00" });
+    // Tags (23 nov): as de campanha passam a ser as do ficheiro; «Nome via nif.pt» (origem) mantém-se.
+    expect(alfa2.tags).toEqual(["Nome via nif.pt", "Zona-Aveiro"]);
     expect((await db.select().from(companyContacts).where(eq(companyContacts.companyId, alfa.id))).length).toBe(4);
     const notes2 = (await db.select().from(companyNotes).where(eq(companyNotes.companyId, alfa.id))).map((x) => x.text);
     expect(notes2.filter((t) => t === "LIGAR 06/05").length).toBe(1);
@@ -119,6 +122,7 @@ describe.skipIf(!url)("importação da base de empresas", () => {
     await revertBatch(db, adminId, up2.id);
     const alfa3 = (await db.select().from(companies).where(eq(companies.nif, n(1))))[0]!;
     expect(alfa3).toMatchObject({ name: "Alfa Lda", l2bMonthly: "105.00" });
+    expect([...alfa3.tags].sort()).toEqual(["MJ", "Nome via nif.pt", "Zona-Porto"]);
     expect((await db.select().from(companyContacts).where(eq(companyContacts.companyId, alfa.id))).length).toBe(3);
     await revertBatch(db, adminId, up.id);
     expect((await db.select().from(companies).where(eq(companies.batchId, up.id))).length).toBe(0);

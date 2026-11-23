@@ -181,6 +181,7 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
               return { ...o, districts: v, municipalities: m?.length ? m : undefined };
             })} />
             <Multi label={f.districts?.length ? `Concelho · de ${f.districts.join(", ")}` : "Concelho"} all={munis} value={f.municipalities} onChange={(v) => set("municipalities", v)} search={!f.districts?.length} />
+            <TagPicker opts={opts} value={f.tags} onChange={(v) => set("tags", v)} />
             {!!opts?.nboCampaigns?.length && <Multi label="Campanha NBO da NOS" all={opts.nboCampaigns.map((x) => x.v)} labels={Object.fromEntries(opts.nboCampaigns.map((x) => [x.v, `${x.v.replace(/\s*\|\s*/g, " · ")} (${fmtInt(x.n)})`]))} value={f.nboCampaigns} onChange={(v) => set("nboCampaigns", v)} />}
             <Multi label="Setor" all={opts?.sectors} value={f.sectors} onChange={(v) => set("sectors", v)} />
             <Multi label="Operadora atual" all={opts?.operators} value={f.operators} onChange={(v) => set("operators", v)} />
@@ -256,6 +257,35 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
 
 function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
   return <button type="button" onClick={onClick} aria-pressed={on} style={{ ...btn, height: 30, fontSize: 12, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line }}>{label}</button>;
+}
+
+/**
+ * Tags de campanha (23 nov), por grupos, com quantas empresas há em cada uma.
+ * Abaixo do mínimo (Configurações) a tag é só informação e não se pode escolher. Entra quem tiver qualquer uma das escolhidas.
+ */
+function TagPicker({ opts, value, onChange }: { opts: FilterOptions | null; value?: string[]; onChange: (v: string[] | undefined) => void }) {
+  if (!opts?.tagConfig) return null;
+  const n = new Map((opts.tags ?? []).map((t) => [t.v, t.n]));
+  const min = opts.tagConfig.minCompanies;
+  const v = value ?? [];
+  const flip = (x: string) => { const nv = v.includes(x) ? v.filter((y) => y !== x) : [...v, x]; onChange(nv.length ? nv : undefined); };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontSize: 13, fontWeight: 600 }}>Tags <span style={{ color: c.muted, fontWeight: 400 }}>{v.length ? `· ${v.length} escolhida(s) · entra quem tiver qualquer uma` : "· todas"}</span></span>
+      {opts.tagConfig.groups.map((g) => (
+        <div key={g.name} style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: c.muted, width: 92 }}>{g.name}</span>
+          {g.tags.map((t) => {
+            const count = n.get(t) ?? 0;
+            const few = count < min && !v.includes(t);
+            return few
+              ? <span key={t} title={`Menos de ${fmtInt(min)} empresas: só informação`} style={{ ...btn, height: 30, fontSize: 12, display: "inline-flex", alignItems: "center", color: c.muted, borderStyle: "dashed", cursor: "default" }}>{t} ({fmtInt(count)}) · só informação</span>
+              : <Toggle key={t} on={v.includes(t)} label={`${t} (${fmtInt(count)})`} onClick={() => flip(t)} />;
+          })}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Escolha múltipla; vazio = todos. */

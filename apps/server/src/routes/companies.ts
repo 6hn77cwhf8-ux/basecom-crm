@@ -16,7 +16,7 @@ export async function companyRoutes(app: FastifyInstance, opts: { db: Db }) {
       q: z.string().max(100).optional(), accountType: z.enum(["client", "prospect"]).optional(),
       owner: z.union([z.literal("none"), z.literal("any"), z.string().uuid()]).optional(), wallet: z.enum(["NC", "FC"]).optional(),
       status: z.enum(["dnc", "review", "nif", "mismatch", "unidentified"]).optional(), municipality: z.string().max(100).optional(),
-      district: z.string().max(100).optional(), sector: z.string().max(100).optional(),
+      district: z.string().max(100).optional(), sector: z.string().max(100).optional(), tag: z.string().max(60).optional(),
       sort: z.enum(SORT_KEYS).optional(), dir: z.enum(["asc", "desc"]).optional(),
       offset: z.coerce.number().int().min(0).optional(), limit: z.coerce.number().int().min(1).max(200).optional(),
     });

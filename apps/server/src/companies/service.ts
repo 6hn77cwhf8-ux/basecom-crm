@@ -2,6 +2,7 @@ import { and, asc, desc, eq, isNotNull, isNull, sql, type SQL } from "drizzle-or
 import type { Db } from "../db/client.js";
 import { companies, companyContacts, companyNotes, users } from "../db/schema.js";
 import { AuthError } from "../auth/service.js";
+import { getSetting } from "../settings.js";
 import { normalizeCompanyName } from "@basecom/shared";
 
 /**
@@ -20,7 +21,7 @@ export type CompanyFilters = {
   q?: string; accountType?: "client" | "prospect"; owner?: string; wallet?: "NC" | "FC";
   status?: "dnc" | "review" | "nif" | "mismatch" | "unidentified";
   /** Ordenação por coluna, como no Excel (vazios sempre no fim). */
-  sort?: SortKey; dir?: "asc" | "desc"; municipality?: string; district?: string; sector?: string; offset?: number; limit?: number;
+  sort?: SortKey; dir?: "asc" | "desc"; municipality?: string; district?: string; sector?: string; tag?: string; offset?: number; limit?: number;
 };
 
 const ACCENTED = "áàâãäéèêëíìîïóòôõöúùûüç";
@@ -73,6 +74,7 @@ function where(f: CompanyFilters) {
   if (f.municipality) c.push(eq(companies.municipality, f.municipality));
   if (f.district) c.push(eq(companies.district, f.district));
   if (f.sector) c.push(eq(companies.sector, f.sector));
+  if (f.tag) c.push(sql`${f.tag} = any(${companies.tags})`);
   return and(...c.filter(Boolean));
 }
 
@@ -124,6 +126,9 @@ export async function filterOptions(db: Db) {
     municipalitiesByDistrict: Object.fromEntries((await db.execute(sql`select district, array_agg(distinct municipality order by municipality) as m from companies
       where district is not null and municipality is not null group by district`)).rows.map((r) => [r.district as string, r.m as string[]])),
     nboCampaigns: (await db.execute(sql`select ${NBO_HEAD} as v, count(*)::int as n from companies where nbo_campaign is not null group by 1 order by 1`)).rows as { v: string; n: number }[],
+    // Tags (23 nov): todas as que existem nas empresas, com quantas há; a lista de campanha e o mínimo vêm das Configurações.
+    tags: (await db.execute(sql`select t as v, count(*)::int as n from companies, unnest(tags) t group by t order by t`)).rows as { v: string; n: number }[],
+    tagConfig: await getSetting(db, "tags"),
     // Intervalos de valor L2B e de meses para o fim da permanência, com quantas empresas há em cada um.
     l2bBuckets: (await db.execute(sql`select b, count(*)::int as n from (select case when l2b_monthly < 50 then 0 when l2b_monthly < 100 then 1 when l2b_monthly < 200 then 2
         when l2b_monthly < 300 then 3 when l2b_monthly < 400 then 4 when l2b_monthly < 500 then 5 else 6 end as b from companies where l2b_monthly is not null) x group by b order by b`)).rows as { b: number; n: number }[],

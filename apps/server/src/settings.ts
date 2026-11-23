@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES, DEFAULT_PROPOSAL_CHANNELS, DEFAULT_SIGNATURE, DEFAULT_NOS_MULTIPLIERS } from "@basecom/shared";
+import { DEFAULT_ATTEMPT_RULES, DEFAULT_OPERATORS, DEFAULT_OPPORTUNITY_RULES, DEFAULT_OUTCOMES, DEFAULT_REASONS, DEFAULT_TASK_TYPES, DEFAULT_MESSAGE_TEMPLATES, DEFAULT_PROPOSAL_CHANNELS, DEFAULT_SIGNATURE, DEFAULT_NOS_MULTIPLIERS, DEFAULT_CAMPAIGN_TAGS, DEFAULT_TAG_MIN_COMPANIES } from "@basecom/shared";
 import type { Db } from "./db/client.js";
 import { auditLog, settings } from "./db/schema.js";
 import { AuthError } from "./auth/errors.js";
@@ -85,6 +85,14 @@ export const SETTINGS = {
   },
   /** Mensagens rápidas (17 nov): modelos para WhatsApp, SMS e email. */
   /** Multiplicadores da Receita NOS (só gerência): valor em € do Pipeline do Administrador. */
+  /** Tags de campanha (23 nov): lista por grupos e mínimo de empresas para usar numa campanha. */
+  tags: {
+    schema: z.object({
+      groups: z.array(z.object({ name: z.string().trim().min(1).max(40), tags: z.array(z.string().trim().min(1).max(60)).max(100) })).min(1).max(20),
+      minCompanies: z.number().int().min(0).max(100_000),
+    }),
+    defaults: { groups: DEFAULT_CAMPAIGN_TAGS, minCompanies: DEFAULT_TAG_MIN_COMPANIES },
+  },
   nosRevenue: {
     schema: z.object({ NN: z.number().min(0).max(50), XSell: z.number().min(0).max(50), FID: z.number().min(0).max(50), Upsell: z.number().min(0).max(50) }),
     defaults: DEFAULT_NOS_MULTIPLIERS,
@@ -137,4 +145,9 @@ export function checkCatalogs(v: SettingValue<"catalogs">) {
   if (new Set(ids).size !== ids.length) bad("Há motivos repetidos.");
   if (!v.reasons.some((r) => r.active)) bad("Tem de haver pelo menos um motivo ativo.");
   if (v.opportunities.warnDays >= v.opportunities.lateDays) bad("O alerta das oportunidades tem de vir antes do prazo de atrasada.");
+}
+
+/** Todas as tags de campanha (os nomes, sem os grupos). */
+export function tagNames(v: SettingValue<"tags">) {
+  return v.groups.flatMap((g) => g.tags);
 }

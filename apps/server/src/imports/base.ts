@@ -7,7 +7,7 @@ import {
 import type { Db } from "../db/client.js";
 import { auditLog, companies, companyContacts, companyNotes, importBatches, importRows, users } from "../db/schema.js";
 import { AuthError } from "../auth/service.js";
-import { getSetting, setSetting } from "../settings.js";
+import { getSetting, setSetting, tagNames } from "../settings.js";
 import { readWorkbook, type Sheet } from "./excel.js";
 
 /**
@@ -26,7 +26,7 @@ export const FIELDS = {
   title: "Título do decisor", title2: "Título do 2.º decisor", decisor2: "2.º decisor", email2: "Email do 2.º decisor",
   extraPhones: "Telefones adicionais (separados por ;)", district: "Distrito", sector: "Setor", annualRevenue: "Faturação anual (€)",
   locationsPotential: "Potencial de localizações", product: "Produto NOS", technology: "Tecnologia", loyaltyMonths: "Meses de permanência",
-  portalStatus: "Estado no portal NOS", nosExit: "Data de saída da NOS", nboCampaign: "Campanha NBO",
+  portalStatus: "Estado no portal NOS", nosExit: "Data de saída da NOS", nboCampaign: "Campanha NBO", tags: "Tags (separadas por vírgula)",
   rguVM: "RGU Voz Móvel (VM)", rguDM: "RGU Dados Móveis (DM)", rguIM: "RGU Internet Móvel (IM)", rguVF: "RGU Voz Fixa (VF)",
   rguDF: "RGU Dados Fixos (DF)", rguIF: "RGU Internet Fixa (IF)", rguTV: "RGU TV", rguIT: "RGU IT", rguAlarmes: "RGU Alarmes",
   ignore: "Não importar",
@@ -43,7 +43,7 @@ export const DEFAULT_MAPPING: Record<string, Field> = {
   "Contacto 1": "phone", "Contacto 2": "phone", "Contacto 3": "phone", "Contacto 4": "phone",
   "Fim de Fidelização / Permanência": "loyaltyEnd", "Comercial Responsável": "owner", "Grupo Económico": "economicGroup",
   "Decisor": "decisor", "Email": "email", "Operadora": "operator", "Último Feedback": "lastFeedback", "Histórico Feedback": "feedbackHistory",
-  "Ganho Fecho 2026 (€)": "ignore", "Ano Última Fonte": "lastSourceYear", "Tags": "ignore", "Fontes": "sources",
+  "Ganho Fecho 2026 (€)": "ignore", "Ano Última Fonte": "lastSourceYear", "Tags": "tags", "Fontes": "sources",
   "Feedback": "ignore", "Data": "ignore", "Comentários": "ignore", "Motivo da remoção": "reason",
   // Formato acordado a 11 nov (ficheiro «BASECOM_Importacao_CRM», 47 colunas).
   "Título": "title", "Título 2": "title2", "Decisor 2": "decisor2", "Email 2": "email2", "Contactos adicionais": "extraPhones",
@@ -88,10 +88,17 @@ export type Extra = {
   district: string | null; sector: string | null; annualRevenue: number | null; locationsPotential: string | null;
   rgu: Record<string, number> | null; product: string | null; technology: string | null; loyaltyMonths: number | null;
   portalStatus: string | null; nosExitMonth: string | null; nboCampaign: string | null;
+  /** null = o ficheiro não tem a coluna Tags (não se mexe nas tags). */
+  tags: string[] | null;
 };
-const EXTRA_KEYS = ["district", "sector", "annualRevenue", "locationsPotential", "rgu", "product", "technology", "loyaltyMonths", "portalStatus", "nosExitMonth", "nboCampaign"] as const;
+const EXTRA_KEYS = ["district", "sector", "annualRevenue", "locationsPotential", "rgu", "product", "technology", "loyaltyMonths", "portalStatus", "nosExitMonth", "nboCampaign", "tags"] as const;
 function extraColumns(e: Extra) {
-  return { ...e, annualRevenue: e.annualRevenue == null ? null : String(e.annualRevenue) };
+  return { ...e, annualRevenue: e.annualRevenue == null ? null : String(e.annualRevenue), tags: e.tags ?? undefined };
+}
+
+/** «Fibra, MJ,  Zona-Porto» → ["Fibra", "MJ", "Zona-Porto"] (sem repetidas). */
+export function splitTags(v: string) {
+  return [...new Set(v.split(/[,;]/).map((t) => t.trim()).filter(Boolean))];
 }
 
 const s = (v: unknown) => (v == null ? "" : String(v).trim());
@@ -116,6 +123,8 @@ export async function uploadBase(db: Db, userId: string, fileName: string, data:
   try { sheets = await readWorkbook(data); } catch { throw new AuthError(400, "Não foi possível ler o ficheiro. Confirme que é um Excel (.xlsx)."); }
   const cfg = await getSetting(db, "importBase");
   const mapping = { ...DEFAULT_MAPPING, ...cfg.mapping } as Record<string, string>;
+  // Até à 0.14 a coluna Tags era ignorada (e ficou assim no mapeamento guardado).
+  if (mapping["Tags"] === "ignore") mapping["Tags"] = "tags";
   const analysis = sheets.map((sh) => analyseSheet(sh, mapping));
   const [batch] = await db.insert(importBatches).values({
     kind: "base", fileName, fileSha256: createHash("sha256").update(data).digest("hex"), fileData: data, status: "uploaded",
@@ -295,6 +304,7 @@ class Ctx {
       product: orNull(get("product")), technology: orNull(get("technology")), loyaltyMonths: int(get("loyaltyMonths")),
       portalStatus: orNull(get("portalStatus")), nosExitMonth: /^\d{4}-\d{2}/.test(exit) ? exit.slice(0, 7) : exit || null,
       nboCampaign: orNull(get("nboCampaign")),
+      tags: col("tags").length ? splitTags(s(get("tags"))) : null,
     };
     const year = Number(get("lastSourceYear"));
     return {
@@ -372,6 +382,7 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
   if (!batch) throw new AuthError(404, "Lote não encontrado.");
   if (batch.status !== "preview") throw new AuthError(409, "Este lote não está em pré-visualização.");
   const counts = { created: 0, updated: 0, skipped: 0 };
+  const campaignTags = JSON.stringify(tagNames(await getSetting(db, "tags")));
 
   await db.transaction(async (tx) => {
     await lockBatch(tx as unknown as Db, batchId, ["preview"], "Este lote não está em pré-visualização (já foi gravado, anulado ou está a ser preparado).");
@@ -433,7 +444,7 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
           loyalty_end: d.loyaltyEnd, l2b_monthly: d.l2bMonthly == null ? null : String(d.l2bMonthly), size: d.size,
           district: cols.district ?? null, sector: cols.sector ?? null, annual_revenue: cols.annualRevenue ?? null, locations_potential: cols.locationsPotential ?? null,
           rgu: cols.rgu ?? null, product: cols.product ?? null, technology: cols.technology ?? null, loyalty_months: cols.loyaltyMonths ?? null,
-          portal_status: cols.portalStatus ?? null, nos_exit_month: cols.nosExitMonth ?? null, nbo_campaign: cols.nboCampaign ?? null,
+          portal_status: cols.portalStatus ?? null, nos_exit_month: cols.nosExitMonth ?? null, nbo_campaign: cols.nboCampaign ?? null, tags: cols.tags ?? null,
         });
         befores.push({ id: r.id, before });
         // Contactos editados no CRM ou já confirmados numa chamada atendida: o CRM manda (só entra o histórico).
@@ -456,10 +467,14 @@ export async function commitBase(db: Db, userId: string, batchId: string) {
           loyalty_months = case when c.l2b_edited_at is null then coalesce(x.loyalty_months, c.loyalty_months) else c.loyalty_months end,
           -- Ex-cliente marcado no CRM (18 nov): a importação não volta a mudar o estado do portal.
           portal_status = case when c.status_edited_at is null then coalesce(x.portal_status, c.portal_status) else c.portal_status end,
-          nos_exit_month = coalesce(x.nos_exit_month, c.nos_exit_month), nbo_campaign = coalesce(x.nbo_campaign, c.nbo_campaign), updated_at = now()
+          nos_exit_month = coalesce(x.nos_exit_month, c.nos_exit_month), nbo_campaign = coalesce(x.nbo_campaign, c.nbo_campaign),
+          -- Tags (23 nov): as de campanha (lista nas Configurações) passam a ser as do ficheiro; as outras mantêm-se.
+          tags = case when x.tags is null then c.tags else array(select distinct t from unnest(
+            array(select unnest(c.tags) except select jsonb_array_elements_text(${campaignTags}::jsonb)) || array(select jsonb_array_elements_text(x.tags))) t order by 1) end,
+          updated_at = now()
         from jsonb_to_recordset(${JSON.stringify(sets)}::jsonb) as x(id uuid, name text, name_key text, address text, postal_code text, municipality text, locality text,
           loyalty_end date, l2b_monthly numeric, size text, district text, sector text, annual_revenue numeric, locations_potential text, rgu jsonb, product text,
-          technology text, loyalty_months int, portal_status text, nos_exit_month text, nbo_campaign text)
+          technology text, loyalty_months int, portal_status text, nos_exit_month text, nbo_campaign text, tags jsonb)
         where c.id = x.id`);
       await tx.execute(sql`update import_rows r set before = x.before from jsonb_to_recordset(${JSON.stringify(befores)}::jsonb) as x(id uuid, before jsonb) where r.id = x.id`);
       await insertChildren(tx as unknown as Db, children, batchId, userId);

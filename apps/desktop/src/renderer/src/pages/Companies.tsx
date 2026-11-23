@@ -104,6 +104,9 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
           <select style={{ ...sel, maxWidth: 200 }} aria-label="Setor" value={f.sector ?? ""} onChange={(e) => set("sector", e.target.value)}>
             <option value="">Setor: todos</option>{opts.sectors.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
+          {!!opts.tags?.length && <select style={{ ...sel, maxWidth: 200 }} aria-label="Tag" value={f.tag ?? ""} onChange={(e) => set("tag", e.target.value)}>
+            <option value="">Tag: todas</option>{opts.tags.map((t) => <option key={t.v} value={t.v}>{t.v} ({fmtInt(t.n)})</option>)}
+          </select>}
           <span style={{ fontSize: 13, color: c.muted, marginLeft: "auto" }}>{data ? `${fmtInt(data.total)} empresas` : "A carregar…"}</span>
           {active > 0 && <button style={{ ...btn, height: 36 }} onClick={clear}>Limpar</button>}
         </div>

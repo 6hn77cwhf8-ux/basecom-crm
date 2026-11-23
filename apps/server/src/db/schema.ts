@@ -161,12 +161,14 @@ export const companies = pgTable("companies", {
   nosExitMonth: text("nos_exit_month"),
   /** Campanha NBO do portal, com a oferta («Campanha — Oferta»). */
   nboCampaign: text("nbo_campaign"),
+  /** Tags da base (23 nov): as de campanha (lista nas Configurações) e as de origem (ex.: «Nome via nif.pt»). */
+  tags: text("tags").array().notNull().default([]),
   lastSourceYear: integer("last_source_year"),
   sources: text("sources"),
   batchId: uuid("batch_id").references(() => importBatches.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("companies_name_key_idx").on(t.nameKey), index("companies_owner_idx").on(t.ownerId), index("companies_postal_idx").on(t.postalCode), index("companies_district_idx").on(t.district), index("companies_sector_idx").on(t.sector)]);
+}, (t) => [index("companies_name_key_idx").on(t.nameKey), index("companies_owner_idx").on(t.ownerId), index("companies_postal_idx").on(t.postalCode), index("companies_district_idx").on(t.district), index("companies_sector_idx").on(t.sector), index("companies_tags_idx").using("gin", t.tags)]);
 
 /** Telefones e emails da empresa. Um número marcado «Incorreto» nunca é reativado por importação. */
 export const companyContacts = pgTable("company_contacts", {
