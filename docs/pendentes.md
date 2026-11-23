@@ -149,3 +149,18 @@ Por publicar (feito a 19/11): assinatura no WhatsApp/email e telemóvel no fim d
 - Também na 0.14: o Administrador pode mudar nomes em Equipa comercial; «Receita NOS (multiplicadores)» nas Configurações.
 - A confirmar no uso real: contador do Ligar (ver «Ligar parado no 0» na auditoria se voltar a acontecer); SMS automática nos 3 telemóveis.
 - Por fazer pelo Leonardo: atualizar a app nos 3 telemóveis e dar a autorização de SMS; criar o login de Chefe de Equipa (Leonardo Rocha) se ainda não existir; assinatura da Catarina em falta.
+
+## Pedidos de 23/11/2026 (noite) — Pipeline, Em cliente e Ligar (0.15)
+
+Investigado:
+- Pipeline: arrastar/«Mudar» nunca pede a OP; «Ganha» não pede o valor da venda; Ganha/Perdida no Pipeline não contam no «O meu dia» (só as chamadas contam).
+- Em cliente: «Mudar para Venda/Proposta» abre um período novo → o tempo recomeça do zero (dá para aldrabar os tempos). Dá também para sair do Em cliente por outro estado sem «Guardar e fechar» (fica sem valor).
+
+### Respostas do Leonardo (23/11)
+1. **OP obrigatória** a partir de Proposta enviada (e Em negociação, Aguarda docs, Ganha): ao mudar de etapa sem OP, abre a janela a pedir a OP (7 algarismos). Interesse e Levantamento sem OP.
+2. **Ganha/Perdida no Pipeline contam no dia do fecho:** Ganha = 1 venda, Perdida = 1 recusa no «O meu dia» do comercial (e nos números da equipa); sem contar duas vezes a mesma empresa fechada numa chamada.
+3. **Valor da venda ao cêntimo obrigatório em todos os «Ganha»** (Pipeline, chamada, Em cliente): tipos (NN/XSell/FID/Upsell) já com os valores da proposta, que o comercial confirma ou corrige; guarda valor proposto e valor vendido.
+4. **Em cliente:** mudar entre Proposta e Venda mantém a mesma contagem (a contar do início) e fica no histórico. Só se sai com «Guardar e fechar» (tipos e valor) ou «Cliente desistiu» (motivo → Perdida, conta como recusa); os outros estados ficam bloqueados enquanto está Em cliente.
+5. **Nova recusa «Recusa à abordagem»:** 120 dias fora das campanhas (configurável), nos motivos de recusa e de perda.
+6. **3 segundos:** depois de guardar o resultado, «Iniciar chamada» fica inativo 3 s (configurável).
+7. **Chamada «Desligada» com o telemóvel ainda em chamada** (de vez em quando): a investigar (eventos da app Android/estado no Ligar).
