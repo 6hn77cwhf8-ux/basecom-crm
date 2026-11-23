@@ -38,8 +38,10 @@ export const SETTINGS = {
       resultAlertSeconds: z.number().int().min(15).max(600).default(100),
       /** Chamadas mais curtas do que isto não contam para o rating (18 nov: 5 s). */
       shortCallSeconds: z.number().int().min(0).max(60).default(5),
+      /** 23 nov: depois de guardar o resultado, «Iniciar chamada» fica inativo X segundos. */
+      nextCallLockSeconds: z.number().int().min(0).max(30).default(3),
     }),
-    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1, resultAlertSeconds: 100, shortCallSeconds: 5 },
+    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1, resultAlertSeconds: 100, shortCallSeconds: 5, nextCallLockSeconds: 3 },
   },
   /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
   importBase: {

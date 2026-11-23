@@ -218,6 +218,13 @@
       "when": 1795461125896,
       "tag": "0030_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795462246431,
+      "tag": "0031_venda_confirmada",
+      "breakpoints": true
     }
   ]
 }

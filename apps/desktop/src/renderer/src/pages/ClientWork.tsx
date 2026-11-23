@@ -5,6 +5,8 @@ import { btn, btnDark, c, card, CopyButton, ErrorText, Field, input } from "../u
 import { DatePicker } from "./DatePicker";
 import { Modal } from "./Wallet";
 import { MessageDialog } from "./MessageDialog";
+import { Lose } from "./Opportunities";
+import type { Reason } from "../api";
 
 /**
  * Em cliente (decisões de 16 nov 2026): trabalho de proposta ou venda num cliente concreto, com o código
@@ -94,6 +96,7 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [givingUp, setGivingUp] = useState(false);
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
   const secs = Math.max(0, Math.floor((Date.now() - new Date(work.since).getTime()) / 1000));
   const since = new Date(work.since).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -128,14 +131,17 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
           {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => onOpenCompany(work.companyId!)}>Abrir ficha</button>}
           {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => setMsg(true)}>Mensagem</button>}
           {work.companyId && work.opCode && <button style={{ ...btn, height: 52 }} disabled={busy} onClick={() => api.startClient({ companyId: work.companyId!, kind: other, opCode: work.opCode! }).then(onChanged).catch((e) => setErr(e.message))}>Mudar para {KIND_LABEL[other]}</button>}
+          {work.companyId && work.opCode && <button style={{ ...btn, height: 52, color: c.danger }} disabled={busy} onClick={() => setGivingUp(true)}>Cliente desistiu</button>}
         </div>
         {closing && <CloseClientDialog work={work} onClose={() => setClosing(false)} onDone={(d) => { setClosing(false); onEnded(d); }} />}
+        {givingUp && <GiveUpDialog work={work} onClose={() => setGivingUp(false)} onDone={(d) => { setGivingUp(false); onEnded(d); }} />}
         {msg && work.companyId && <MessageDialog companyId={work.companyId} me={me} initialTemplate={work.kind === "sale" ? "docs" : "proposal"} onClose={() => setMsg(false)} />}
       </section>
       <aside style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: 12 }}>
         <section style={{ ...card, padding: 20, display: "flex", flexDirection: "column", gap: 10, fontSize: 14, lineHeight: "20px" }}>
           <b style={{ fontSize: 16, fontWeight: 600 }}>Enquanto está em cliente</b>
-          <span>Não é marcada nenhuma chamada. No fim, carregue em «Guardar e fechar» e preencha os dados da proposta; depois volta ao Ligar.</span>
+          <span>Não é marcada nenhuma chamada. No fim, carregue em «Guardar e fechar» e preencha os dados{work.kind === "sale" ? " da venda (valor ao cêntimo)" : " da proposta"}; depois volta ao Ligar. Se o cliente desistir, carregue em «Cliente desistiu».</span>
+          <span>Mudar entre Proposta e Venda não recomeça o tempo.</span>
           <span>O tempo conta como trabalho no ponto, nunca como tempo morto.</span>
         </section>
       </aside>
@@ -147,6 +153,7 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
 export function ClientBanner({ hidden, onOpenCompany }: { hidden: boolean; onOpenCompany: (id: string) => void }) {
   const [d, setD] = useState<DaySummary | null>(null);
   const [closing, setClosing] = useState(false);
+  const [givingUp, setGivingUp] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => {
     const load = () => api.today().then(setD).catch(() => undefined);
@@ -164,7 +171,9 @@ export function ClientBanner({ hidden, onOpenCompany }: { hidden: boolean; onOpe
       <span style={{ color: c.muted }}>NIF {w.nif} · OP {w.opCode}</span>
       {w.companyId && <button style={{ ...btn, height: 30, fontSize: 12 }} onClick={() => onOpenCompany(w.companyId!)}>Ficha</button>}
       <button style={{ ...btnDark, height: 30, fontSize: 12 }} onClick={() => setClosing(true)}>Guardar e fechar</button>
+      <button style={{ ...btn, height: 30, fontSize: 12, color: c.danger }} onClick={() => setGivingUp(true)}>Cliente desistiu</button>
       {closing && <CloseClientDialog work={w} onClose={() => setClosing(false)} onDone={(x) => { setClosing(false); setD(x); }} />}
+      {givingUp && <GiveUpDialog work={w} onClose={() => setGivingUp(false)} onDone={(x) => { setGivingUp(false); setD(x); }} />}
     </div>
   );
 }
@@ -207,6 +216,18 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   const isProposal = work.kind !== "sale";
   const [channels, setChannels] = useState<string[]>(DEFAULT_PROPOSAL_CHANNELS);
   const [types, setTypes] = useState<TypesDraft>({});
+  // 23 nov: na venda, os valores vêm da proposta (mesma OP) e o comercial confirma ou corrige ao cêntimo.
+  const [proposed, setProposed] = useState<number | null>(null);
+  const [confirmed, setConfirmed] = useState(isProposal);
+  useEffect(() => {
+    if (isProposal || !work.companyId) return;
+    api.companyOpportunities(work.companyId).then((list) => {
+      const o = list.find((x) => x.nosOp === work.opCode && x.saleTypes) ?? list.find((x) => x.saleTypes && x.stage !== "lost");
+      if (!o?.saleTypes) return;
+      setTypes(Object.fromEntries(Object.entries(o.saleTypes).map(([k, v]) => [k, Number(v).toFixed(2).replace(".", ",")])) as TypesDraft);
+      setProposed(Object.values(o.saleTypes).reduce((a, v) => a + Number(v), 0));
+    }).catch(() => undefined);
+  }, []);
   const [channel, setChannel] = useState("");
   const [followUp, setFollowUp] = useState<FollowUp | null>(null);
   const [at, setAt] = useState("");
@@ -216,7 +237,8 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   useEffect(() => { api.catalogs().then((x) => x.catalogs.opportunities?.channels?.length && setChannels(x.catalogs.opportunities.channels)).catch(() => undefined); }, []);
   const nums = typesToNumbers(types);
   const typesErr = saleTypesError(nums);
-  const ready = !typesErr && (!isProposal || (!!channel && !!at && !!followUp));
+  const ready = !typesErr && (!isProposal || (!!channel && !!at && !!followUp)) && confirmed;
+  const total = Object.values(nums).reduce((a, v) => a + (v ?? 0), 0);
   const mins = Math.max(1, Math.round((Date.now() - new Date(work.since).getTime()) / 60_000));
   const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
   function save() {
@@ -228,7 +250,11 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   return (
     <Modal title={`Guardar ${isProposal ? "a proposta" : "a venda"} · OP ${work.opCode ?? ""}`} onClose={onClose} width={640}>
       <span style={{ fontSize: 13, color: c.muted }}>{work.company} · em cliente há {mins} min</span>
-      <SaleTypesPicker types={types} setTypes={setTypes} />
+      {!isProposal && <span style={{ fontSize: 13, color: c.muted }}>{proposed != null ? `Proposta: ${proposed.toFixed(2).replace(".", ",")} €/mês. ` : ""}Confirme ou corrija o valor da venda, ao cêntimo.</span>}
+      <SaleTypesPicker types={types} setTypes={(f) => { if (!isProposal) setConfirmed(false); setTypes(f); }} />
+      {!isProposal && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 600 }}>
+        <input type="checkbox" checked={confirmed} disabled={!!typesErr} onChange={(e) => setConfirmed(e.target.checked)} /> Confirmo a venda: {total.toFixed(2).replace(".", ",")} €/mês
+      </label>}
       {Object.keys(types).length > 0 && typesErr && <span style={{ fontSize: 12, color: c.muted }}>{typesErr}</span>}
       {isProposal && (
         <Field label="Canal de envio · obrigatório">
@@ -249,4 +275,15 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
       </div>
     </Modal>
   );
+}
+
+/** «Cliente desistiu» (23 nov): motivo da recusa; a oportunidade fica Perdida e conta como recusa no dia. */
+function GiveUpDialog({ work, onClose, onDone }: { work: ClientWork; onClose: () => void; onDone: (d: DaySummary) => void }) {
+  const [reasons, setReasons] = useState<Reason[] | null>(null);
+  useEffect(() => { api.catalogs().then((x) => setReasons(x.catalogs.reasons.filter((r) => r.active))).catch(() => setReasons([])); }, []);
+  if (!reasons) return null;
+  let result: DaySummary | null = null;
+  return <Lose o={{ company: work.company ?? "" }} reasons={reasons} title={`Cliente desistiu · ${work.company ?? ""} · OP ${work.opCode ?? ""}`} button="Cliente desistiu"
+    submit={(reasonId, comment, extra) => api.giveUpClient({ reasonId, comment, ...extra }).then((d) => { result = d; })}
+    onClose={onClose} onDone={() => { if (result) onDone(result); }} />;
 }

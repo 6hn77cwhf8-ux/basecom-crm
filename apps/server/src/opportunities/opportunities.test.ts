@@ -35,7 +35,11 @@ describe.skipIf(!url)("Oportunidades", () => {
     await db.update(opportunities).set({ lastActivityAt: new Date(Date.now() - 7 * 86_400_000) }).where(eq(opportunities.id, o.id));
     expect((await listOpportunities(db, toPublic(ana))).find((x) => x.id === o.id)!.alert!.level).toBe("late");
     expect((await listOpportunities(db, toPublic(bia))).find((x) => x.id === o.id)).toBeUndefined();
-    await moveOpportunity(db, toPublic(ana), o.id, "proposal", "Enviada por email");
+    // 23 nov: a partir de «Proposta enviada» a OP é obrigatória.
+    await expect(moveOpportunity(db, toPublic(ana), o.id, "proposal", "Enviada por email")).rejects.toThrow(/OP/);
+    await expect(moveOpportunity(db, toPublic(ana), o.id, "proposal", undefined, "12345")).rejects.toThrow(/7 algarismos/);
+    await moveOpportunity(db, toPublic(ana), o.id, "survey");
+    await moveOpportunity(db, toPublic(ana), o.id, "proposal", "Enviada por email", "7123456");
     const after = (await listOpportunities(db, toPublic(ana))).find((x) => x.id === o.id)!;
     expect(after).toMatchObject({ stage: "proposal", alert: { level: "ok" } });
     await logOpportunityActivity(db, toPublic(ana), o.id, "Cliente pediu ajuste de preço");
@@ -45,10 +49,14 @@ describe.skipIf(!url)("Oportunidades", () => {
   it("ganha conquista a carteira; perdida exige motivo e só volta às campanhas depois do prazo", async () => {
     const c1 = await co(2), c2 = await co(3);
     const won = await createOpportunity(db, toPublic(ana), { companyId: c1 });
-    await winOpportunity(db, toPublic(ana), won.id);
+    // 23 nov: ganha pede a OP e o valor da venda ao cêntimo (pode ser diferente da proposta).
+    await expect(winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98 } })).rejects.toThrow(/OP/);
+    await expect(winOpportunity(db, toPublic(ana), won.id, { soldTypes: {}, nosOp: "7000001" })).rejects.toThrow();
+    await winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98.004 }, nosOp: "7000001" });
+    expect(await db.query.opportunities.findFirst({ where: eq(opportunities.id, won.id) })).toMatchObject({ stage: "won", soldValue: "98.00", soldTypes: { NN: 98 }, closedVia: "pipeline", closedBy: ana.id });
     expect((await db.query.companies.findFirst({ where: eq(companies.id, c1) }))!.ownerId).toBe(ana.id);
     expect((await db.select().from(walletChanges).where(eq(walletChanges.companyId, c1)))[0]!.kind).toBe("conquest");
-    await expect(winOpportunity(db, toPublic(ana), won.id)).rejects.toThrow(/fechada/);
+    await expect(winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98 } })).rejects.toThrow(/fechada/);
 
     const lost = await createOpportunity(db, toPublic(ana), { companyId: c2 });
     await expect(loseOpportunity(db, toPublic(ana), lost.id, "inexistente")).rejects.toThrow(/motivo/);
@@ -65,7 +73,7 @@ describe.skipIf(!url)("Oportunidades", () => {
   it("«Aguarda docs» há 2 dias cria uma única tarefa «Pedir documentos»; a previsão de pontos soma as propostas abertas", async () => {
     const c = await co(9);
     const o = await createOpportunity(db, toPublic(ana), { companyId: c });
-    await moveOpportunity(db, toPublic(ana), o.id, "documents");
+    await moveOpportunity(db, toPublic(ana), o.id, "documents", undefined, "7000009");
     expect(await docsReminders(db, ana.id)).toBe(0); // ainda não passaram 2 dias
     await db.update(opportunities).set({ stageChangedAt: new Date(Date.now() - 2 * 86_400_000 - 60_000) }).where(eq(opportunities.id, o.id));
     expect(await docsReminders(db, ana.id)).toBe(1);

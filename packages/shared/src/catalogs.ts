@@ -79,6 +79,8 @@ export const DEFAULT_REASONS: Reason[] = [
   { id: "closed", label: "Empresa encerrada ou sem atividade", effect: "company_closed", active: true },
   // 18 nov: como o RGPD, mas por tempo — sai de todas as campanhas e não se liga durante 12 meses (configurável).
   { id: "dissatisfied", label: "Insatisfeito NOS", effect: "dissatisfied", months: 12, active: true },
+  // 23 nov: recusa logo na abordagem; volta às campanhas ao fim de 120 dias (configurável).
+  { id: "approach", label: "Recusa à abordagem", effect: "cooldown", days: 120, active: true },
   { id: "other", label: "Outro", effect: "other", active: true },
 ];
 

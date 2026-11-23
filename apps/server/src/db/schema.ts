@@ -341,6 +341,12 @@ export const opportunities = pgTable("opportunities", {
   lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
+  /** Venda confirmada ao cêntimo (23 nov): tipos e valor vendidos (a proposta fica em saleTypes/proposedValue). */
+  soldTypes: jsonb("sold_types").$type<Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>>(),
+  soldValue: numeric("sold_value", { precision: 12, scale: 2 }),
+  /** Quem fechou e onde (pipeline | client | call): os fechos no Pipeline e no Em cliente contam no dia (23 nov). */
+  closedBy: uuid("closed_by").references(() => users.id),
+  closedVia: text("closed_via"),
 }, (t) => [index("opportunities_company_idx").on(t.companyId), index("opportunities_owner_idx").on(t.ownerId, t.stage)]);
 
 /** Tarefas (catálogo 7): criadas à mão ou automaticamente por chamadas, motivos e oportunidades. */

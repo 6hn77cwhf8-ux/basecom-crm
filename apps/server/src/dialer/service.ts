@@ -492,7 +492,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
           await tx.insert(walletChanges).values({ companyId: co.id, toOwnerId: user.id, kind: "conquest", effectiveFrom: now.toISOString().slice(0, 10), status: "applied", reason: "Primeira venda", createdBy: user.id, appliedAt: now });
           summary.push("Empresa conquistada para a sua carteira");
         }
-        await opportunity("won").then((id) => tx.update(opportunities).set({ closedAt: now }).where(eq(opportunities.id, id)));
+        await opportunity("won").then((id) => tx.update(opportunities).set({ closedAt: now, closedBy: user.id, closedVia: "call" }).where(eq(opportunities.id, id)));
         await setEntry({ status: "done" });
         break;
       }

@@ -110,7 +110,7 @@ export async function myDay(db: Db, user: PublicUser) {
   const oppsLate = opps.filter((o) => o.alert?.level === "late").length;
   const oppsWarn = opps.filter((o) => o.alert?.level === "warn").length;
   const cs = await callStats(db, user.id);
-  return { oppsLate, oppsWarn, ...(r.rows[0] as { effective: number; proposals: number; sales: number }), calls: cs.calls, refusals: cs.refusals, breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
+  return { oppsLate, oppsWarn, ...(r.rows[0] as { effective: number; proposals: number; sales: number }), sales: (r.rows[0] as { sales: number }).sales + cs.closedWon, calls: cs.calls, refusals: cs.refusals, breakUsed: t.used.break, breakLimit: t.limits.breakSeconds, worked: t.seconds.working, loggedIn: t.total,
     // Pontos do ciclo (previsão das propostas abertas; os confirmados chegam com o Arranque B).
     points: await (async () => { const forecast = await openProposalPoints(db, user.id); return { cycle: cycleForDate(new Date()).label, confirmed: 0, forecast, next: nextTier(forecast) }; })(),
     clientSeconds: t.seconds.client, officeSeconds: t.seconds.office, officeLimit: t.limits.officeSeconds, supportSeconds: t.seconds.support,

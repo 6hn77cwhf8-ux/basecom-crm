@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { cycleForDate, NSNR, nosRevenue, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
+import { cycleForDate, NSNR, proposalValue, saleTypesError, nosRevenue, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, companies, companyNotes, opportunities, tasks, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
@@ -14,13 +14,29 @@ import { canSee, visibleUserIds } from "../teams/service.js";
 
 const LABEL = Object.fromEntries(OPPORTUNITY_STAGES.map((s) => [s.id, s.label])) as Record<string, string>;
 const OPEN = OPPORTUNITY_STAGES.filter((s) => s.open).map((s) => s.id) as string[];
+/** 23 nov: a partir de «Proposta enviada» a OP (7 algarismos) é obrigatória. */
+export const NEEDS_OP = ["proposal", "negotiation", "documents", "won"];
+const OP_CODE = /^\d{7}$/;
+function checkOp(current: string | null, given?: string) {
+  const op = given?.trim() || current;
+  if (!op) throw new AuthError(400, "Indique a OP (7 algarismos) para passar a esta etapa.");
+  if (!OP_CODE.test(op)) throw new AuthError(400, "A OP tem 7 algarismos.");
+  return op;
+}
+/** Valores ao cêntimo (23 nov): arredonda cada tipo a 2 casas e valida os tipos. */
+export function soldTypesOrError(t: SaleTypes) {
+  const clean = Object.fromEntries(Object.entries(t).filter(([, v]) => v != null).map(([k, v]) => [k, Math.round(Number(v) * 100) / 100])) as SaleTypes;
+  const err = saleTypesError(clean);
+  if (err) throw new AuthError(400, err);
+  return { soldTypes: clean, soldValue: String(proposalValue(clean)) };
+}
 
 export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerId?: string; closed?: boolean } = {}) {
   const visible = await visibleUserIds(db, user);
   if (opts.ownerId && visible && !visible.includes(opts.ownerId)) throw new AuthError(403, "Só vê as oportunidades da sua equipa.");
   const owners = opts.ownerId ? [opts.ownerId] : visible;
   const rules = (await getSetting(db, "catalogs")).opportunities as OpportunityRules;
-  const r = await db.execute(sql`select o.id, o.stage, o.services, o.nos_op as "nosOp", o.sale_types as "saleTypes", o.proposed_value as "proposedValue", o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
+  const r = await db.execute(sql`select o.id, o.stage, o.services, o.nos_op as "nosOp", o.sale_types as "saleTypes", o.proposed_value as "proposedValue", o.sold_types as "soldTypes", o.sold_value as "soldValue", o.last_activity_at as "lastActivityAt", o.created_at as "createdAt", o.closed_at as "closedAt",
       o.lost_reason_id as "lostReasonId", o.company_id as "companyId", c.name as company, c.nif, c.l2b_monthly as "l2bMonthly", u.name as owner, u.photo as "ownerPhoto", o.owner_id as "ownerId",
       (select min(t.due_at) from tasks t where t.opportunity_id = o.id and t.status = 'open') as "nextTaskAt"
     from opportunities o join companies c on c.id = o.company_id join users u on u.id = o.owner_id
@@ -29,15 +45,15 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
     order by o.last_activity_at asc limit 1000`);
   const now = new Date();
   return (r.rows as Record<string, unknown>[]).map((o) => ({
-    ...(o as { id: string; stage: string; services: string | null; nosOp: string | null; saleTypes: Record<string, number> | null; proposedValue: string | null; ownerPhoto: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null }),
+    ...(o as { id: string; stage: string; services: string | null; nosOp: string | null; saleTypes: Record<string, number> | null; proposedValue: string | null; soldTypes: SaleTypes | null; soldValue: string | null; ownerPhoto: string | null; lastActivityAt: string; createdAt: string; closedAt: string | null; lostReasonId: string | null; companyId: string; company: string; nif: string; l2bMonthly: string | null; owner: string; ownerId: string; nextTaskAt: string | null }),
     stageLabel: LABEL[o.stage as string] ?? (o.stage as string),
     alert: OPEN.includes(o.stage as string) ? opportunityAlert(new Date(o.lastActivityAt as string), now, rules) : null,
   }));
 }
 
-async function load(db: Db, user: PublicUser, id: string) {
+async function load(db: Db, user: PublicUser, id: string, anyOwner = false) {
   const o = await db.query.opportunities.findFirst({ where: eq(opportunities.id, id) });
-  if (!o || (o.ownerId !== user.id && !(user.role !== "sales" && (await canSee(db, user, o.ownerId))))) throw new AuthError(404, "Oportunidade não encontrada.");
+  if (!o || (!anyOwner && o.ownerId !== user.id && !(user.role !== "sales" && (await canSee(db, user, o.ownerId))))) throw new AuthError(404, "Oportunidade não encontrada.");
   if (!OPEN.includes(o.stage)) throw new AuthError(409, "Esta oportunidade já está fechada.");
   return o;
 }
@@ -56,10 +72,11 @@ export async function createOpportunity(db: Db, user: PublicUser, input: { compa
   return o!;
 }
 
-export async function moveOpportunity(db: Db, user: PublicUser, id: string, stage: string, comment?: string) {
+export async function moveOpportunity(db: Db, user: PublicUser, id: string, stage: string, comment?: string, nosOp?: string) {
   const o = await load(db, user, id);
   if (!OPEN.includes(stage)) throw new AuthError(400, "Para fechar, use «Ganha» ou «Perdida».");
-  await db.update(opportunities).set({ stage, lastActivityAt: new Date(), ...(stage !== o.stage ? { stageChangedAt: new Date() } : {}) }).where(eq(opportunities.id, id));
+  const op = NEEDS_OP.includes(stage) ? checkOp(o.nosOp, nosOp) : nosOp?.trim() ? checkOp(null, nosOp) : o.nosOp;
+  await db.update(opportunities).set({ stage, nosOp: op, lastActivityAt: new Date(), ...(stage !== o.stage ? { stageChangedAt: new Date() } : {}) }).where(eq(opportunities.id, id));
   await note(db, o.companyId, user.id, `Oportunidade: ${LABEL[o.stage]} → ${LABEL[stage]}${comment?.trim() ? ` · ${comment.trim()}` : ""}`);
 }
 
@@ -72,23 +89,26 @@ export async function logOpportunityActivity(db: Db, user: PublicUser, id: strin
 }
 
 /** Ganha: negócio fechado. Se a empresa não tinha carteira, é conquistada (regra da primeira venda). O registo da venda chega com o Arranque B. */
-export async function winOpportunity(db: Db, user: PublicUser, id: string) {
+export async function winOpportunity(db: Db, user: PublicUser, id: string, input: { soldTypes: SaleTypes; nosOp?: string }) {
   const o = await load(db, user, id);
+  const op = checkOp(o.nosOp, input.nosOp);
+  const sold = soldTypesOrError(input.soldTypes ?? {});
   const now = new Date();
   await db.transaction(async (tx) => {
-    await tx.update(opportunities).set({ stage: "won", closedAt: now, lastActivityAt: now }).where(eq(opportunities.id, id));
+    await tx.update(opportunities).set({ stage: "won", nosOp: op, ...sold, ...(o.saleTypes ? {} : { saleTypes: sold.soldTypes, proposedValue: sold.soldValue }), closedAt: now, closedBy: user.id, closedVia: "pipeline", lastActivityAt: now }).where(eq(opportunities.id, id));
     const co = (await tx.query.companies.findFirst({ where: eq(companies.id, o.companyId) }))!;
     if (!co.ownerId) {
       await tx.update(companies).set({ ownerId: o.ownerId, walletKindConfirmed: true, updatedAt: now }).where(eq(companies.id, co.id));
       await tx.insert(walletChanges).values({ companyId: co.id, toOwnerId: o.ownerId, kind: "conquest", effectiveFrom: now.toISOString().slice(0, 10), status: "applied", reason: "Primeira venda (oportunidade ganha)", createdBy: user.id, appliedAt: now });
     }
-    await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: `Oportunidade ganha (${LABEL[o.stage]} → Ganha)` });
+    await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: `Oportunidade ganha (${LABEL[o.stage]} → Ganha) · OP ${op} · venda ${Number(sold.soldValue).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/mês` });
   });
 }
 
 /** Perdida: motivo obrigatório; volta às campanhas ao fim de seis meses, salvo prazo diferente do motivo. */
-export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string, operatorInfo?: { operator?: string; date?: string }) {
-  const o = await load(db, user, id);
+export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string, operatorInfo?: { operator?: string; date?: string }, via: "pipeline" | "client" = "pipeline") {
+  // Em cliente (23 nov): quem está a trabalhar a empresa fecha-a, mesmo que a oportunidade seja de outra carteira.
+  const o = await load(db, user, id, via === "client");
   const cat = await getSetting(db, "catalogs");
   const reason = (cat.reasons as Reason[]).find((r) => r.id === reasonId && r.active);
   if (!reason) throw new AuthError(400, "Escolha o motivo da perda.");
@@ -102,7 +122,7 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
   const days = reason.effect === "cooldown" ? reason.days ?? 0 : (cat.opportunities as OpportunityRules).lostReopenDays;
   const eligible = (nc?.eligibleAt ?? new Date(now.getTime() + days * 86_400_000)).toISOString().slice(0, 10);
   await db.transaction(async (tx) => {
-    await tx.update(opportunities).set({ stage: "lost", lostReasonId: reason.id, closedAt: now, lastActivityAt: now }).where(eq(opportunities.id, id));
+    await tx.update(opportunities).set({ stage: "lost", lostReasonId: reason.id, closedAt: now, closedBy: user.id, closedVia: via, lastActivityAt: now }).where(eq(opportunities.id, id));
     if (reason.effect === "company_closed") {
       await tx.update(companies).set({ inactive: true, updatedAt: now }).where(eq(companies.id, o.companyId));
       await tx.update(campaignEntries).set({ status: "removed" }).where(and(eq(campaignEntries.companyId, o.companyId), eq(campaignEntries.status, "pending")));
@@ -158,7 +178,7 @@ export async function pipelineStats(db: Db, user: PublicUser) {
   const cycle = cycleForDate(new Date());
   const metric: "eur" | "points" = user.role === "admin" ? "eur" : "points";
   const mult = metric === "eur" ? await getSetting(db, "nosRevenue") : null;
-  const r = await db.execute(sql`select o.stage, o.sale_types as "saleTypes", c.wallet_kind as "walletKind", o.closed_at as "closedAt", o.last_activity_at as "lastActivityAt",
+  const r = await db.execute(sql`select o.stage, case when o.stage = 'won' then coalesce(o.sold_types, o.sale_types) else o.sale_types end as "saleTypes", c.wallet_kind as "walletKind", o.closed_at as "closedAt", o.last_activity_at as "lastActivityAt",
       o.owner_id as "ownerId", u.name as owner, u.photo, t.name as team
     from opportunities o join companies c on c.id = o.company_id join users u on u.id = o.owner_id
       left join team_members tm on tm.user_id = o.owner_id left join teams t on t.id = tm.team_id

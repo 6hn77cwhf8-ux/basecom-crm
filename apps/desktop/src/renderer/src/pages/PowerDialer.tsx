@@ -164,6 +164,11 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
     setEndedAt(end); setGroup(answered === false ? "noanswer" : "refuse"); setResultKey((k) => k + 1); setPhase("result");
   });
 
+  // 23 nov: depois de guardar o resultado, «Iniciar chamada» / «Ligar já» ficam inativos X s (3 por omissão).
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const [, relock] = useState(0);
+  const locked = Date.now() < lockedUntil;
+  useEffect(() => { if (!lockedUntil) return; const t = setTimeout(() => relock((x) => x + 1), Math.max(0, lockedUntil - Date.now()) + 30); return () => clearTimeout(t); }, [lockedUntil]);
   async function save(r: ResultInput) {
     if (!callId) return;
     if (live) { pendingRef.current = r; setQueued(true); hangUpLive(); return; }
@@ -172,6 +177,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       // Decisor mudado na abertura: fica registado no histórico da empresa.
       const changed = decisor && (decisor.name !== cur?.people[0]?.name);
       const res = await api.saveResult(callId, changed ? { ...r, newDecisor: { salutation: decisor.salutation, name: decisor.name } } : r);
+      setLockedUntil(Date.now() + (cat?.timeLimits.nextCallLockSeconds ?? 3) * 1000);
       setCount((x) => x + 1); setLastSummary(`${res.outcome}${res.summary.length ? " · " + res.summary.filter((s) => !s.startsWith("Nova tentativa")).join(" · ") : ""}`);
       loadCampaigns();
       if (res.clientWork) { const t = await api.today(); setClient(t.client); setWorking(false); setWsKey((k) => k + 1); }
@@ -411,7 +417,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
                       )}
                     </div>
                   )}
-                  <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => start().catch((e) => setError(e.message))}>{working ? "Iniciar chamada" : "Em pausa"}</button></>
+                  <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || locked || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => !locked && start().catch((e) => setError(e.message))}>{!working ? "Em pausa" : locked ? "Aguarde…" : "Iniciar chamada"}</button></>
                 : <div style={{ display: "flex", gap: 8 }}>
                     {viaPhone && <MuteButton muted={muted} onClick={toggleMute} />}
                     <button style={{ ...btnDark, flex: 1, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>
@@ -440,7 +446,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
           {working ? <>
             <span style={{ fontSize: 40, fontWeight: 800 }}>{left}</span>
             <span style={{ fontSize: 14 }}>{left === 0 && pauseReason ? `Em pausa: ${pauseReason}` : `Próxima empresa em ${left} s`}</span>
-            <button style={btnDark} onClick={() => load(true)}>Ligar já</button>
+            <button style={btnDark} disabled={locked} onClick={() => !locked && load(true)}>{locked ? "Aguarde…" : "Ligar já"}</button>
           </> : <span style={{ fontSize: 16, fontWeight: 600 }}>Em pausa: a próxima empresa é marcada quando voltar a «A trabalhar».</span>}
         </section>
       )}

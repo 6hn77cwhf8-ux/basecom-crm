@@ -164,3 +164,8 @@ Investigado:
 5. **Nova recusa «Recusa à abordagem»:** 120 dias fora das campanhas (configurável), nos motivos de recusa e de perda.
 6. **3 segundos:** depois de guardar o resultado, «Iniciar chamada» fica inativo 3 s (configurável).
 7. **Chamada «Desligada» com o telemóvel ainda em chamada** (de vez em quando): a investigar (eventos da app Android/estado no Ligar).
+
+### Estado (23/11, noite)
+- 0.14.1 publicada às 19:34 (tags de campanha).
+- 0.15.0 construída e ensaiada com dados inventados (OP pedida no Pipeline; Ganha com valor confirmado ao cêntimo; Em cliente: tempo contínuo ao mudar Proposta↔Venda, estados bloqueados, «Cliente desistiu»; Recusa à abordagem 120 dias; 3 s sem ligar; fechos no Pipeline/Em cliente contam no «O meu dia»). App Android 0.15: corrige o «Desligada» com a chamada ainda a decorrer (a confirmar no uso real).
+- Fechos já feitos antes da 0.15 não têm valor vendido (ficam só com o valor proposto).
