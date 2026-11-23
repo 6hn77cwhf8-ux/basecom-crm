@@ -118,7 +118,7 @@ Prints recebidos: feedback anterior com linhas vazias; O meu dia (tema escuro); 
 
 Assinaturas recebidas a 19/11 (Ângela e Leonardo): construídas (cargo, telemóvel e email profissional por pessoa; modelo nas Configurações). Catarina ainda sem assinatura.
 
-## Erros e pedidos de 20/11/2026 (investigados, por decidir/construir)
+## Erros e pedidos de 20/11/2026 — FEITO na 0.14.0 (publicada a 23/11 à noite)
 
 1. **Contador dos 10 s chega a 0 e não marca** (Ângela, 2 vezes). Causa provável: com uma chamada a entrar (aviso aberto) o Ligar pausa a marcação (0.13). Na app Android, uma chamada em espera que deixa de tocar durante outra chamada pode ser lida como «atendida» (o telemóvel volta ao estado «em chamada»), o que abre a janela da recebida e mantém o Ligar em pausa. A confirmar com a Ângela (viu o aviso «Chamada a entrar»?).
 2. **Empresas recusadas voltaram a cair** (NIF 508657695 e 508898102). Causa provável: o resultado foi registado numa chamada fora da campanha (ex.: o cliente devolveu a chamada depois da SMS e a recusa foi dada na janela da chamada recebida, ou pela ficha). Nesse caso a entrada da campanha não é fechada e a empresa volta a ser marcada. Corrigir: um resultado com conversa, registado fora da campanha, fecha também as entradas por trabalhar dessa empresa em todas as campanhas.
@@ -143,3 +143,9 @@ Por publicar (feito a 19/11): assinatura no WhatsApp/email e telemóvel no fim d
 - **8. Abrir script (chamada recebida):** abre o Ligar com o script grande dessa empresa — o da campanha onde está, ou o por omissão (NN / Cliente NOS); o resultado fecha a entrada da campanha.
 - **9. Administrador** passa a chamar-se «Incognit Truth, Unipessoal Lda»; o Leonardo tem login próprio como Chefe de Equipa (assinatura e «Ligar pelo computador» nesse login).
 - **10. SMS «Tentámos ligar»:** enviada sozinha pela app (autorização de SMS dada uma vez em cada telemóvel); histórico com «SMS enviada» / «falhou».
+
+### Estado (23/11)
+- Tudo construído na 0.14.0 e ensaiado com dados inventados. O prazo de segunda às 08:00 falhou (a sessão parou durante a noite); publicada na segunda, 23/11, depois das 19:35.
+- Também na 0.14: o Administrador pode mudar nomes em Equipa comercial; «Receita NOS (multiplicadores)» nas Configurações.
+- A confirmar no uso real: contador do Ligar (ver «Ligar parado no 0» na auditoria se voltar a acontecer); SMS automática nos 3 telemóveis.
+- Por fazer pelo Leonardo: atualizar a app nos 3 telemóveis e dar a autorização de SMS; criar o login de Chefe de Equipa (Leonardo Rocha) se ainda não existir; assinatura da Catarina em falta.
