@@ -87,6 +87,19 @@ describe.skipIf(!url)("campanhas: que empresas entram", () => {
     expect((await previewCampaign(db, { districts: [district] }, [ana.id])).total).toBe(4);
   });
 
+  it("tags: entra quem tiver qualquer uma das escolhidas; com menos do mínimo não dá para criar a campanha", async () => {
+    await company("com-mj", { tags: ["MJ", "Zona-Porto"] });
+    await company("com-porto", { tags: ["Zona-Porto"] });
+    await company("sem-tags", {});
+    const base = { districts: [district] };
+    const all = (await previewCampaign(db, base, [ana.id])).total;
+    expect((await previewCampaign(db, { ...base, tags: ["MJ"] }, [ana.id])).total).toBe(1);
+    expect((await previewCampaign(db, { ...base, tags: ["MJ", "Zona-Porto"] }, [ana.id])).total).toBe(2);
+    expect(all).toBeGreaterThanOrEqual(3);
+    await expect(createCampaign(db, toPublic(admin), { name: `Tags ${tag}`, mode: "new", script: "", filters: { ...base, tags: ["MJ"] }, memberIds: [ana.id] })).rejects.toThrow(/menos de 250/);
+    await expect(createCampaign(db, toPublic(admin), { name: `Tags ${tag}`, mode: "new", script: "", filters: { ...base, tags: ["Inventada"] }, memberIds: [ana.id] })).rejects.toThrow(/fora da lista/);
+  });
+
   it("valor L2B e meses para o fim da permanência; trazer de outra campanha move as empresas", async () => {
     await company("barata", { l2bMonthly: "30", loyaltyMonths: 5 });
     await company("media", { l2bMonthly: "150", loyaltyMonths: 18 });
