@@ -51,9 +51,9 @@ export async function listOpportunities(db: Db, user: PublicUser, opts: { ownerI
   }));
 }
 
-async function load(db: Db, user: PublicUser, id: string) {
+async function load(db: Db, user: PublicUser, id: string, anyOwner = false) {
   const o = await db.query.opportunities.findFirst({ where: eq(opportunities.id, id) });
-  if (!o || (o.ownerId !== user.id && !(user.role !== "sales" && (await canSee(db, user, o.ownerId))))) throw new AuthError(404, "Oportunidade não encontrada.");
+  if (!o || (!anyOwner && o.ownerId !== user.id && !(user.role !== "sales" && (await canSee(db, user, o.ownerId))))) throw new AuthError(404, "Oportunidade não encontrada.");
   if (!OPEN.includes(o.stage)) throw new AuthError(409, "Esta oportunidade já está fechada.");
   return o;
 }
@@ -107,7 +107,8 @@ export async function winOpportunity(db: Db, user: PublicUser, id: string, input
 
 /** Perdida: motivo obrigatório; volta às campanhas ao fim de seis meses, salvo prazo diferente do motivo. */
 export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string, operatorInfo?: { operator?: string; date?: string }, via: "pipeline" | "client" = "pipeline") {
-  const o = await load(db, user, id);
+  // Em cliente (23 nov): quem está a trabalhar a empresa fecha-a, mesmo que a oportunidade seja de outra carteira.
+  const o = await load(db, user, id, via === "client");
   const cat = await getSetting(db, "catalogs");
   const reason = (cat.reasons as Reason[]).find((r) => r.id === reasonId && r.active);
   if (!reason) throw new AuthError(400, "Escolha o motivo da perda.");
