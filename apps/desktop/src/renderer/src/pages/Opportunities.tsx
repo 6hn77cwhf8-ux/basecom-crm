@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cycleForDate, OPPORTUNITY_STAGES, operatorRefusalNote } from "@basecom/shared";
 import { type PipelineAgg, type PipelineStats, api, type Catalogs, type Opportunity, type Reason, type User } from "../api";
-import { Avatar, btn, btnDark, c, card, Chip, CopyButton, ErrorText, Field, fmtDate, fmtEur, input, PageHeader } from "../ui";
+import { Avatar, btn, btnDark, c, card, Chip, CopyButton, ErrorText, Field, fmtDate, fmtEur, fmtInt, input, PageHeader } from "../ui";
 import { Modal } from "./Wallet";
 import { DatePicker } from "./DatePicker";
 
@@ -15,7 +15,7 @@ const STAGE_COLOR: Record<string, { bg: string; ink: string; bar: string }> = {
   negotiation: { bg: "#0369A1", ink: "#FFFFFF", bar: "#38BDF8" },
   documents: { bg: "#7C3AED", ink: "#FFFFFF", bar: "#A78BFA" },
 };
-const eur = (n: number) => `${n.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+const eur = (n: number) => fmtEur(n);
 const value = (o: Opportunity) => Number(o.proposedValue ?? 0);
 
 /**
@@ -300,7 +300,7 @@ function PipelineNumbers({ me }: { me: User }) {
   const [by, setBy] = useState<"total" | "user" | "team">("total");
   useEffect(() => { api.pipelineStats().then(setS).catch(() => undefined); }, []);
   if (!s) return null;
-  const fmt = (v: number) => (s.metric === "eur" ? eur(v) : `${Math.round(v).toLocaleString("pt-PT")} pts`);
+  const fmt = (v: number) => (s.metric === "eur" ? eur(v) : `${fmtInt(v)} pts`);
   const unit = s.metric === "eur" ? "Receita NOS ponderada" : "pontos do plano";
   const tiles: [string, string, string][] = [
     ["N.º de OPs", String(s.total.open), `abertas · ${fmt(s.total.openValue)}`],
