@@ -277,7 +277,12 @@ class PhoneService : Service() {
                 val since = busySince
                 busySince = 0L
                 if (since > 0) main.postDelayed({ reportMissedSince(since) }, 3_000)
-                if (outCallId != null && outOffhook) main.postDelayed({ finishOutgoing(null) }, 2_000)
+                // 23 nov: guarda AGORA qual é a chamada que acabou. Se, nos 2 s de espera, o telemóvel voltar a estar em chamada
+                // (estado trocado por momentos ou nova chamada já a marcar), não se dá por terminada a chamada errada.
+                val endedId = outCallId
+                if (endedId != null && outOffhook) main.postDelayed({
+                    if (outCallId == endedId && isIdleNow()) finishOutgoing(null)
+                }, 2_000)
                 if (inRinging) {
                     val n = inNumber
                     inRinging = false; inAnswered = false
@@ -286,6 +291,12 @@ class PhoneService : Service() {
             }
         }
     }
+
+    /** O telemóvel está mesmo sem chamada? (se não for possível saber, assume que sim, como antes). */
+    @Suppress("DEPRECATION")
+    private fun isIdleNow(): Boolean = try {
+        (getSystemService(TELEPHONY_SERVICE) as TelephonyManager).callState == TelephonyManager.CALL_STATE_IDLE
+    } catch (_: Exception) { true }
 
     /** Duração da última chamada no registo do telemóvel (0 = não atendida). */
     private fun lastDuration(type: Int, number: String?): Int {
