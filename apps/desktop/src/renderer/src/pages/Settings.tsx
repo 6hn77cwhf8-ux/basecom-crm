@@ -6,9 +6,10 @@ import { Campaigns } from "./Campaigns";
 import { CatalogSettings } from "./CatalogSettings";
 import { TeamsSettings } from "./TeamsSettings";
 
-type Section = "timeLimits" | "catalogs" | "messages" | "campaigns" | "teams" | "auth" | "audit";
+type Section = "timeLimits" | "nosRevenue" | "catalogs" | "messages" | "campaigns" | "teams" | "auth" | "audit";
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "timeLimits", label: "Limites de tempo" },
+  { id: "nosRevenue", label: "Receita NOS (multiplicadores)" },
   { id: "catalogs", label: "Catálogos (resultados, motivos, prazos)" },
   { id: "messages", label: "Mensagens (WhatsApp, SMS, email)" },
   { id: "campaigns", label: "Campanhas e scripts" },
@@ -17,8 +18,8 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: "audit", label: "Histórico de auditoria" },
 ];
 
-type NumericKey = "timeLimits" | "auth";
-const FIELDS: { [K in NumericKey]: { key: keyof S[K]; label: string; unit: string; note?: string }[] } = {
+type NumericKey = "timeLimits" | "auth" | "nosRevenue";
+const FIELDS: { [K in NumericKey]: { key: keyof S[K]; label: string; unit: string; note?: string; step?: number }[] } = {
   timeLimits: [
     { key: "resultSeconds", label: "Registar o resultado após a chamada", unit: "s", note: "Se ultrapassar, o Chefe de Equipa é avisado" },
     { key: "nextCallSeconds", label: "Espera até marcar a empresa seguinte", unit: "s" },
@@ -31,6 +32,12 @@ const FIELDS: { [K in NumericKey]: { key: keyof S[K]; label: string; unit: strin
     { key: "breakMinutes", label: "Intervalo", unit: "min/dia", note: "Se ultrapassar, o Administrador é avisado" },
     { key: "dailyMinutes", label: "Horas previstas (segunda a sexta)", unit: "min/dia", note: "Para o saldo do ponto (480 = 8 h). O almoço não conta" },
     { key: "saturdayMinutes", label: "Horas previstas ao sábado", unit: "min", note: "255 = 4 h 15 (08:45–13:00)" },
+  ],
+  nosRevenue: [
+    { key: "NN", label: "NN", unit: "× valor", step: 0.1, note: "Só a gerência vê. Valor em € do Pipeline do Administrador. FC conta metade" },
+    { key: "XSell", label: "XSell", unit: "× valor", step: 0.1 },
+    { key: "FID", label: "FID", unit: "× valor", step: 0.1 },
+    { key: "Upsell", label: "Upsell", unit: "× valor", step: 0.1 },
   ],
   auth: [
     { key: "maxFailedLogins", label: "Tentativas erradas antes de bloquear", unit: "vezes" },
@@ -75,7 +82,7 @@ function Limits({ kind }: { kind: NumericKey }) {
         <div key={String(f.key)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${c.line}`, fontSize: 14 }}>
           <span>{f.label}{f.note && <span style={{ display: "block", fontSize: 12, color: c.muted }}>{f.note}</span>}</span>
           <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input type="number" min={0} aria-label={f.label} style={{ ...input, width: 80, textAlign: "right" }} value={value[f.key as string]} onChange={(e) => { setSaved(false); setValue({ ...value, [f.key]: Number(e.target.value) }); }} />
+            <input type="number" min={0} step={f.step ?? 1} aria-label={f.label} style={{ ...input, width: 80, textAlign: "right" }} value={value[f.key as string]} onChange={(e) => { setSaved(false); setValue({ ...value, [f.key]: Number(e.target.value) }); }} />
             <span style={{ fontSize: 12, color: c.muted, width: 56 }}>{f.unit}</span>
           </span>
         </div>
@@ -98,6 +105,7 @@ const ACTIONS: Record<string, string> = {
   "2fa_ativada": "Ativou a 2FA", palavra_passe_alterada: "Alterou a palavra-passe", utilizador_criado: "Criou utilizador",
   utilizador_alterado: "Alterou utilizador", palavra_passe_reposta: "Repôs palavra-passe", "2fa_reposta": "Repôs 2FA",
   sessao_terminada: "Terminou sessão", configuracao_alterada: "Alterou configuração",
+  empresa_criada: "Empresa criada no CRM", dialer_parado: "Ligar parado no 0",
 };
 
 const GROUPS: [string, string][] = [["", "Tudo"], ["imports", "Importações"], ["wallet", "Carteiras"], ["contacts", "Contactos"], ["campaigns", "Campanhas"], ["access", "Entradas e segurança"], ["admin", "Utilizadores e configurações"]];

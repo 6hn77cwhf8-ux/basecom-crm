@@ -9,6 +9,7 @@ import { DatePicker } from "./DatePicker";
 
 export function Team({ me }: { me: User }) {
   const isAdmin = me.role === "admin";
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [list, setList] = useState<TeamMember[]>([]);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -49,7 +50,15 @@ export function Team({ me }: { me: User }) {
               <tr key={u.id} style={{ borderBottom: `1px solid ${c.line}`, opacity: u.active ? 1 : 0.55 }}>
                 <td style={{ padding: "10px 12px", fontWeight: 600 }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Avatar name={u.name} photo={u.photo} size={30} />{u.name}
+                    <Avatar name={u.name} photo={u.photo} size={30} />
+                    {renaming?.id === u.id ? (
+                      <form style={{ display: "flex", gap: 6 }} onSubmit={(e) => { e.preventDefault(); const n = renaming.name.trim(); if (n.length >= 2) act(() => api.updateUser(u.id, { name: n })).then(() => setRenaming(null)); }}>
+                        <input autoFocus aria-label={`Nome de ${u.name}`} style={{ ...input, height: 30, width: 240 }} value={renaming.name} onChange={(e) => setRenaming({ id: u.id, name: e.target.value })} />
+                        <button type="submit" style={{ ...btnDark, height: 30, fontSize: 12 }} disabled={renaming.name.trim().length < 2}>Guardar</button>
+                        <button type="button" style={{ ...btn, height: 30, fontSize: 12 }} onClick={() => setRenaming(null)}>Cancelar</button>
+                      </form>
+                    ) : u.name}
+                    {isAdmin && renaming?.id !== u.id && <button title="Mudar o nome" onClick={() => setRenaming({ id: u.id, name: u.name })} style={{ border: 0, background: "none", padding: 0, fontSize: 12, fontWeight: 500, color: c.muted, textDecoration: "underline", cursor: "pointer", fontFamily: "inherit" }}>nome</button>}
                     {isAdmin && (
                       <label title="Carregar a foto" style={{ fontSize: 12, fontWeight: 500, color: c.muted, textDecoration: "underline", cursor: "pointer" }}>foto
                         <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) act(() => resizePhoto(f).then((ph) => api.setPhoto(u.id, ph))); }} />

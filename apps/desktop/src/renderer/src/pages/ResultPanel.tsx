@@ -150,7 +150,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${c.line}`, borderRadius: 12 }}>
           <Field label="Operadora atual (obrigatório)"><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: o })}>{o}</button>)}</div></Field>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Field label="Fim de fidelização (obrigatório)"><DatePicker value={date === "NS/NR" ? "" : date} onChange={setDate} disabled={date === "NS/NR"} width={200} ariaLabel="Fim de fidelização" /></Field>
+            <Field label="Fim de fidelização (obrigatório)"><DatePicker value={date === "NS/NR" ? "" : date} onChange={setDate} disabled={date === "NS/NR"} width={200} ariaLabel="Fim de fidelização" min={tomorrow()} /></Field>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600, alignSelf: "flex-end", height: 40 }}><input type="checkbox" checked={date === "NS/NR"} onChange={(e) => setDate(e.target.checked ? "NS/NR" : "")} /> Cliente não refere (NS/NR)</label>
           </div>
           {comp.operator && date && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(comp.operator, date, reason?.monthsBefore ?? 4, reason?.unknownMonths ?? 6)}</div>}
@@ -217,7 +217,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Feedback de outra operadora</summary>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
           <Field label="Operadora atual"><div style={{ display: "flex", gap: 4 }}>{OPERATORS.map((o) => <button key={o} style={{ ...pill(comp.operator === o), height: 30, fontSize: 12 }} onClick={() => setComp({ ...comp, operator: comp.operator === o ? undefined : o })}>{o}</button>)}</div></Field>
-          <Field label="Fim de fidelização"><DatePicker value={date} onChange={setDate} width={180} ariaLabel="Fim de fidelização" /></Field>
+          <Field label="Fim de fidelização"><DatePicker value={date} onChange={setDate} width={180} ariaLabel="Fim de fidelização" min={tomorrow()} /></Field>
         </div>
         <Field label="O que diz da operadora atual"><input style={{ ...input, marginTop: 6 }} value={comp.text ?? ""} onChange={(e) => setComp({ ...comp, text: e.target.value || undefined })} placeholder="Ex.: paga 120 €/mês por 4 linhas e internet" /></Field>
       </details>}
@@ -235,3 +235,6 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
     </section>
   );
 }
+
+/** O fim de fidelização é sempre uma data futura (a partir de amanhã). */
+function tomorrow() { const d = new Date(); d.setDate(d.getDate() + 1); return toLocal(d).slice(0, 10); }

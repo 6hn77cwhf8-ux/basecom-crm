@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CompanyFilters, type CompanyKpis, type CompanyRow, type FilterOptions, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtEur, fmtInt, input, Kpi, PageHeader, td, th } from "../ui";
+import { NewCompanyDialog } from "./NewCompany";
 import { DeleteDialog, ScheduledDialog, TransferDialog } from "./Wallet";
 
 const PAGE = 50;
@@ -17,7 +18,7 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   const [error, setError] = useState("");
   const isAdmin = me.role === "admin";
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [dialog, setDialog] = useState<"transfer" | "scheduled" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"transfer" | "scheduled" | "delete" | "new" | null>(null);
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
 
@@ -44,9 +45,10 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
   return (
     <>
       <PageHeader eyebrow="Base de dados" title="Empresas"
-        actions={isAdmin && <>
-          <button style={btn} onClick={() => setDialog("scheduled")}>Transferências agendadas</button>
-          <button style={btnDark} onClick={onImport} title="Só o Administrador">Importar ficheiro</button>
+        actions={<>
+          {isAdmin && <button style={btn} onClick={() => setDialog("scheduled")}>Transferências agendadas</button>}
+          {isAdmin && <button style={btn} onClick={onImport} title="Só o Administrador">Importar ficheiro</button>}
+          <button style={btnDark} onClick={() => setDialog("new")}>Nova empresa</button>
         </>} />
       {notice && <p role="status" style={{ margin: 0, padding: "10px 14px", borderRadius: 10, background: c.okSoft, color: c.ok, fontSize: 14, fontWeight: 600 }}>{notice}</p>}
       {isAdmin && picked.size > 0 && (
@@ -63,6 +65,8 @@ export function Companies({ me, onOpen, onImport }: { me: User; onOpen: (id: str
         onDone={(msg) => { setDialog(null); setPicked(new Set()); setNotice(msg); setReload((x) => x + 1); api.companyKpis().then(setKpis).catch(() => undefined); }} />}
       {dialog === "delete" && <DeleteDialog ids={[...picked]} label={`${fmtInt(picked.size)} empresa(s)`} onClose={() => setDialog(null)}
         onDone={(msg) => { setDialog(null); setPicked(new Set()); setNotice(msg); setReload((x) => x + 1); api.companyKpis().then(setKpis).catch(() => undefined); }} />}
+      {dialog === "new" && <NewCompanyDialog onClose={() => setDialog(null)}
+        onOpen={(id, existed) => { setDialog(null); setNotice(existed ? "Este NIF já existia no CRM: abrimos a ficha da empresa que já existe." : "Empresa criada."); setReload((x) => x + 1); onOpen(id); }} />}
       {dialog === "scheduled" && <ScheduledDialog onClose={() => setDialog(null)} onChange={() => setReload((x) => x + 1)} />}
 
       <div style={{ display: "flex", gap: 12 }}>

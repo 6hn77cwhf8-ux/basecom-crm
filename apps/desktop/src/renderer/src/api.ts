@@ -10,6 +10,7 @@ export type Settings = {
   messages: { templates: { id: string; label: string; text: string; active: boolean }[]; signature?: string };
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
   timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number; resultAlertSeconds: number; shortCallSeconds: number };
+  nosRevenue: { NN: number; XSell: number; FID: number; Upsell: number };
 };
 export type CompanyRow = {
   id: string; nif: string; name: string; accountType: "client" | "prospect"; municipality: string | null; locality: string | null; district: string | null; sector: string | null;
@@ -37,6 +38,11 @@ export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_
 /** «Guardar e fechar» do Em cliente (17 nov): tipos e valor; na proposta, canal, próxima ação e data. */
 export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; followUp?: "call" | "sms" | "email" | "whatsapp"; at?: string; comment?: string };
 export type ReceivedCall = { id: string; number: string; ringingAt: string; answered: boolean | null; durationSeconds: number | null; endedAt: string | null; returned: boolean; missed: boolean; companies: { id: string; name: string; nif: string }[] };
+export type NewCompany = {
+  nif: string; name: string; kind: "NN" | "NC" | "FC"; phones?: string[]; email?: string | null; decisor?: string | null;
+  address?: string | null; postalCode?: string | null; locality?: string | null; municipality?: string | null; district?: string | null;
+  sector?: string | null; operator?: string | null; l2bMonthly?: number | null; loyaltyMonths?: number | null; loyaltyEnd?: string | null; note?: string | null;
+};
 export type PipelineAgg = { open: number; openValue: number; late: number; won: number; wonValue: number; lost: number; lostValue: number };
 export type PipelineStats = { metric: "eur" | "points"; cycle: string; total: PipelineAgg; byUser: (PipelineAgg & { id: string; name: string; photo: string | null; team: string | null })[]; byTeam: (PipelineAgg & { name: string })[] };
 export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[]; opportunities?: { channels?: string[] } }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
@@ -164,6 +170,7 @@ export const api = {
   scheduledTransfers: () => call<{ changes: ScheduledChange[] }>("/wallet/scheduled").then((r) => r.changes),
   cancelTransfer: (id: string) => call(`/wallet/scheduled/${id}/cancel`, { method: "POST", body: "{}" }),
   setWalletKind: (id: string, kind: "NC" | "FC", reason: string) => call(`/companies/${id}/wallet-kind`, { method: "POST", body: JSON.stringify({ kind, reason }) }),
+  createCompany: (b: NewCompany) => call<{ id: string; existed: boolean }>("/companies", { method: "POST", body: JSON.stringify(b) }),
   deleteCompanies: (ids: string[], reason: string, code: string) => call<{ deleted: number }>("/companies/delete", { method: "POST", body: JSON.stringify({ ids, reason, code }) }),
   setDoNotContact: (id: string, value: boolean, reason: string) => call(`/companies/${id}/do-not-contact`, { method: "POST", body: JSON.stringify({ value, reason }) }),
   identifyKind: (id: string, kind: "NC" | "FC") => call(`/companies/${id}/identify-kind`, { method: "POST", body: JSON.stringify({ kind }) }),

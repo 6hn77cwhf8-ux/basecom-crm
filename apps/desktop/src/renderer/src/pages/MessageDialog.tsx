@@ -10,7 +10,7 @@ const CHANNELS: [Channel, string][] = [["whatsapp", "WhatsApp"], ["sms", "SMS"],
 /**
  * Mensagem rápida (desenho 10, 17 nov): modelo com o nome do decisor, a empresa, a OP e o comercial.
  * WhatsApp abre o WhatsApp do computador (ou o WhatsApp Web) com o texto; Email abre o programa de email;
- * SMS abre a mensagem no telemóvel BASECOM emparelhado. Quem envia é sempre o comercial. Fica no histórico.
+ * SMS é enviada pelo telemóvel BASECOM emparelhado (sem autorização, abre a mensagem). Quem envia é sempre o comercial. Fica no histórico.
  */
 export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent }: { companyId: string; me: { name: string; mobile?: string | null }; initialTemplate?: string; onClose: () => void; onSent?: () => void }) {
   const [d, setD] = useState<CompanyDetail | null>(null);
@@ -56,7 +56,7 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
         window.open(`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`);
       }
       await api.logMessage(companyId, { channel, templateId: tpl || undefined, to, text });
-      setDone(channel === "sms" ? "Enviado para o telemóvel: abra a mensagem no telemóvel e carregue em enviar." : "Aberto. Fica registado no histórico da empresa.");
+      setDone(channel === "sms" ? "Enviada para o telemóvel BASECOM: segue sozinha (se o telemóvel não tiver autorização de SMS, abre a mensagem para carregar em enviar). O resultado fica no histórico." : "Aberto. Fica registado no histórico da empresa.");
       onSent?.();
     } catch (e) { setErr((e as Error).message); }
   }
