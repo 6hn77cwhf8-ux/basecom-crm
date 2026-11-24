@@ -169,3 +169,16 @@ Investigado:
 - 0.14.1 publicada às 19:34 (tags de campanha).
 - 0.15.0 construída e ensaiada com dados inventados (OP pedida no Pipeline; Ganha com valor confirmado ao cêntimo; Em cliente: tempo contínuo ao mudar Proposta↔Venda, estados bloqueados, «Cliente desistiu»; Recusa à abordagem 120 dias; 3 s sem ligar; fechos no Pipeline/Em cliente contam no «O meu dia»). App Android 0.15: corrige o «Desligada» com a chamada ainda a decorrer (a confirmar no uso real).
 - Fechos já feitos antes da 0.15 não têm valor vendido (ficam só com o valor proposto).
+
+## Pedidos de 24/11/2026 — decididos, por construir (0.16; NÃO publicar sem ordem do Leonardo)
+
+1. **Formação:** na Equipa comercial sai, mas o ecrã do comercial continua «Em formação» e o Ligar parado. Causa provável: o ecrã só relê o estado de 30 em 30 s e o Ligar guarda o seu próprio estado. Fazer: o sinal de presença (15 s) devolve o estado e o ecrã atualiza logo; o Ligar retoma; aviso «O seu responsável terminou a formação».
+2. **Tags e juntar grupos nas campanhas:** todas as tags podem ser escolhidas (abaixo do mínimo só avisa). Juntam sempre (OU): Tags, Meses para o fim da permanência, Fim de fidelização (datas), Campanha NBO. Valor L2B: botão «Juntar / Restringir» em cada campanha. Os outros filtros restringem (E). Regra: restrições E (qualquer um dos que juntam).
+3. **«Com quem está a falar?» trocado** (recebida atendida ao mesmo tempo que o script marcava): mostrar os dois números e as duas empresas; se o número que entra é da empresa do script, é a mesma conversa (não pergunta); número em várias empresas → mostrar todas (hoje apanha uma qualquer); registar cada caso.
+4. **Ligar ao cliente durante a proposta (Em cliente) sem feedback:** botão «Ligar ao cliente»; no fim, nota opcional; histórico «Chamada durante a proposta · OP X · duração / não atendeu»; não conta como chamada de campanha; o tempo Em cliente continua.
+5. **Callback de outra campanha:** faixa laranja larga por cima do script «CALLBACK · campanha X · marcado por Y para as HH:MM» e script rodeado a laranja.
+6. **Avisos de tarefas da Agenda:** banner laranja no topo à hora marcada (em qualquer ecrã, mesmo em chamada, sem a cortar) com «Abrir» e «Daqui a 10 min»; caixa vermelha por cima de «Terminar sessão» com as tarefas em atraso até serem feitas; som curto (não toca durante uma chamada).
+7. **Ganha/Perdida (Pipeline e Em cliente) fecha as tarefas dessa oportunidade** e os follow-ups de chamada dessa empresa na fila; outras tarefas da empresa ficam.
+8. **Retribuir a chamada abre sempre o script grande:** «Ligar de volta» nas Chamadas recebidas e nas não atendidas (aviso e menu do número) abre o Ligar com o script dessa empresa.
+9. **Ecrã proporcional em todo o CRM:** letra, caixas e espaços escalam com a janela; no Ligar o script cabe sempre inteiro, sem scroll. Ensaiar em 1280×800, 1366×768 e 1920×1080.
+10. **Telemóveis:** OPPO a funcionar bem; TCL por testar (qualidade da chamada e eventos).
