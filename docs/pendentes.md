@@ -186,13 +186,13 @@ Investigado:
 ## Pedidos de 25/11/2026 — decididos, por construir (juntar à 0.16; NÃO publicar sem ordem do Leonardo)
 
 Respostas do Leonardo:
-- **Fidelizado recentemente (NOS)** (nova recusa): contacta-se sempre **8 meses antes do fim da fidelização atual** (24 meses → aos 16; 36 meses → aos 28). Na nova fidelização, por omissão 36 (a 21: decisão nossa, em teoria 36).
+- **Fidelizado recentemente (NOS)** (nova recusa): contacta-se sempre **8 meses DEPOIS do início do contrato** (corrigido a 25/11): contrato de 36 → liga quando faltarem **28**; contrato de 24 → quando faltarem **16**. Na nova fidelização, por omissão 36 (a 21: decisão nossa, em teoria 36).
 - **Recusas que obrigam a deixar a informação do cliente** (mensalidade L2B e meses de permanência): só **recusa depois de proposta** (Perdida no Pipeline, «Cliente desistiu», recusa de empresa com proposta) e **Fidelizado recentemente**. As outras (ex.: Recusa à abordagem, Tem gestor) fecham só com o motivo, sem ir ao programa nem identificar NC/FC.
 - **Ganha:** separar **valor ponderado** (o que se escreve por tipo, já com a FID proporcional; conta para os pontos; o total diz «Ponderado», sem «€/mês») de **nova mensalidade do cliente (L2B)** e **fidelização 24/36 meses**, obrigatórios, que atualizam a ficha.
 - **L2B na venda muda no Ganha**, a contar da data do fecho (fim = fecho + 24/36 meses); quando houver a data de ativação (Arranque B), passa a contar da ativação.
 
 Decidido pelo Claude (o Leonardo pediu para responder às perguntas):
-- **O que o comercial escreve:** os **meses que faltam** (a data de fim aparece logo). O CRM guarda a **data de fim de fidelização** e os meses descontam sozinhos na ficha e no L2B. Contacto automático = fim − 8 meses (configurável); se faltarem 8 ou menos, entra já nas campanhas.
+- **O que o comercial escreve:** a **fidelização (24 ou 36 meses)** e os **meses que faltam** (a data de fim aparece logo). O CRM guarda a **data de fim de fidelização** e os meses descontam sozinhos na ficha e no L2B. Contacto automático = início do contrato + 8 meses (configurável), ou seja, quando faltarem 28 (de 36) ou 16 (de 24). Ex.: 36, faltam 34 → liga daqui a 6 meses. Se já faltarem 28/16 ou menos, entra já nas campanhas.
 - **Campanhas por permanência:** o filtro passa a «**Faltam de X a Y meses**» (livre, ex.: 0–8, até 31), calculado a partir da data de fim; atalho «≤ 8 meses». Junta (OU) com os outros filtros de juntar, como decidido a 24/11.
 - **Nova recusa «Tem gestor»:** volta às campanhas ao fim de **120 dias** (configurável); fecha só com o motivo.
 - **Ponto em horas:** «7 h 32» (abaixo de 1 hora, «45 min»), igual na Equipa comercial, no «O meu dia» e no Excel.
