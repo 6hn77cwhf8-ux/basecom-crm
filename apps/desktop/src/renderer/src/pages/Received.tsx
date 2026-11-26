@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatPhone } from "@basecom/shared";
-import { api, type ReceivedCall, type User } from "../api";
+import { api, OPEN_SCRIPT_EVENT, type ReceivedCall, type User } from "../api";
 import { btn, btnDark, c, card, ErrorText, tone } from "../ui";
 import { QuickCall } from "./QuickCall";
 
@@ -15,6 +15,7 @@ const when = (iso: string) => {
  * Carregar no número abre a ficha (ou mostra as empresas, se houver várias). «Devolver chamada» liga pelo telemóvel.
  */
 export function Received({ me, onOpenCompany }: { me: User; onOpenCompany: (id: string) => void }) {
+  const bigScript = me.role !== "admin";
   const [rows, setRows] = useState<ReceivedCall[] | null>(null);
   const [tab, setTab] = useState<"missed" | "all">("missed");
   const [open, setOpen] = useState<string | null>(null);
@@ -31,6 +32,8 @@ export function Received({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
       const d = await api.company(co.id);
       const ct = d.contacts.find((x) => x.kind === "phone" && x.value === r.number);
       if (!ct) { onOpenCompany(co.id); return; }
+      // 24 nov: retribuir abre sempre o script grande no Ligar (comercial e Chefe de Equipa).
+      if (bigScript) { window.dispatchEvent(new CustomEvent(OPEN_SCRIPT_EVENT, { detail: { companyId: co.id, number: ct.value, contactId: ct.id } })); return; }
       setCalling({ co: { ...co, walletKind: d.company.walletKind as "NC" | "FC" | undefined }, contact: { id: ct.id, value: ct.value }, needsKind: d.company.accountType === "client" && !d.company.ownerId && !d.company.walletKindConfirmed });
     } catch (e) { setErr((e as Error).message); }
   }

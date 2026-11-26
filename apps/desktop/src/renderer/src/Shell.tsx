@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { LateTasksBox, TaskBanner, useDueTasks } from "./pages/TaskReminder";
 import { fmtBalance, fmtHours } from "@basecom/shared";
 import { Avatar, btn, btnDark, c, dialPref, ErrorText, font, resizePhoto, tint, tone } from "./ui";
 import { IncomingBanner, PhoneDialog } from "./pages/Phone";
@@ -38,6 +39,7 @@ function readOpen() { try { return localStorage.getItem("bc_nav") !== "0"; } cat
 
 export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser, children }: { user: User; page: PageId; onNavigate: (p: PageId) => void; onLogout: () => void; onOpenCompany: (id: string) => void; onUser?: (u: User) => void; children: ReactNode }) {
   const [looks, setLooks] = useState(false);
+  const due = useDueTasks(user.id);
   const [open, setOpen] = useState(readOpen);
   const [phoneOpen, setPhoneOpen] = useState(false);
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem("bc_nav", v ? "1" : "0"); } catch { /* sem armazenamento */ } };
@@ -81,8 +83,9 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
             </button>
           );
         })}
+        <LateTasksBox due={due} open={open} onAgenda={() => onNavigate("agenda")} />
         <button onClick={onLogout} title="Terminar sessão" aria-label="Terminar sessão"
-          style={{ marginTop: "auto", marginBottom: 10, height: 32, border: `1px solid ${c.line}`, borderRadius: 8, background: c.card, color: c.ink, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          style={{ marginTop: due.length ? 0 : "auto", marginBottom: 10, height: 32, border: `1px solid ${c.line}`, borderRadius: 8, background: c.card, color: c.ink, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <Icon d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />{open && "Terminar sessão"}
         </button>
         <div style={{ paddingTop: 14, borderTop: `1px solid ${c.line}`, display: "flex", alignItems: "center", gap: 10 }}>
@@ -103,6 +106,7 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
       {/* Menu recolhido: o espaço que ficava com os nomes do menu mostra «O meu dia». */}
       {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpps={() => onNavigate("oportunidades")} onOpenCompany={onOpenCompany} />}
       <IncomingBanner onOpenCompany={onOpenCompany} bigScript={user.role !== "admin"} />
+      <TaskBanner due={due} onOpenCompany={onOpenCompany} />
       <ClientBanner hidden={page === "novos"} onOpenCompany={onOpenCompany} />
       {phoneOpen && <PhoneDialog onClose={() => setPhoneOpen(false)} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>

@@ -84,7 +84,9 @@ export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenComp
   // Avisa o Ligar (18 nov): há uma chamada recebida a tocar ou aberta — não marca a seguinte e, se estiver a meio de uma, pergunta.
   const active = !!answered || (!!inc && inc.id !== dismissed && !inc.endedAt);
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent(INCOMING_EVENT, { detail: { active, open: !!answered, id: answered?.id ?? inc?.id ?? null, who: answered?.company ?? inc?.company ?? inc?.number ?? null } }));
+    // 24 nov: vai também o número e TODAS as empresas desse número (um número pode estar em várias empresas).
+    const x = answered ?? inc;
+    window.dispatchEvent(new CustomEvent(INCOMING_EVENT, { detail: { active, open: !!answered, id: x?.id ?? null, who: x ? (x.companies.length > 1 ? x.companies.map((k) => k.name).join(" / ") : x.company ?? x.number) : null, number: x?.number ?? null, companyIds: x?.companies.map((k) => k.id) ?? (x?.companyId ? [x.companyId] : []) } }));
   }, [active, !!answered, answered?.id, inc?.id]);
   // O Ligar decidiu continuar a sua chamada: fecha a janela da recebida.
   useEffect(() => {

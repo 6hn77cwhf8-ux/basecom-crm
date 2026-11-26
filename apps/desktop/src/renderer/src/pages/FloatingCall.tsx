@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { c } from "../ui";
 
@@ -13,6 +14,8 @@ export function FloatingCall({ company, phone, secs, muted, canMute, onMute, onB
   /** Chamada terminada, resultado por registar: segundos que faltam (podem ser negativos). */
   pending?: { left: number };
 }) {
+  // 24 nov: o som dos avisos de tarefa não toca durante uma chamada.
+  useEffect(() => { document.body.dataset.inCall = "1"; return () => { delete document.body.dataset.inCall; }; }, []);
   const box = { position: "fixed" as const, right: 24, bottom: 24, zIndex: 70, width: 360, borderRadius: 18, boxShadow: "0 18px 44px rgba(0,0,0,.28)", padding: 16, display: "flex", flexDirection: "column" as const, gap: 12, fontFamily: "inherit" };
   const dark = { height: 40, borderRadius: 10, border: "1px solid #3A3A3C", background: "#1C1C1E", color: "#FFFFFF", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" };
   if (pending) return createPortal(

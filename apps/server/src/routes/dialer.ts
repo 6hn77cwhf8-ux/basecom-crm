@@ -27,7 +27,7 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.post("/calls/:id/no-result", any, async (req) => { await closeCallWithoutResult(db, req.user!, id.parse(req.params).id, z.object({ note: z.string().max(500).optional() }).parse(req.body ?? {}).note); return { ok: true }; });
   app.post("/dialer/entries/:id/release", any, async (req) => { await releaseEntry(db, req.user!, id.parse(req.params).id); return { ok: true }; });
   app.post("/calls", any, async (req) => {
-    const b = z.object({ companyId: z.string().uuid(), contactId: z.string().uuid().nullable().optional(), entryId: z.string().uuid().nullable().optional(), source: z.enum(["new", "current", "wallet", "ficha", "agenda", "recebida"]), consultedNos: z.boolean().optional(), phone: z.string().max(20).optional() }).parse(req.body);
+    const b = z.object({ companyId: z.string().uuid(), contactId: z.string().uuid().nullable().optional(), entryId: z.string().uuid().nullable().optional(), source: z.enum(["new", "current", "wallet", "ficha", "agenda", "recebida", "retribuir", "cliente"]), consultedNos: z.boolean().optional(), phone: z.string().max(20).optional() }).parse(req.body);
     return startCall(db, req.user!, b);
   });
   app.post("/calls/:id/end", any, async (req) => endCall(db, req.user!, id.parse(req.params).id));

@@ -140,7 +140,9 @@ export async function deviceEvent(db: Db, device: { id: string; userId: string }
   }
   if (ev.type === "incoming_ringing" || ev.type === "incoming_missed") {
     const p = normalizePhone(ev.number);
-    const company = p ? (await db.select({ id: companyContacts.companyId }).from(companyContacts).where(and(eq(companyContacts.kind, "phone"), eq(companyContacts.value, p.national))).limit(1))[0] : undefined;
+    // 24 nov: só liga a chamada a uma empresa quando o número é de uma só; com várias, o ecrã mostra todas.
+    const owners = p ? [...new Set((await db.select({ id: companyContacts.companyId }).from(companyContacts).where(and(eq(companyContacts.kind, "phone"), eq(companyContacts.value, p.national)))).map((x) => x.id))] : [];
+    const company = owners.length === 1 ? { id: owners[0]! } : undefined;
     const number = p?.national ?? ev.number.slice(0, 30);
     const at = new Date(ev.at);
     if (ev.type === "incoming_missed") {

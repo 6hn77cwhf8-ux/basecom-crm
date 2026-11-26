@@ -68,7 +68,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   const [muted, setMuted] = useState(false);
   const [prior, setPrior] = useState(0);
   // Chamadas em simultâneo (18 nov): o CRM segue o telemóvel; com uma recebida a tocar ou aberta, não marca a seguinte.
-  const [incoming, setIncoming] = useState<{ active: boolean; open: boolean; id: string | null; who: string | null }>({ active: false, open: false, id: null, who: null });
+  const [incoming, setIncoming] = useState<{ active: boolean; open: boolean; id: string | null; who: string | null; number?: string | null; companyIds?: string[] }>({ active: false, open: false, id: null, who: null });
   const [askedFor, setAskedFor] = useState<string | null>(null);
   const reloadAfter = useRef(false);
   useEffect(() => {
@@ -79,28 +79,33 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   // 20 nov: «Abrir script» numa chamada recebida — mostra o script grande dessa empresa e regista o resultado aqui
   // (na entrada da campanha onde ela está). Uma chamada feita que ainda estava a marcar é cancelada (o CRM segue o telemóvel).
   const [received, setReceived] = useState(false);
-  const openReceivedRef = useRef<(companyId: string, number: string) => void>(() => undefined);
-  openReceivedRef.current = async (companyId: string, number: string) => {
+  const openReceivedRef = useRef<(companyId: string, number: string, dial?: { contactId: string }) => void>(() => undefined);
+  openReceivedRef.current = async (companyId: string, number: string, dial?: { contactId: string }) => {
     if (phase === "result" || phase === "review") { setError(`Registe primeiro o resultado de ${cur?.company.name ?? "a chamada anterior"}; depois abra o script da chamada recebida.`); return; }
     setError("");
     if (phase === "calling" && callId) await api.discardCall(callId).catch(() => undefined);
     try {
       const v = await api.companyScriptView(companyId);
       setCur(v); setConsulted(false); consultedRef.current = false; setSkipping(false); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
-      const r = await api.startCall({ companyId, entryId: v.entry.id || null, source: "recebida", phone: number })
-        .catch(() => api.startCall({ companyId, source: "recebida", phone: number }));
+      // 24 nov: retribuir a chamada abre sempre o script grande e marca o número (no telemóvel ou no computador).
+      const r = dial
+        ? await api.startCall({ companyId, contactId: dial.contactId, entryId: v.entry.id || null, source: "retribuir" }).catch(() => api.startCall({ companyId, contactId: dial.contactId, source: "retribuir" }))
+        : await api.startCall({ companyId, entryId: v.entry.id || null, source: "recebida", phone: number }).catch(() => api.startCall({ companyId, source: "recebida", phone: number }));
+      if (dial && !r.viaPhone) dialOnComputer(number);
       setPrior(r.priorResultSeconds ?? 0);
-      setCallId(r.id); setStartedAt(Date.now()); setViaPhone(true); setLive(false); setQueued(false); pendingRef.current = null; setReceived(true); setPhase("calling");
+      setCallId(r.id); setStartedAt(Date.now()); setViaPhone(dial ? r.viaPhone : true); setLive(false); setQueued(false); pendingRef.current = null; setReceived(!dial); setPhase("calling");
     } catch (e) { setError((e as Error).message); }
   };
   useEffect(() => {
-    const h = (e: Event) => { const d = (e as CustomEvent<{ companyId: string; number: string }>).detail; openReceivedRef.current(d.companyId, d.number); };
+    const h = (e: Event) => { const d = (e as CustomEvent<{ companyId: string; number: string; contactId?: string }>).detail; openReceivedRef.current(d.companyId, d.number, d.contactId ? { contactId: d.contactId } : undefined); };
     window.addEventListener(OPEN_SCRIPT_EVENT, h);
     return () => window.removeEventListener(OPEN_SCRIPT_EVENT, h);
   }, []);
   useEffect(() => { if (phase === "countdown" || phase === "ready" || phase === "idle") setReceived(false); }, [phase]);
   // Acabou a recebida e a marcação tinha sido cancelada: a empresa volta (início da fila), sem marcar sozinho.
   useEffect(() => { if (!incoming.active && reloadAfter.current) { reloadAfter.current = false; load(false); } }, [incoming.active]);
+  // 24 nov: durante a chamada os avisos de tarefa não fazem som.
+  useEffect(() => { if (phase !== "calling") return; document.body.dataset.inCall = "1"; return () => { delete document.body.dataset.inCall; }; }, [phase]);
   const toggleMute = () => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message));
   useEffect(() => { setMuted(false); }, [callId]);
 
@@ -265,17 +270,27 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       </header>
       <ErrorText>{error}</ErrorText>
       {/* Dúvida (recebida aberta a meio de uma chamada feita): pergunta com quem está a falar. */}
-      {incoming.open && incoming.id && askedFor !== incoming.id && phase === "calling" && cur && createPortal(
+      {/* 24 nov: se o número que entrou é da empresa do script, é a mesma conversa: não pergunta. */}
+      {incoming.open && incoming.id && askedFor !== incoming.id && phase === "calling" && cur && sameAsScript(incoming, cur) && <SameCall id={incoming.id} onSame={() => { setAskedFor(incoming.id); window.dispatchEvent(new CustomEvent(INCOMING_DISMISS, { detail: incoming.id })); }} />}
+      {incoming.open && incoming.id && askedFor !== incoming.id && phase === "calling" && cur && !sameAsScript(incoming, cur) && createPortal(
         <div role="alertdialog" aria-label="Com quem está a falar?" style={{ position: "fixed", inset: 0, zIndex: 95, background: "rgba(11,11,11,0.35)", display: "grid", placeItems: "center" }}>
-          <div style={{ ...card, width: 520, maxWidth: "92vw", padding: 22, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 18px 44px rgba(0,0,0,.25)" }}>
-            <b style={{ fontSize: 18 }}>Entrou uma chamada{incoming.who ? ` de ${incoming.who}` : ""}. Com quem está a falar?</b>
-            <span style={{ fontSize: 13, color: c.muted }}>O feedback fica no cliente com quem está a falar.</span>
-            <button style={{ ...btnDark, height: 46 }} onClick={() => {
+          <div style={{ ...card, width: 560, maxWidth: "92vw", padding: 22, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 18px 44px rgba(0,0,0,.25)" }}>
+            <b style={{ fontSize: 18 }}>Entrou uma chamada. Com quem está a falar?</b>
+            <span style={{ fontSize: 13, color: c.muted }}>O feedback fica no cliente com quem está a falar. Confirme pelo número que vê no telemóvel.</span>
+            <button style={{ ...btn, height: "auto", padding: "12px 14px", textAlign: "left", display: "flex", flexDirection: "column", gap: 2 }} onClick={() => { setAskedFor(incoming.id); window.dispatchEvent(new CustomEvent(INCOMING_DISMISS, { detail: incoming.id })); }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: c.muted }}>A chamada que eu fiz (script)</span>
+              <b style={{ fontSize: 16 }}>{cur.company.name}</b>
+              <span style={{ fontSize: 14 }}>{cur.phone ? formatPhone(cur.phone.value) : "—"} · continuar a minha chamada</span>
+            </button>
+            <button style={{ ...btnDark, height: "auto", padding: "12px 14px", textAlign: "left", display: "flex", flexDirection: "column", gap: 2 }} onClick={() => {
               setAskedFor(incoming.id); reloadAfter.current = true;
               if (callId) api.discardCall(callId).catch(() => undefined);
               setCallId(null); setPhase("idle"); setLive(false);
-            }}>Com quem ligou{incoming.who ? ` (${incoming.who})` : ""} — cancelar a minha chamada</button>
-            <button style={{ ...btn, height: 46 }} onClick={() => { setAskedFor(incoming.id); window.dispatchEvent(new CustomEvent(INCOMING_DISMISS, { detail: incoming.id })); }}>Com {cur.company.name} — continuar a minha chamada</button>
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", opacity: 0.8 }}>A chamada que entrou</span>
+              <b style={{ fontSize: 16 }}>{incoming.who ?? "Número desconhecido"}</b>
+              <span style={{ fontSize: 14 }}>{incoming.number ? formatPhone(incoming.number) : ""} · cancelar a minha chamada</span>
+            </button>
             <span style={{ fontSize: 12, color: c.muted }}>Se cancelar, {cur.company.name} volta ao início da fila (não conta como tentativa).</span>
           </div>
         </div>, document.body)}
@@ -532,4 +547,17 @@ function OppActions({ entryId, onDone, onError }: { entryId: string; onDone: () 
       </div>}
     </div>
   );
+}
+
+/** A chamada que entrou é da mesma empresa do script (mesmo número ou número dessa empresa)? */
+function sameAsScript(inc: { number?: string | null; companyIds?: string[] }, cur: DialerEntry) {
+  const n = (x?: string | null) => (x ?? "").replace(/\D/g, "").slice(-9);
+  if (inc.number && cur.phone && n(inc.number) === n(cur.phone.value)) return true;
+  return !!inc.companyIds?.includes(cur.company.id) && (inc.companyIds?.length ?? 0) === 1;
+}
+
+/** Mesma conversa: fecha sozinho a janela da recebida e continua a chamada do script. */
+function SameCall({ id, onSame }: { id: string; onSame: () => void }) {
+  useEffect(() => { onSame(); }, [id]);
+  return null;
 }
