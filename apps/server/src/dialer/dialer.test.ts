@@ -137,7 +137,8 @@ describe.skipIf(!url)("Power Dialer: consequências dos resultados", () => {
     expect((await daySummary(db, ana.id)).client).toMatchObject({ kind: "sale", opCode: "7590457" });
     await expect(endClient(db, toPublic(ana))).rejects.toThrow(/dados da proposta/);
     await expect(endClient(db, toPublic(ana), { saleTypes: { XSell: 10, Upsell: 5 } })).rejects.toThrow(/XSell e Upsell/);
-    await endClient(db, toPublic(ana), { saleTypes: { NN: 129 } });
+    await expect(endClient(db, toPublic(ana), { saleTypes: { NN: 129 } })).rejects.toThrow(/mensalidade/);
+    await endClient(db, toPublic(ana), { saleTypes: { NN: 129 }, l2b: { monthly: 149.9, contractMonths: 36 } });
     expect((await db.select().from(opportunities).where(eq(opportunities.companyId, n3.company.id)))[0]).toMatchObject({ proposedValue: "129.00", saleTypes: { NN: 129 } });
     expect((await db.query.companies.findFirst({ where: eq(companies.id, n3.company.id) }))!.ownerId).toBe(ana.id);
     expect((await db.select().from(walletChanges).where(eq(walletChanges.companyId, n3.company.id)))[0]!.kind).toBe("conquest");

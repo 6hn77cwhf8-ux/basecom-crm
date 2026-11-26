@@ -77,8 +77,9 @@ export const SETTINGS = {
       }),
       reasons: z.array(z.object({
         id: z.string().min(1), label: z.string().min(1).max(120), active: z.boolean(),
-        effect: z.enum(["cooldown", "loyalty_end", "new_contract", "followup_task", "company_closed", "dissatisfied", "other"]),
+        effect: z.enum(["cooldown", "loyalty_end", "new_contract", "followup_task", "company_closed", "dissatisfied", "recent_nos", "other"]),
         days: z.number().int().min(0).max(3650).optional(), months: z.number().int().min(1).max(60).optional(), monthsBefore: z.number().int().min(0).max(60).optional(), unknownMonths: z.number().int().min(0).max(60).optional(), contractMonths: z.number().int().min(1).max(120).optional(),
+        contactAfterMonths: z.number().int().min(0).max(60).optional(),
       })).min(1),
       opportunities: z.object({ warnDays: z.number().int().min(1).max(60), lateDays: z.number().int().min(1).max(90), lostReopenDays: z.number().int().min(0).max(3650), docsTaskDays: z.number().int().min(1).max(60).default(2), channels: z.array(z.string().min(1).max(40)).min(1).max(12).default(DEFAULT_PROPOSAL_CHANNELS) }),
       taskTypes: z.array(z.string().min(1).max(60)).min(1),

@@ -64,7 +64,7 @@ export function Carteira({ me, onOpenCompany }: { me: User; onOpenCompany: (id: 
           </div>
         ) : (
           <ResultPanel cat={cat} group={calling.group} onGroup={(g) => setCalling({ ...calling, group: g })} busy={busy} error={error} endedAt={calling.ended}
-            company={{ name: r.name, nif: r.nif, phone: formatPhone(calling.phone), decisor: r.decisor ?? undefined }}
+            company={{ id: r.id, name: r.name, nif: r.nif, phone: formatPhone(calling.phone), decisor: r.decisor ?? undefined }}
             onBack={() => setCalling({ ...calling, ended: null })} onSave={save} />
         )}
         <ErrorText>{error}</ErrorText>

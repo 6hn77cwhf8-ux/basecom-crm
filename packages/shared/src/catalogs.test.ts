@@ -47,3 +47,20 @@ describe("regra dos sete dias das oportunidades", () => {
     expect(opportunityAlert(d0, at(3), { warnDays: 2, lateDays: 3, lostReopenDays: 180 }).level).toBe("late");
   });
 });
+
+import { recentLoyalty } from "./catalogs.js";
+describe("Fidelizado recentemente (25 nov): contacto 8 meses depois do início do contrato", () => {
+  const today = new Date(Date.UTC(2026, 10, 25));
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  it("36 meses, faltam 34 → fim daqui a 34 meses; liga daqui a 6 (quando faltarem 28)", () => {
+    const r = recentLoyalty(today, 36, 34);
+    expect(d(r.loyaltyEnd)).toBe("2029-09-25");
+    expect(d(r.contactAt)).toBe("2027-05-25");
+  });
+  it("24 meses, faltam 22 → liga daqui a 6 (quando faltarem 16)", () => {
+    expect(d(recentLoyalty(today, 24, 22).contactAt)).toBe("2027-05-25");
+  });
+  it("já faltam menos de 28 (de 36) → liga já", () => {
+    expect(d(recentLoyalty(today, 36, 20).contactAt)).toBe("2026-11-25");
+  });
+});

@@ -102,7 +102,7 @@ export function QuickCall({ company, contact, needsKind, onClose, onSaved, recei
         {resultOpen && cat && call && (
           <ResultPanel walletKind={company.walletKind} cat={cat} group={group} onGroup={setGroup} busy={busy} error={error} endedAt={endedAt ?? Date.now()} needsKind={needsKind}
             live={live ? { secs, queued, onHangUp: () => { hangUp(); } } : undefined}
-            company={{ name: company.name, nif: company.nif, phone: formatPhone(contact.value) }}
+            company={{ id: company.id, name: company.name, nif: company.nif, phone: formatPhone(contact.value) }}
             backLabel="Voltar à chamada" onBack={() => setResultOpen(false)} onSave={save} />
         )}
       </div>

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { cycleForDate, OPPORTUNITY_STAGES, operatorRefusalNote } from "@basecom/shared";
-import { type PipelineAgg, type PipelineStats, api, type Catalogs, type Opportunity, type Reason, type User } from "../api";
+import { type L2BInput, type PipelineAgg, type PipelineStats, api, type Catalogs, type Opportunity, type Reason, type User } from "../api";
 import { Avatar, btn, btnDark, c, card, Chip, CopyButton, ErrorText, Field, fmtDate, fmtEur, fmtInt, input, PageHeader } from "../ui";
 import { Modal } from "./Wallet";
 import { DatePicker } from "./DatePicker";
 import { SaleTypesPicker, typesToNumbers, type TypesDraft } from "./ClientWork";
 import { saleTypesError } from "@basecom/shared";
+import { emptyL2B, L2BFields, l2bReady, l2bValue, type L2BDraft } from "./L2BFields";
 
 const OPEN = OPPORTUNITY_STAGES.filter((s) => s.open);
 
@@ -273,34 +274,39 @@ function Win({ o, onClose, onDone }: { o: Opportunity; onClose: () => void; onDo
   const [types, setTypes] = useState<TypesDraft>(() => Object.fromEntries(Object.entries(o.saleTypes ?? {}).map(([k, v]) => [k, fmt(Number(v))])) as TypesDraft);
   const [op, setOp] = useState("");
   const [ok, setOk] = useState(false);
+  const [l2b, setL2b] = useState<L2BDraft>(emptyL2B(36));
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const nums = typesToNumbers(types);
   const typesErr = saleTypesError(nums);
   const total = Object.values(nums).reduce((a, v) => a + (v ?? 0), 0);
-  const ready = !typesErr && ok && (o.nosOp || op.length === 7);
+  const ready = !typesErr && ok && (o.nosOp || op.length === 7) && l2bReady(l2b, { contract: true });
   return (
     <Modal title={`Ganha · ${o.company}`} onClose={onClose} width={640}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {o.nosOp ? <span style={{ fontSize: 13 }}>OP <b>{o.nosOp}</b></span> : <OpField value={op} onChange={setOp} />}
-        {o.proposedValue && <span style={{ fontSize: 13, color: c.muted }}>Proposta: {eur(Number(o.proposedValue))}/mês. Confirme ou corrija os valores da venda, ao cêntimo.</span>}
-        <SaleTypesPicker types={types} setTypes={(f) => { setOk(false); setTypes(f); }} />
+        {o.proposedValue && <span style={{ fontSize: 13, color: c.muted }}>Proposta: {eur(Number(o.proposedValue))} ponderado. Confirme ou corrija os valores ponderados da venda, ao cêntimo.</span>}
+        <SaleTypesPicker types={types} setTypes={(f) => { setOk(false); setTypes(f); }} weighted />
         <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 600 }}>
-          <input type="checkbox" checked={ok} disabled={!!typesErr} onChange={(e) => setOk(e.target.checked)} /> Confirmo a venda: {eur(total)}/mês
+          <input type="checkbox" checked={ok} disabled={!!typesErr} onChange={(e) => setOk(e.target.checked)} /> Confirmo a venda: {eur(total)} ponderado
         </label>
+        <L2BFields value={l2b} onChange={setL2b} need={{ contract: true }} title="Cliente depois da venda (atualiza a ficha)" />
         <span style={{ fontSize: 12, color: c.muted }}>Se a empresa não tiver carteira, passa para a carteira de {o.owner}. Conta como venda no dia de hoje.</span>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={btnDark} disabled={!ready || busy} onClick={() => { setBusy(true); api.winOpportunity(o.id, nums, o.nosOp ? undefined : op).then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>Marcar como Ganha</button>
+          <button style={btnDark} disabled={!ready || busy} onClick={() => { setBusy(true); api.winOpportunity(o.id, nums, o.nosOp ? undefined : op, l2bValue(l2b)).then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false)); }}>Marcar como Ganha</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-export function Lose({ o, reasons, onClose, onDone, title, submit, button = "Marcar como perdida" }: { o: { company: string; id?: string }; reasons: Reason[]; onClose: () => void; onDone: () => void; title?: string; button?: string;
-  submit?: (reasonId: string, comment: string | undefined, extra: { operator: string; date: string } | undefined) => Promise<unknown> }) {
+export function Lose({ o, reasons, onClose, onDone, title, submit, button = "Marcar como perdida", afterProposal }: { o: { company: string; id?: string; stage?: string }; reasons: Reason[]; onClose: () => void; onDone: () => void; title?: string; button?: string;
+  /** 25 nov: depois de proposta (ou no Em cliente) pede a informação do cliente (L2B). */
+  afterProposal?: boolean;
+  submit?: (reasonId: string, comment: string | undefined, extra: { operator: string; date: string } | undefined, l2b?: L2BInput) => Promise<unknown> }) {
+  const [l2b, setL2b] = useState<L2BDraft>(emptyL2B());
   const [reason, setReason] = useState<Reason | null>(null);
   const [comment, setComment] = useState("");
   const [err, setErr] = useState("");
@@ -308,7 +314,9 @@ export function Lose({ o, reasons, onClose, onDone, title, submit, button = "Mar
   const [date, setDate] = useState("");
   // Outra operadora (igual à recusa): operadora e data de fim; contacto automático X meses antes.
   const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
-  const ok = !!reason && (reason.effect !== "other" || comment.trim().length > 0) && (!byOperator || (!!operator && !!date));
+  const recentNos = reason?.effect === "recent_nos";
+  const askL2B = recentNos || !!afterProposal || ["proposal", "negotiation", "documents"].includes(o.stage ?? "");
+  const ok = !!reason && (reason.effect !== "other" || comment.trim().length > 0) && (!byOperator || (!!operator && !!date)) && (!askL2B || l2bReady(l2b, { contract: recentNos, left: true }));
   return (
     <Modal title={title ?? `Oportunidade perdida · ${o.company}`} onClose={onClose} width={620}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -325,12 +333,13 @@ export function Lose({ o, reasons, onClose, onDone, title, submit, button = "Mar
             {operator && date && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{operatorRefusalNote(operator, date, reason!.monthsBefore ?? 4, reason!.unknownMonths ?? 6)}</span>}
           </div>
         )}
+        {reason && askL2B && <L2BFields value={l2b} onChange={setL2b} need={{ contract: recentNos, left: true }} recent={recentNos} contactAfterMonths={reason.contactAfterMonths ?? 8} title={recentNos ? "Fidelizado recentemente: informação do cliente" : "Perdida depois de proposta: informação do cliente"} />}
         <Field label={reason?.effect === "other" ? "Descrição (obrigatória)" : "Comentário"}><input style={input} value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
-        {reason && !byOperator && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{reason.effect === "company_closed" ? "A empresa fica encerrada e sai de todas as campanhas." : reason.effect === "cooldown" ? `Volta a poder entrar em campanhas daqui a ${reason.days} dias.` : "Volta a poder entrar em campanhas daqui a seis meses."}</span>}
+        {reason && !byOperator && !recentNos && <span style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}>{reason.effect === "company_closed" ? "A empresa fica encerrada e sai de todas as campanhas." : reason.effect === "cooldown" ? `Volta a poder entrar em campanhas daqui a ${reason.days} dias.` : "Volta a poder entrar em campanhas daqui a seis meses."}</span>}
         <ErrorText>{err}</ErrorText>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
-          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={!ok} onClick={() => (submit ?? ((r, cm, x) => api.loseOpportunity(o.id!, r, cm, x)))(reason!.id, comment || undefined, byOperator ? { operator, date } : undefined).then(onDone).catch((e) => setErr(e.message))}>{button}</button>
+          <button style={{ ...btnDark, background: c.danger, borderColor: c.danger }} disabled={!ok} onClick={() => (submit ?? ((r, cm, x, l) => api.loseOpportunity(o.id!, r, cm, x, l)))(reason!.id, comment || undefined, byOperator ? { operator, date } : undefined, askL2B ? l2bValue(l2b) : undefined).then(onDone).catch((e) => setErr(e.message))}>{button}</button>
         </div>
       </div>
     </Modal>

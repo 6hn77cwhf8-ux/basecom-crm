@@ -6,6 +6,7 @@ import { DatePicker } from "./DatePicker";
 import { Modal } from "./Wallet";
 import { MessageDialog } from "./MessageDialog";
 import { Lose } from "./Opportunities";
+import { emptyL2B, L2BFields, l2bReady, l2bValue, type L2BDraft } from "./L2BFields";
 import type { Reason } from "../api";
 
 /**
@@ -181,13 +182,13 @@ export function ClientBanner({ hidden, onOpenCompany }: { hidden: boolean; onOpe
 /** Tipos de venda (até 2: FID + XSell ou FID + Upsell; NN sozinho) com o valor de cada um (€/mês). */
 export type TypesDraft = Partial<Record<SaleKind, string>>;
 export const typesToNumbers = (t: TypesDraft) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Number(String(v).replace(",", ".")) || 0])) as Partial<Record<SaleKind, number>>;
-export function SaleTypesPicker({ types, setTypes, walletKind = "NC" }: { types: TypesDraft; setTypes: (f: (t: TypesDraft) => TypesDraft) => void; walletKind?: "NC" | "FC" }) {
+export function SaleTypesPicker({ types, setTypes, walletKind = "NC", weighted }: { types: TypesDraft; setTypes: (f: (t: TypesDraft) => TypesDraft) => void; walletKind?: "NC" | "FC"; weighted?: boolean }) {
   const nums = typesToNumbers(types);
   const err = saleTypesError(nums);
   const points = err ? 0 : proposalPoints(nums, walletKind);
   return (
     <div role="group" aria-label="Tipo de venda" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>Tipo de venda e valor · até 2 (FID + XSell ou FID + Upsell) · obrigatório</span>
+      <span style={{ fontSize: 13, fontWeight: 600 }}>{weighted ? "Tipo de venda e valor ponderado (o que conta para os pontos; FID já proporcional)" : "Tipo de venda e valor"} · até 2 (FID + XSell ou FID + Upsell) · obrigatório</span>
       {SALE_KINDS.map((k) => {
         const on = types[k] !== undefined;
         const chosen = Object.keys(types) as SaleKind[];
@@ -199,7 +200,7 @@ export function SaleTypesPicker({ types, setTypes, walletKind = "NC" }: { types:
               <input type="checkbox" checked={on} disabled={blocked} onChange={(e) => setTypes((t) => { const n = { ...t }; if (e.target.checked) n[k] = ""; else delete n[k]; return n; })} /> {k}
             </label>
             <span style={{ fontSize: 12, color: c.muted }}>{hint}</span>
-            {on ? <input aria-label={`Valor ${k}`} inputMode="decimal" value={types[k]} onChange={(e) => setTypes((t) => ({ ...t, [k]: e.target.value.replace(/[^0-9,.]/g, "") }))} placeholder="0,00 €" style={{ ...input, height: 34, textAlign: "right", fontWeight: 700 }} /> : <span />}
+            {on ? <input aria-label={`Valor ${k}`} inputMode="decimal" value={types[k]} onChange={(e) => setTypes((t) => ({ ...t, [k]: e.target.value.replace(/[^0-9,.]/g, "") }))} placeholder={weighted ? "ponderado" : "0,00 €"} style={{ ...input, height: 34, textAlign: "right", fontWeight: 700 }} /> : <span />}
           </div>
         );
       })}
@@ -219,6 +220,7 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   // 23 nov: na venda, os valores vêm da proposta (mesma OP) e o comercial confirma ou corrige ao cêntimo.
   const [proposed, setProposed] = useState<number | null>(null);
   const [confirmed, setConfirmed] = useState(isProposal);
+  const [l2b, setL2b] = useState<L2BDraft>(emptyL2B(36));
   useEffect(() => {
     if (isProposal || !work.companyId) return;
     api.companyOpportunities(work.companyId).then((list) => {
@@ -237,24 +239,25 @@ export function CloseClientDialog({ work, onClose, onDone }: { work: ClientWork;
   useEffect(() => { api.catalogs().then((x) => x.catalogs.opportunities?.channels?.length && setChannels(x.catalogs.opportunities.channels)).catch(() => undefined); }, []);
   const nums = typesToNumbers(types);
   const typesErr = saleTypesError(nums);
-  const ready = !typesErr && (!isProposal || (!!channel && !!at && !!followUp)) && confirmed;
+  const ready = !typesErr && (!isProposal || (!!channel && !!at && !!followUp)) && confirmed && (isProposal || l2bReady(l2b, { contract: true }));
   const total = Object.values(nums).reduce((a, v) => a + (v ?? 0), 0);
   const mins = Math.max(1, Math.round((Date.now() - new Date(work.since).getTime()) / 60_000));
   const pill = (on: boolean) => ({ ...btn, height: 34, fontSize: 13, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
   function save() {
     if (!ready || busy) return;
     setBusy(true); setErr("");
-    api.endClient({ saleTypes: nums, channel: isProposal ? channel : undefined, followUp: followUp ?? undefined, at: at ? new Date(at).toISOString() : undefined, comment: comment.trim() || undefined })
+    api.endClient({ saleTypes: nums, channel: isProposal ? channel : undefined, followUp: followUp ?? undefined, at: at ? new Date(at).toISOString() : undefined, comment: comment.trim() || undefined, l2b: isProposal ? undefined : l2bValue(l2b) })
       .then(onDone).catch((e) => setErr(e.message)).finally(() => setBusy(false));
   }
   return (
     <Modal title={`Guardar ${isProposal ? "a proposta" : "a venda"} · OP ${work.opCode ?? ""}`} onClose={onClose} width={640}>
       <span style={{ fontSize: 13, color: c.muted }}>{work.company} · em cliente há {mins} min</span>
-      {!isProposal && <span style={{ fontSize: 13, color: c.muted }}>{proposed != null ? `Proposta: ${proposed.toFixed(2).replace(".", ",")} €/mês. ` : ""}Confirme ou corrija o valor da venda, ao cêntimo.</span>}
-      <SaleTypesPicker types={types} setTypes={(f) => { if (!isProposal) setConfirmed(false); setTypes(f); }} />
+      {!isProposal && <span style={{ fontSize: 13, color: c.muted }}>{proposed != null ? `Proposta: ${proposed.toFixed(2).replace(".", ",")} ponderado. ` : ""}Confirme ou corrija os valores ponderados da venda, ao cêntimo.</span>}
+      <SaleTypesPicker types={types} setTypes={(f) => { if (!isProposal) setConfirmed(false); setTypes(f); }} weighted />
       {!isProposal && <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, fontWeight: 600 }}>
-        <input type="checkbox" checked={confirmed} disabled={!!typesErr} onChange={(e) => setConfirmed(e.target.checked)} /> Confirmo a venda: {total.toFixed(2).replace(".", ",")} €/mês
+        <input type="checkbox" checked={confirmed} disabled={!!typesErr} onChange={(e) => setConfirmed(e.target.checked)} /> Confirmo a venda: {total.toFixed(2).replace(".", ",")} ponderado
       </label>}
+      {!isProposal && <L2BFields value={l2b} onChange={setL2b} need={{ contract: true }} title="Cliente depois da venda (atualiza a ficha)" />}
       {Object.keys(types).length > 0 && typesErr && <span style={{ fontSize: 12, color: c.muted }}>{typesErr}</span>}
       {isProposal && (
         <Field label="Canal de envio · obrigatório">
@@ -284,6 +287,7 @@ function GiveUpDialog({ work, onClose, onDone }: { work: ClientWork; onClose: ()
   if (!reasons) return null;
   let result: DaySummary | null = null;
   return <Lose o={{ company: work.company ?? "" }} reasons={reasons} title={`Cliente desistiu · ${work.company ?? ""} · OP ${work.opCode ?? ""}`} button="Cliente desistiu"
-    submit={(reasonId, comment, extra) => api.giveUpClient({ reasonId, comment, ...extra }).then((d) => { result = d; })}
+    afterProposal
+    submit={(reasonId, comment, extra, l2b) => api.giveUpClient({ reasonId, comment, ...extra, l2b }).then((d) => { result = d; })}
     onClose={onClose} onDone={() => { if (result) onDone(result); }} />;
 }

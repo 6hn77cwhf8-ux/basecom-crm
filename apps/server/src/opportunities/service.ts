@@ -1,11 +1,12 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { cycleForDate, NSNR, proposalValue, saleTypesError, nosRevenue, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
+import { cycleForDate, NSNR, proposalValue, recentLoyalty, saleTypesError, nosRevenue, OPPORTUNITY_STAGES, proposalPoints, type SaleTypes, nextContactFor, nextWorkingMoment, operatorRefusalNote, opportunityAlert, type OpportunityRules, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, campaignEntries, companies, companyNotes, opportunities, tasks, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
 import { cancelPendingWork } from "../companies/cancel.js";
+import { AFTER_PROPOSAL, applyL2B, checkL2B, type L2BInput } from "../companies/l2b.js";
 
 /**
  * Oportunidades (catálogo, secção 3): etapas, regra dos sete dias (alerta ao 5.º, atrasada ao 7.º, nunca fecha sozinha),
@@ -90,13 +91,16 @@ export async function logOpportunityActivity(db: Db, user: PublicUser, id: strin
 }
 
 /** Ganha: negócio fechado. Se a empresa não tinha carteira, é conquistada (regra da primeira venda). O registo da venda chega com o Arranque B. */
-export async function winOpportunity(db: Db, user: PublicUser, id: string, input: { soldTypes: SaleTypes; nosOp?: string }) {
+export async function winOpportunity(db: Db, user: PublicUser, id: string, input: { soldTypes: SaleTypes; nosOp?: string; l2b?: L2BInput }) {
   const o = await load(db, user, id);
   const op = checkOp(o.nosOp, input.nosOp);
   const sold = soldTypesOrError(input.soldTypes ?? {});
+  // 25 nov: nova mensalidade do cliente e fidelização (24/36) — atualizam a ficha (fim = fecho + meses).
+  const l2b = checkL2B(input.l2b, { contract: true });
   const now = new Date();
   await db.transaction(async (tx) => {
     await cancelPendingWork(tx as unknown as Db, o.companyId);
+    await applyL2B(tx as unknown as Db, o.companyId, user.id, l2b, l2b.contractMonths!, "venda");
     await tx.update(opportunities).set({ stage: "won", nosOp: op, ...sold, ...(o.saleTypes ? {} : { saleTypes: sold.soldTypes, proposedValue: sold.soldValue }), closedAt: now, closedBy: user.id, closedVia: "pipeline", lastActivityAt: now }).where(eq(opportunities.id, id));
     const co = (await tx.query.companies.findFirst({ where: eq(companies.id, o.companyId) }))!;
     if (!co.ownerId) {
@@ -108,13 +112,16 @@ export async function winOpportunity(db: Db, user: PublicUser, id: string, input
 }
 
 /** Perdida: motivo obrigatório; volta às campanhas ao fim de seis meses, salvo prazo diferente do motivo. */
-export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string, operatorInfo?: { operator?: string; date?: string }, via: "pipeline" | "client" = "pipeline") {
+export async function loseOpportunity(db: Db, user: PublicUser, id: string, reasonId: string, comment?: string, operatorInfo?: { operator?: string; date?: string }, via: "pipeline" | "client" = "pipeline", l2bIn?: L2BInput) {
   // Em cliente (23 nov): quem está a trabalhar a empresa fecha-a, mesmo que a oportunidade seja de outra carteira.
   const o = await load(db, user, id, via === "client");
   const cat = await getSetting(db, "catalogs");
   const reason = (cat.reasons as Reason[]).find((r) => r.id === reasonId && r.active);
   if (!reason) throw new AuthError(400, "Escolha o motivo da perda.");
   if (reason.effect === "other" && !comment?.trim()) throw new AuthError(400, "No motivo «Outro», a descrição é obrigatória.");
+  // 25 nov: Perdida depois de proposta (ou «Fidelizado recentemente») pede a informação do cliente (L2B).
+  const recentNos = reason.effect === "recent_nos";
+  const l2b = recentNos ? checkL2B(l2bIn, { contract: true, left: true }) : AFTER_PROPOSAL.includes(o.stage) || via === "client" ? checkL2B(l2bIn, { left: true }) : undefined;
   const now = new Date();
   // Outra operadora (igual à recusa): operadora e fim de fidelização; contacto X meses antes do fim.
   const byOperator = reason.effect === "loyalty_end" || reason.effect === "new_contract";
@@ -122,7 +129,8 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
   const known = byOperator && operatorInfo!.date !== NSNR ? operatorInfo!.date! : null;
   const nc = byOperator ? nextContactFor(reason, now, known ? new Date(`${known}T00:00:00Z`) : null) : null;
   const days = reason.effect === "cooldown" ? reason.days ?? 0 : (cat.opportunities as OpportunityRules).lostReopenDays;
-  const eligible = (nc?.eligibleAt ?? new Date(now.getTime() + days * 86_400_000)).toISOString().slice(0, 10);
+  const rl = recentNos && l2b ? recentLoyalty(now, l2b.contractMonths!, l2b.monthsLeft!, reason.contactAfterMonths ?? 8) : null;
+  const eligible = (rl?.contactAt ?? nc?.eligibleAt ?? new Date(now.getTime() + days * 86_400_000)).toISOString().slice(0, 10);
   await db.transaction(async (tx) => {
     // 26 nov: Perdida anula tudo o que estava em espera (campanhas, callbacks, «Não atende», tarefas da oportunidade).
     await cancelPendingWork(tx as unknown as Db, o.companyId);
@@ -136,6 +144,8 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
       if (nc?.at) await tx.insert(tasks).values({ companyId: o.companyId, type: "Ligar", assignedTo: o.ownerId, dueAt: nextWorkingMoment(nc.at), description: `Primeiro contacto após «${reason.label}»`, origin: "opportunity", opportunityId: o.id, createdBy: user.id });
     }
     await tx.insert(companyNotes).values({ companyId: o.companyId, kind: "note", userId: user.id, text: `Oportunidade perdida: ${reason.label}${comment?.trim() ? ` · ${comment.trim()}` : ""}${reason.effect !== "company_closed" ? ` · volta às campanhas a ${eligible.split("-").reverse().join("/")}` : ""}` });
+    if (l2b) await applyL2B(tx as unknown as Db, o.companyId, user.id, l2b, l2b.monthsLeft ?? null, recentNos ? "fidelizado recentemente" : "perdida depois de proposta");
+    if (rl) await tx.insert(tasks).values({ companyId: o.companyId, type: "Ligar", assignedTo: o.ownerId, dueAt: nextWorkingMoment(rl.contactAt), description: `Refidelização: contrato de ${l2b!.contractMonths} meses`, origin: "opportunity", createdBy: user.id });
     await tx.insert(auditLog).values({ userId: user.id, action: "oportunidade_perdida", entity: "company", entityId: o.companyId, details: reason.label });
   });
 }

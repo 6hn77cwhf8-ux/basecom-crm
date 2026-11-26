@@ -90,14 +90,16 @@ describe.skipIf(!url)("em cliente, office, apoio e formação", () => {
     await expect(setState(db, toPublic(ana), ana.id, "working")).rejects.toThrow(/Cliente desistiu/);
 
     const before = await closedToday(db, ana.id);
-    await endClient(db, toPublic(ana), { saleTypes: { NN: 98.5 } });
+    await endClient(db, toPublic(ana), { saleTypes: { NN: 98.5 }, l2b: { monthly: 120, contractMonths: 36 } });
+    expect(await db.query.companies.findFirst({ where: eq(companies.id, c1) })).toMatchObject({ l2bMonthly: "120.00", loyaltyMonths: 36 });
     const [won] = await db.select().from(opportunities).where(eq(opportunities.companyId, c1));
     expect(won).toMatchObject({ stage: "won", proposedValue: "100.00", soldValue: "98.50", closedVia: "client" });
     expect((await closedToday(db, ana.id)).won).toBe(before.won + 1);
 
     await startClient(db, toPublic(ana), { companyId: c2, kind: "proposal", opCode: "7000022", withOpportunity: true });
     const r0 = (await callStats(db, ana.id)).refusals;
-    await giveUpClient(db, toPublic(ana), { reasonId: "approach" });
+    await expect(giveUpClient(db, toPublic(ana), { reasonId: "approach" })).rejects.toThrow(/mensalidade/);
+    await giveUpClient(db, toPublic(ana), { reasonId: "approach", l2b: { monthly: 60, monthsLeft: 10 } });
     expect((await daySummary(db, ana.id)).state).toBe("working");
     const [lost] = await db.select().from(opportunities).where(eq(opportunities.companyId, c2));
     expect(lost).toMatchObject({ stage: "lost", lostReasonId: "approach", closedVia: "client" });

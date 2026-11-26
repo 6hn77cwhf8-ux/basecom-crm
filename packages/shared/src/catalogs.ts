@@ -58,12 +58,14 @@ export const DEFAULT_ATTEMPT_RULES: AttemptRules = { noAnswerRetryMinutes: 120, 
  * - company_closed: empresa inativa, sai de todas as campanhas;
  * - other: descrição obrigatória; o comercial define a tarefa e o prazo.
  */
-export type ReasonEffect = "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "dissatisfied" | "other";
+export type ReasonEffect = "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "dissatisfied" | "recent_nos" | "other";
 export type Reason = { id: string; label: string; effect: ReasonEffect; days?: number; monthsBefore?: number; contractMonths?: number;
   /** «Insatisfeito NOS»: meses fora de todas as campanhas (12 por omissão). */
   months?: number;
   /** Outra operadora sem data (cliente não refere, «NS/NR»): novo contacto daqui a X meses (6 por omissão, decisão de 16 nov). */
-  unknownMonths?: number; active: boolean };
+  unknownMonths?: number;
+  /** «Fidelizado recentemente» (25 nov): contacto X meses DEPOIS do início do contrato (8 por omissão: a 28 de 36, a 16 de 24). */
+  contactAfterMonths?: number; active: boolean };
 /** Não sabe / não responde: o cliente não refere a operadora ou o fim da fidelização. */
 export const NSNR = "NS/NR";
 
@@ -79,6 +81,10 @@ export const DEFAULT_REASONS: Reason[] = [
   { id: "closed", label: "Empresa encerrada ou sem atividade", effect: "company_closed", active: true },
   // 18 nov: como o RGPD, mas por tempo — sai de todas as campanhas e não se liga durante 12 meses (configurável).
   { id: "dissatisfied", label: "Insatisfeito NOS", effect: "dissatisfied", months: 12, active: true },
+  // 25 nov: tem gestor de conta (NOS ou outro); volta às campanhas ao fim de 120 dias (configurável).
+  { id: "manager", label: "Tem gestor", effect: "cooldown", days: 120, active: true },
+  // 25 nov: fidelizou há pouco tempo com a NOS; contrato 24/36 e meses que faltam; contacto 8 meses depois do início.
+  { id: "recent_nos", label: "Fidelizado recentemente (NOS)", effect: "recent_nos", contactAfterMonths: 8, active: true },
   // 23 nov: recusa logo na abordagem; volta às campanhas ao fim de 120 dias (configurável).
   { id: "approach", label: "Recusa à abordagem", effect: "cooldown", days: 120, active: true },
   { id: "other", label: "Outro", effect: "other", active: true },
@@ -101,6 +107,24 @@ export const COMPETITOR_OPERATORS = ["NOS", "MEO", "Vodafone", "DIGI", "NOWO", "
  * Data do próximo contacto para um motivo de recusa (ex.: «Abr 2028 · 6 meses antes do fim dos 24 meses»).
  * `date` é a data indicada pelo comercial (fim da fidelização ou data da renovação).
  */
+/** Meses de calendário sem «saltar» o mês: 31/01 − 4 meses = 30/09 (e não 01/10). */
+export function addMonthsUTC(d: Date, n: number) {
+  const y = d.getUTCFullYear(), m = d.getUTCMonth() + n;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), last), d.getUTCHours(), d.getUTCMinutes()));
+}
+
+/**
+ * «Fidelizado recentemente» (25 nov): com o contrato (24/36) e os meses que faltam, o fim da fidelização é hoje + meses
+ * que faltam; o contacto é 8 meses depois do início do contrato, ou seja, quando faltarem contrato − 8 (28 de 36; 16 de 24).
+ * Se já faltarem menos do que isso, o contacto é hoje.
+ */
+export function recentLoyalty(today: Date, contractMonths: number, monthsLeft: number, contactAfterMonths = 8) {
+  const loyaltyEnd = addMonthsUTC(today, monthsLeft);
+  const contact = addMonthsUTC(loyaltyEnd, -(contractMonths - contactAfterMonths));
+  return { loyaltyEnd, contactAt: contact > today ? contact : today };
+}
+
 export function nextContactFor(reason: Reason, today: Date, date?: Date | null): { at: Date | null; eligibleAt: Date | null } {
   const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
   // Meses de calendário sem «saltar» o mês: 31/01 − 4 meses = 30/09 (e não 01/10).

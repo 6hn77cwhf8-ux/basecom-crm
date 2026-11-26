@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { AuthError } from "../auth/service.js";
+import { l2bSchema } from "./opportunities.js";
 import { daySummary, endClient, giveUpClient, heartbeat, pontoRows, setState, startClient, teamToday } from "../time/service.js";
 import ExcelJS from "exceljs";
 import { canSee } from "../teams/service.js";
@@ -23,13 +24,14 @@ export async function timeRoutes(app: FastifyInstance, opts: { db: Db }) {
     return startClient(db, req.user!, { ...b, withOpportunity: true });
   });
   app.post("/time/client/give-up", any, async (req) => {
-    const b = z.object({ reasonId: z.string().min(1), comment: z.string().max(1000).optional(), operator: z.string().max(40).optional(), date: z.union([z.string().date(), z.literal("NS/NR")]).optional() }).parse(req.body);
+    const b = z.object({ reasonId: z.string().min(1), comment: z.string().max(1000).optional(), operator: z.string().max(40).optional(), date: z.union([z.string().date(), z.literal("NS/NR")]).optional(), l2b: l2bSchema }).parse(req.body);
     return giveUpClient(db, req.user!, b);
   });
   app.post("/time/client/end", any, async (req) => {
     const b = z.object({
       saleTypes: z.object({ NN: z.number().min(0).max(100_000).optional(), FID: z.number().min(0).max(100_000).optional(), XSell: z.number().min(0).max(100_000).optional(), Upsell: z.number().min(0).max(100_000).optional() }),
       channel: z.string().max(40).optional(), followUp: z.enum(["call", "sms", "email", "whatsapp"]).optional(), at: z.string().datetime().optional(), comment: z.string().max(2000).optional(),
+      l2b: l2bSchema,
     }).optional().parse(req.body ?? undefined);
     return endClient(db, req.user!, b);
   });

@@ -52,7 +52,9 @@ describe.skipIf(!url)("Oportunidades", () => {
     // 23 nov: ganha pede a OP e o valor da venda ao cêntimo (pode ser diferente da proposta).
     await expect(winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98 } })).rejects.toThrow(/OP/);
     await expect(winOpportunity(db, toPublic(ana), won.id, { soldTypes: {}, nosOp: "7000001" })).rejects.toThrow();
-    await winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98.004 }, nosOp: "7000001" });
+    await expect(winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98 }, nosOp: "7000001", l2b: { monthly: 110 } })).rejects.toThrow(/24 ou 36/);
+    await winOpportunity(db, toPublic(ana), won.id, { soldTypes: { NN: 98.004 }, nosOp: "7000001", l2b: { monthly: 110, contractMonths: 24 } });
+    expect(await db.query.companies.findFirst({ where: eq(companies.id, c1) })).toMatchObject({ l2bMonthly: "110.00", loyaltyMonths: 24 });
     expect(await db.query.opportunities.findFirst({ where: eq(opportunities.id, won.id) })).toMatchObject({ stage: "won", soldValue: "98.00", soldTypes: { NN: 98 }, closedVia: "pipeline", closedBy: ana.id });
     expect((await db.query.companies.findFirst({ where: eq(companies.id, c1) }))!.ownerId).toBe(ana.id);
     expect((await db.select().from(walletChanges).where(eq(walletChanges.companyId, c1)))[0]!.kind).toBe("conquest");
@@ -66,6 +68,15 @@ describe.skipIf(!url)("Oportunidades", () => {
     const c3 = await co(4);
     const lost2 = await createOpportunity(db, toPublic(ana), { companyId: c3 });
     await loseOpportunity(db, toPublic(ana), lost2.id, "price");
+    // 25 nov: «Fidelizado recentemente»: contrato 24/36 e meses que faltam; liga 8 meses depois do início do contrato.
+    const c4 = await co(5);
+    const lost3 = await createOpportunity(db, toPublic(ana), { companyId: c4 });
+    await expect(loseOpportunity(db, toPublic(ana), lost3.id, "recent_nos", undefined, undefined, "pipeline", { monthly: 80, monthsLeft: 34 })).rejects.toThrow(/24 ou 36/);
+    await loseOpportunity(db, toPublic(ana), lost3.id, "recent_nos", undefined, undefined, "pipeline", { monthly: 80, contractMonths: 36, monthsLeft: 34 });
+    const c4row = (await db.query.companies.findFirst({ where: eq(companies.id, c4) }))!;
+    expect(c4row).toMatchObject({ l2bMonthly: "80.00", loyaltyMonths: 34 });
+    const inMonths = Math.round((new Date(c4row.campaignEligibleFrom!).getTime() - Date.now()) / (30.44 * 86_400_000));
+    expect(inMonths).toBe(6);
     const days = (new Date((await db.query.companies.findFirst({ where: eq(companies.id, c3) }))!.campaignEligibleFrom!).getTime() - Date.now()) / 86_400_000;
     expect(Math.round(days)).toBeGreaterThanOrEqual(89); // motivo «Preço»: 90 dias
   });

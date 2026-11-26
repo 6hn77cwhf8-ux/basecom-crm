@@ -1,11 +1,12 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { DEFAULT_SCRIPTS, followUpLabel, type FollowUp, NSNR, callbackLimit, proposalValue, saleTypesError, type SaleTypes, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
+import { DEFAULT_SCRIPTS, followUpLabel, type FollowUp, NSNR, callbackLimit, proposalValue, saleTypesError, type SaleTypes, lisbonDay, nboHead, nextContactFor, operatorRefusalNote, recentLoyalty, renderScript, spokenName, nextWorkingDayStart, nextWorkingMoment, type Outcome, type Reason } from "@basecom/shared";
 import type { Db } from "../db/client.js";
 import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies, companyContacts, companyNotes, opportunities, tasks, users, walletChanges } from "../db/schema.js";
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { markFormerClient } from "../companies/status.js";
 import { callableNow, cancelPendingWork } from "../companies/cancel.js";
+import { AFTER_PROPOSAL, applyL2B, checkL2B, type L2BInput } from "../companies/l2b.js";
 import { currentState, OP_CODE, setState, startClient, type WorkKind } from "../time/service.js";
 import { notifyLeadOrAdmin } from "../notifications/service.js";
 import { queueDial, queueHangup } from "../phone/service.js";
@@ -281,6 +282,8 @@ export type ResultInput = {
   saleTypes?: SaleTypes;
   /** Próxima ação (18 nov): follow-up por chamada, SMS, email ou WhatsApp, com a data em «at». */
   followUp?: FollowUp;
+  /** 25 nov: informação do cliente (L2B) — obrigatória na recusa depois de proposta e em «Fidelizado recentemente». */
+  l2b?: L2BInput;
 };
 /** Resultados que pedem a OP e abrem o trabalho em cliente. */
 export const CLIENT_WORK: Record<string, WorkKind> = { proposal_sent: "proposal", sale: "sale" };
@@ -324,7 +327,14 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
   const resultSeconds = Math.max(0, Math.round((now.getTime() - endedAt.getTime()) / 1000)) + Number((call.details as { priorResultSeconds?: number } | null)?.priorResultSeconds ?? 0);
   const co = (await db.query.companies.findFirst({ where: eq(companies.id, call.companyId) }))!;
   // NC/FC só se pede quando houve conversa (não se pede num «Não atendeu», «Ocupado», voicemail ou número errado).
-  const needsKind = co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed && !NO_CONTACT.includes(outcome.effect);
+  // 25 nov: recusas simples (ex.: à abordagem, tem gestor) fecham só com o motivo, sem ir ao programa; a recusa depois
+  // de proposta e «Fidelizado recentemente» pedem a informação do cliente (L2B) e o NC/FC.
+  const openOpp = (await db.select().from(opportunities).where(and(eq(opportunities.companyId, co.id), sql`${opportunities.stage} not in ('won','lost')`)).orderBy(desc(opportunities.createdAt)))[0];
+  const afterProposal = outcome.effect === "not_interested" && !!openOpp && AFTER_PROPOSAL.includes(openOpp.stage);
+  const recentNos = outcome.effect === "not_interested" && reason?.effect === "recent_nos";
+  const l2b = recentNos ? checkL2B(input.l2b, { contract: true, left: true }) : afterProposal ? checkL2B(input.l2b, { left: true }) : undefined;
+  const simpleRefusal = outcome.effect === "not_interested" && !recentNos && !afterProposal;
+  const needsKind = co.accountType === "client" && !co.ownerId && !co.walletKindConfirmed && !NO_CONTACT.includes(outcome.effect) && !simpleRefusal;
   if (needsKind && !input.walletKind) throw new AuthError(400, "Cliente sem NC/FC: identifique se é NC ou FC.");
   const entry = call.entryId ? await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, call.entryId) }) : undefined;
   const a = cat.attempts;
@@ -474,6 +484,13 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
         if (byOperator && known) patch.loyaltyEnd = known;
         if (byOperator && input.competitor?.operator && input.competitor.operator !== NSNR) patch.operator = input.competitor.operator;
         if (nc.eligibleAt) patch.campaignEligibleFrom = nc.eligibleAt.toISOString().slice(0, 10);
+        // Fidelizado recentemente (25 nov): volta a ligar 8 meses depois do início do contrato (a 28 de 36, a 16 de 24).
+        if (recentNos && l2b) {
+          const rl = recentLoyalty(now, l2b.contractMonths!, l2b.monthsLeft!, r.contactAfterMonths ?? 8);
+          patch.campaignEligibleFrom = rl.contactAt.toISOString().slice(0, 10);
+          await task("Ligar", nextWorkingMoment(rl.contactAt), `Refidelização: contrato de ${l2b.contractMonths} meses, faltam ${l2b.contractMonths! - (r.contactAfterMonths ?? 8)}`);
+        }
+        if (l2b) await applyL2B(tx as unknown as Db, co.id, user.id, l2b, l2b.monthsLeft ?? null, recentNos ? "fidelizado recentemente" : "recusa depois de proposta");
         if (r.effect === "company_closed") { patch.inactive = true; await leaveAllCampaigns(); }
         // Insatisfeito NOS: como o RGPD, mas até uma data — sai de todas as campanhas e não volta antes dela.
         if (r.effect === "dissatisfied" && nc.eligibleAt) { patch.dissatisfiedUntil = nc.eligibleAt.toISOString().slice(0, 10); await leaveAllCampaigns(); }

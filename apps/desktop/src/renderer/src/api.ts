@@ -36,9 +36,10 @@ export type CompanyDetail = {
   wallet: { id: string; kind: string; status: string; effectiveFrom: string; reason: string | null; toOwner: string | null; createdAt: string }[];
 };
 export type Outcome = { id: string; label: string; group: "refuse" | "callback" | "noanswer" | "proposal" | "sale" | "other"; effect: string; active: boolean };
-export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "dissatisfied" | "other"; days?: number; months?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; active: boolean };
+export type Reason = { id: string; label: string; effect: "cooldown" | "loyalty_end" | "new_contract" | "followup_task" | "company_closed" | "dissatisfied" | "recent_nos" | "other"; days?: number; months?: number; monthsBefore?: number; contractMonths?: number; unknownMonths?: number; contactAfterMonths?: number; active: boolean };
+export type L2BInput = { monthly?: number; contractMonths?: number; monthsLeft?: number };
 /** «Guardar e fechar» do Em cliente (17 nov): tipos e valor; na proposta, canal, próxima ação e data. */
-export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; followUp?: "call" | "sms" | "email" | "whatsapp"; at?: string; comment?: string };
+export type CloseClient = { saleTypes: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; channel?: string; followUp?: "call" | "sms" | "email" | "whatsapp"; at?: string; comment?: string; l2b?: L2BInput };
 export type ReceivedCall = { id: string; number: string; ringingAt: string; answered: boolean | null; durationSeconds: number | null; endedAt: string | null; returned: boolean; missed: boolean; companies: { id: string; name: string; nif: string }[] };
 export type NewCompany = {
   nif: string; name: string; kind: "NN" | "NC" | "FC"; phones?: string[]; email?: string | null; decisor?: string | null;
@@ -60,7 +61,7 @@ export type DialerEntry = {
   /** 18 nov: ainda não houve nenhum não atende nesta empresa (SMS «Tentámos ligar»). */
   firstNoAnswer?: boolean;
 };
-export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC" | "NN"; followUp?: "call" | "sms" | "email" | "whatsapp"; newDecisor?: { salutation?: string | null; name: string }; opCode?: string; saleTypes?: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>> };
+export type ResultInput = { outcomeId: string; reasonId?: string; comment?: string; date?: string; at?: string; forMe?: boolean; nextAction?: string; services?: string; decisorName?: string; competitor?: { operator?: string; renewalDate?: string; text?: string }; walletKind?: "NC" | "FC" | "NN"; followUp?: "call" | "sms" | "email" | "whatsapp"; newDecisor?: { salutation?: string | null; name: string }; opCode?: string; saleTypes?: Partial<Record<"NN" | "FID" | "XSell" | "Upsell", number>>; l2b?: L2BInput };
 export type Task = { id: string; type: string; dueAt: string; description: string | null; companyId: string; company: string; nif: string; status: string };
 export type AgendaTask = { id: string; type: string; dueAt: string; description: string | null; origin: string; status: string; opportunityId: string | null; companyId: string; company: string; nif: string; municipality: string | null; assignedName: string; assignedTo: string; phone: string | null };
 export type MyDay = { refusals: number; incoming: IncomingStats; ponto: Ponto; oppsLate: number; oppsWarn: number; calls: number; effective: number; proposals: number; sales: number; breakUsed: number; breakLimit: number; worked: number; loggedIn: number; received: number | null; late: number; points: { cycle: string; confirmed: number; forecast: number; next: { points: number; bonus: number } | null }; clientSeconds: number; officeSeconds: number; officeLimit: number; supportSeconds: number; next: { id: string; dueAt: string; type: string; company: string; companyId: string }[] };
@@ -218,9 +219,9 @@ export const api = {
   createOpportunity: (b: { companyId: string; stage?: string; services?: string }) => call("/opportunities", { method: "POST", body: JSON.stringify(b) }),
   moveOpportunity: (id: string, stage: string, comment?: string, nosOp?: string) => call(`/opportunities/${id}/stage`, { method: "POST", body: JSON.stringify({ stage, comment, nosOp }) }),
   opportunityActivity: (id: string, text: string) => call(`/opportunities/${id}/activity`, { method: "POST", body: JSON.stringify({ text }) }),
-  winOpportunity: (id: string, soldTypes: Record<string, number | undefined>, nosOp?: string) => call(`/opportunities/${id}/win`, { method: "POST", body: JSON.stringify({ soldTypes, nosOp }) }),
-  giveUpClient: (b: { reasonId: string; comment?: string; operator?: string; date?: string }) => call<DaySummary>("/time/client/give-up", { method: "POST", body: JSON.stringify(b) }),
-  loseOpportunity: (id: string, reasonId: string, comment?: string, extra?: { operator: string; date: string }) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment, ...extra }) }),
+  winOpportunity: (id: string, soldTypes: Record<string, number | undefined>, nosOp?: string, l2b?: L2BInput) => call(`/opportunities/${id}/win`, { method: "POST", body: JSON.stringify({ soldTypes, nosOp, l2b }) }),
+  giveUpClient: (b: { reasonId: string; comment?: string; operator?: string; date?: string; l2b?: L2BInput }) => call<DaySummary>("/time/client/give-up", { method: "POST", body: JSON.stringify(b) }),
+  loseOpportunity: (id: string, reasonId: string, comment?: string, extra?: { operator: string; date: string }, l2b?: L2BInput) => call(`/opportunities/${id}/lose`, { method: "POST", body: JSON.stringify({ reasonId, comment, ...extra, l2b }) }),
   wallet: (q: { ownerId?: string; tasks?: string; q?: string }) => call<{ companies: WalletRow[] }>(`/wallet${qs(q)}`).then((r) => r.companies),
   callFromWallet: (id: string) => call<{ callId: string; phone: { id: string; value: string; type: string | null } }>(`/wallet/${id}/call`, { method: "POST", body: "{}" }),
   agendaPeople: () => call<{ people: { id: string; name: string; role: string; photo: string | null }[] }>("/agenda/people").then((r) => r.people),

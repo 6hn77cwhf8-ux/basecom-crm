@@ -12,7 +12,7 @@ type Cat = {
 const GROUP: Record<string, string> = { refuse: "Recusa", callback: "Callback", noanswer: "Não atende", proposal: "Proposta", sale: "Venda", other: "Outro" };
 const EFFECT: Record<Reason["effect"], string> = {
   cooldown: "Volta às campanhas após X dias", loyalty_end: "Outro operador: fidelizado (data do cliente)", new_contract: "Outro operador: renovou (data do cliente)",
-  followup_task: "Tarefa de seguimento após X dias", company_closed: "Empresa encerrada (sai de tudo)", dissatisfied: "Insatisfeito NOS (sai de tudo durante X meses)", other: "Outro (descrição obrigatória)",
+  followup_task: "Tarefa de seguimento após X dias", company_closed: "Empresa encerrada (sai de tudo)", dissatisfied: "Insatisfeito NOS (sai de tudo durante X meses)", recent_nos: "Fidelizado recentemente (contacto X meses depois do início do contrato)", other: "Outro (descrição obrigatória)",
 };
 const ATTEMPTS: [keyof Cat["attempts"], string, string][] = [
   ["noAnswerRetryMinutes", "Não atendeu: nova tentativa após", "min"], ["busyRetryMinutes", "Ocupado: nova tentativa após", "min"],

@@ -94,7 +94,7 @@ export function Agenda({ me, onOpenCompany }: { me: User; onOpenCompany: (id: st
           </section>
         ) : (
           <ResultPanel cat={cat} group={calling.group} onGroup={(g) => setCalling({ ...calling, group: g })} busy={busy} error={error} endedAt={calling.ended}
-            needsKind={calling.needsKind} company={{ name: t.company, nif: t.nif, phone: calling.phone ? formatPhone(calling.phone) : undefined }}
+            needsKind={calling.needsKind} company={{ id: t.companyId, name: t.company, nif: t.nif, phone: calling.phone ? formatPhone(calling.phone) : undefined }}
             onBack={() => setCalling({ ...calling, ended: null })} onSave={save} />
         )}
         <ErrorText>{error}</ErrorText>

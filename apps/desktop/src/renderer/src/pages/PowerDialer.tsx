@@ -436,7 +436,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
           triedSms={cur.firstNoAnswer && smsTo ? { to: smsTo, vars: { decisor: cur.decisors[0] || undefined, empresa: cur.company.name, comercial: me.name, telemovel: me.mobile ?? undefined } } : undefined}
           onSms={(text) => { if (smsTo) api.logMessage(cur.company.id, { channel: "sms", templateId: "tried_call", to: smsTo, text }).catch((e) => setError(`SMS não enviada: ${(e as Error).message}`)); }}
           live={live ? { secs: Math.floor((Date.now() - startedAt) / 1000), queued, onHangUp: () => { hangUpLive(); } } : undefined}
-          company={{ name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
+          company={{ id: cur.company.id, name: cur.company.name, nif: cur.company.nif, phone: cur.phone ? formatPhone(cur.phone.value) : undefined, decisor: cur.decisors[0] }}
           onBack={() => setPhase("review")} onSave={save} />
       )}
 

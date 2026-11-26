@@ -4,6 +4,7 @@ import { api, type Catalogs, type Outcome, type Reason, type ResultInput } from 
 import { btn, btnDark, c, card, ErrorText, Field, input } from "../ui";
 import { OpField, opValid, SaleTypesPicker, typesToNumbers, type TypesDraft } from "./ClientWork";
 import { DatePicker } from "./DatePicker";
+import { emptyL2B, L2BFields, l2bReady, l2bValue, type L2BDraft } from "./L2BFields";
 
 export const GROUPS = [
   { id: "refuse", label: "Recusa", key: "1" }, { id: "callback", label: "Callback", key: "2" }, { id: "noanswer", label: "Não atende", key: "3" },
@@ -34,7 +35,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   backLabel?: string;
   /** Resultado aberto com a chamada ainda a decorrer no telemóvel: só grava quando a chamada acabar. */
   live?: { secs: number; queued: boolean; onHangUp: () => void };
-  hidden?: boolean; needsKind?: boolean; cat: Catalogs; group: Group; company: { name: string; nif: string; phone?: string; decisor?: string };
+  hidden?: boolean; needsKind?: boolean; cat: Catalogs; group: Group; company: { id?: string; name: string; nif: string; phone?: string; decisor?: string };
   endedAt: number; busy: boolean; error: string; onGroup: (g: Group) => void; onBack: () => void; onSave: (r: ResultInput) => void;
 }) {
   const options = useMemo(() => cat.catalogs.outcomes.filter((o) => o.active && o.group === group), [cat, group]);
@@ -52,6 +53,10 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [op, setOp] = useState("");
   // Tipos de venda e valor de cada um (€/mês): até 2 (FID + XSell ou FID + Upsell; NN sozinho).
   const [types, setTypes] = useState<TypesDraft>({});
+  // 25 nov: informação do cliente (L2B) na recusa depois de proposta e em «Fidelizado recentemente».
+  const [l2b, setL2b] = useState<L2BDraft>(emptyL2B());
+  const [oppStage, setOppStage] = useState<string | null>(null);
+  useEffect(() => { if (company.id) api.companyOpportunities(company.id).then((l) => setOppStage(l.find((o) => o.stage !== "won" && o.stage !== "lost")?.stage ?? null)).catch(() => undefined); }, [company.id]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { setOutcome(options.length === 1 ? options[0]! : null); setReason(null); }, [group]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -61,8 +66,11 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const eff = outcome?.effect;
   /** Recusa por outro operador: operadora obrigatória e nova abordagem na data que o cliente sugerir (não automática). */
   const byOperator = reason?.effect === "loyalty_end" || reason?.effect === "new_contract";
-  // NC/FC só quando houve conversa (num «Não atendeu» não se pede).
-  const askKind = needsKind && !!outcome && !["no_answer", "busy", "voicemail", "wrong_number"].includes(outcome.effect);
+  const recentNos = outcome?.effect === "not_interested" && reason?.effect === "recent_nos";
+  const afterProposal = outcome?.effect === "not_interested" && !!oppStage && ["proposal", "negotiation", "documents"].includes(oppStage);
+  const askL2B = recentNos || afterProposal;
+  // NC/FC só quando houve conversa (num «Não atendeu» não se pede) e não nas recusas simples (25 nov: sem ir ao programa).
+  const askKind = needsKind && !!outcome && !["no_answer", "busy", "voicemail", "wrong_number"].includes(outcome.effect) && (outcome.effect !== "not_interested" || askL2B);
   // Proposta enviada e Venda (17 nov): só a OP; o resto pede-se no «Guardar e fechar» do Em cliente.
   const needsAt = eff === "call_later" || eff === "interested" || eff === "negotiating" || reason?.effect === "other";
   // Proposta enviada e Venda fechada: OP obrigatória e, ao guardar, começa o tempo «Em cliente».
@@ -71,7 +79,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const withTypes = eff === "negotiating";
   const saleTypes = typesToNumbers(types);
   const typesErr = withTypes ? saleTypesError(saleTypes) : null;
-  const ready = !typesErr && (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
+  const ready = (!askL2B || l2bReady(l2b, { contract: recentNos, left: true })) && !typesErr && (!workKind || opValid(op)) && (!askKind || !!kind) && (!byOperator || (!!comp.operator && !!date)) && !!outcome && (eff !== "not_interested" || !!reason) && (reason?.effect !== "other" || comment.trim().length > 0)
     && (eff !== "call_later" || !!at) && (!["interested", "negotiating"].includes(eff ?? "") || (!!at && !!followUp));
   // SMS «Tentámos ligar»: só no «Não atendeu» do 1.º não atende, para telemóveis.
   const showSms = !!triedSms && eff === "no_answer" && /^9\d{8}$/.test(triedSms.to.replace(/\D/g, ""));
@@ -85,7 +93,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         if (reason.effect === "cooldown") return `Pode voltar a uma campanha daqui a ${reason.days} dias`;
     if (reason.effect === "followup_task") return `Tarefa de seguimento daqui a ${reason.days} dias`;
     if (reason.effect === "company_closed") return "Empresa marcada como encerrada e retirada de todas as campanhas";
-    if (reason.effect === "loyalty_end" || reason.effect === "new_contract") return null;
+    if (reason.effect === "loyalty_end" || reason.effect === "new_contract" || reason.effect === "recent_nos") return null;
     return "Defina a data da nova abordagem (opcional)";
   }, [reason, date]);
 
@@ -98,6 +106,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
       decisorName: decisorName.trim() || undefined, followUp: followUp ?? undefined, competitor: comp.operator || comp.text ? comp : undefined, walletKind: askKind && kind ? kind : undefined,
       opCode: workKind ? op : undefined,
       saleTypes: withTypes ? saleTypes : undefined,
+      l2b: askL2B ? l2bValue(l2b) : undefined,
     });
   }
   useEffect(() => {
@@ -157,6 +166,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
         </div>
       )}
       {nextContact && <div style={{ fontSize: 13, padding: "8px 12px", background: c.brandSoft, borderRadius: 10 }}><b>Próximo contacto (automático):</b> {nextContact}</div>}
+      {askL2B && <L2BFields value={l2b} onChange={setL2b} need={{ contract: recentNos, left: true }} recent={recentNos} contactAfterMonths={reason?.contactAfterMonths ?? 8}
+        title={recentNos ? "Fidelizado recentemente: informação do cliente" : "Recusa depois de proposta: informação do cliente"} />}
 
       {eff === "decisor_absent" && <Field label="Nome do decisor (se souber)"><input style={input} value={decisorName} onChange={(e) => setDecisorName(e.target.value)} /></Field>}
       {needsAt && (

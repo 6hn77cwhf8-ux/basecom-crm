@@ -9,6 +9,7 @@ import { canSee, visibleUserIds } from "../teams/service.js";
 import { incomingStats } from "../phone/service.js";
 import { docsReminders, loseOpportunity, soldTypesOrError } from "../opportunities/service.js";
 import { cancelPendingWork } from "../companies/cancel.js";
+import { applyL2B, checkL2B, type L2BInput } from "../companies/l2b.js";
 import { queueFollowUp } from "../dialer/service.js";
 
 /**
@@ -128,7 +129,7 @@ export async function startClient(db: Db, user: PublicUser, input: { companyId: 
   return daySummary(db, user.id);
 }
 
-export type CloseClientInput = { saleTypes: SaleTypes; channel?: string; followUp?: FollowUp; at?: string; comment?: string };
+export type CloseClientInput = { saleTypes: SaleTypes; channel?: string; followUp?: FollowUp; at?: string; comment?: string; l2b?: L2BInput };
 
 /**
  * «Guardar e fechar» (17 nov 2026): fecha o trabalho em cliente com os dados da proposta ou venda
@@ -146,6 +147,8 @@ export async function endClient(db: Db, user: PublicUser, input?: CloseClientInp
     const channels = rules.channels ?? DEFAULT_PROPOSAL_CHANNELS;
     if (isProposal && !channels.includes(input.channel ?? "")) throw new AuthError(400, "Indique o canal por onde enviou a proposta.");
     if (isProposal && (!input.at || !input.followUp)) throw new AuthError(400, "Escolha a próxima ação (follow-up) e a data.");
+    // 25 nov: na venda, a nova mensalidade do cliente e a fidelização (24/36) são obrigatórias e atualizam a ficha.
+    const saleL2B = isProposal ? undefined : checkL2B(input.l2b, { contract: true });
     const now = new Date();
     const value = proposalValue(input.saleTypes);
     const companyId = cur.companyId, op = cur.opCode;
@@ -158,6 +161,7 @@ export async function endClient(db: Db, user: PublicUser, input?: CloseClientInp
         // 23 nov: venda confirmada ao cêntimo; a proposta (se houver) fica guardada à parte. Fecha como Ganha.
         const sold = soldTypesOrError(input.saleTypes);
         await cancelPendingWork(tx as unknown as Db, companyId);
+        await applyL2B(tx as unknown as Db, companyId, user.id, saleL2B!, saleL2B!.contractMonths!, "venda");
         await tx.update(opportunities).set({ ...sold, ...(opp!.saleTypes ? {} : { saleTypes: sold.soldTypes, proposedValue: sold.soldValue }), stage: "won",
           ...(opp!.closedAt ? {} : { closedAt: now, closedBy: user.id, closedVia: "client" }), lastActivityAt: now }).where(eq(opportunities.id, opp!.id));
         if (co && !co.ownerId) {
@@ -182,7 +186,7 @@ export async function endClient(db: Db, user: PublicUser, input?: CloseClientInp
  * «Cliente desistiu» (23 nov): sai do Em cliente sem venda. Motivo obrigatório (catálogo de recusas):
  * a oportunidade fica Perdida e conta como recusa no dia.
  */
-export async function giveUpClient(db: Db, user: PublicUser, input: { reasonId: string; comment?: string; operator?: string; date?: string }) {
+export async function giveUpClient(db: Db, user: PublicUser, input: { reasonId: string; comment?: string; operator?: string; date?: string; l2b?: L2BInput }) {
   const cur = await openEntry(db, user.id);
   if (cur?.state !== "client" || !cur.companyId || !cur.opCode) throw new AuthError(409, "Não está Em cliente.");
   const companyId = cur.companyId, op = cur.opCode;
@@ -194,7 +198,7 @@ export async function giveUpClient(db: Db, user: PublicUser, input: { reasonId: 
     const co = await db.query.companies.findFirst({ where: eq(companies.id, companyId) });
     [opp] = await db.insert(opportunities).values({ companyId, ownerId: co?.ownerId ?? user.id, stage: "proposal", nosOp: op }).returning();
   }
-  await loseOpportunity(db, user, opp!.id, input.reasonId, input.comment, { operator: input.operator, date: input.date }, "client");
+  await loseOpportunity(db, user, opp!.id, input.reasonId, input.comment, { operator: input.operator, date: input.date }, "client", input.l2b);
   await setState(db, user, user.id, "working", undefined, { closingClient: true });
   return daySummary(db, user.id);
 }

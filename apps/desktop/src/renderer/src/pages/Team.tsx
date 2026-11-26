@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { fmtBalance } from "@basecom/shared";
+import { fmtBalance, fmtHours } from "@basecom/shared";
 import { api, ROLE_LABEL, type Role, type TeamMember, type User } from "../api";
 import { SignatureDialog } from "./Signature";
 import { btn, btnDark, c, card, Chip, ErrorText, Field, fmtDate, input, PageHeader, td, th, Avatar, resizePhoto } from "../ui";
@@ -165,14 +165,14 @@ function Ponto({ canExport }: { canExport: boolean }) {
               <td style={{ ...td, fontWeight: 600 }}>{r.name}</td>
               <td style={td}>{r.state ? <Chip tone={r.state === "working" ? "ok" : "warn"}>{STATE_LABEL[r.state]}{r.client ? ` · ${r.client.kind === "sale" ? "Venda" : "Proposta"} · NIF ${r.client.nif} · OP ${r.client.opCode}` : ""}</Chip> : <span style={{ color: c.muted }}>Fora</span>}</td>
               <td style={td}>{hm(p.entrada)}</td><td style={td}>{hm(p.saidaAlmoco)}</td><td style={td}>{hm(p.regressoAlmoco)}</td><td style={td}>{hm(p.saida)}</td>
-              <td style={{ ...td, fontWeight: 700 }}>{mmss(p.presenceSeconds)}</td>
+              <td style={{ ...td, fontWeight: 700 }}>{fmtHours(p.presenceSeconds)}</td>
               <td style={{ ...td, fontWeight: 700, color: p.balanceSeconds < 0 ? c.danger : c.ok }}>{fmtBalance(p.balanceSeconds)}</td>
               <td style={td}>{hm(p.expectedExit)}</td>
-              <td style={{ ...td, ...red(r.over.break) }}>{mmss(r.seconds.break)}</td>
-              <td style={td}>{mmss(r.seconds.training)}</td>
-              <td style={{ ...td, fontWeight: r.seconds.client ? 700 : 400 }}>{mmss(r.seconds.client ?? 0)}</td>
-              <td style={td}>{mmss(r.seconds.office ?? 0)}</td>
-              <td style={td}>{mmss(r.seconds.support ?? 0)}</td>
+              <td style={{ ...td, ...red(r.over.break) }}>{fmtHours(r.seconds.break)}</td>
+              <td style={td}>{fmtHours(r.seconds.training)}</td>
+              <td style={{ ...td, fontWeight: r.seconds.client ? 700 : 400 }}>{fmtHours(r.seconds.client ?? 0)}</td>
+              <td style={td}>{fmtHours(r.seconds.office ?? 0)}</td>
+              <td style={td}>{fmtHours(r.seconds.support ?? 0)}</td>
               <td style={td}>{r.calls?.calls ?? 0}</td>
               <td style={td}>{r.calls?.refusals ?? 0}</td>
               <td style={td} title="Chamadas com menos de 5 s ou repetidas antes de guardar: não contam">{r.calls?.short ?? 0}</td>

@@ -48,6 +48,7 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
       opCode: z.string().trim().max(20).optional(),
       saleTypes: z.object({ NN: z.number().min(0).max(100000).optional(), FID: z.number().min(0).max(100000).optional(), XSell: z.number().min(0).max(100000).optional(), Upsell: z.number().min(0).max(100000).optional() }).optional(),
       followUp: z.enum(["call", "sms", "email", "whatsapp"]).optional(),
+      l2b: z.object({ monthly: z.number().min(0).max(100000).optional(), contractMonths: z.number().int().min(1).max(60).optional(), monthsLeft: z.number().int().min(0).max(60).optional() }).optional(),
     }).parse(req.body);
     return saveResult(db, req.user!, id.parse(req.params).id, b);
   });

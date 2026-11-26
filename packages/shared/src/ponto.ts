@@ -50,3 +50,10 @@ export function fmtBalance(seconds: number): string {
   const m = Math.round(Math.abs(seconds) / 60);
   return `${sign}${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
 }
+
+/** Ponto em horas (25 nov): «7 h 32»; abaixo de 1 hora, «45 min». */
+export function fmtHours(seconds: number): string {
+  const m = Math.round(Math.max(0, seconds) / 60);
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
