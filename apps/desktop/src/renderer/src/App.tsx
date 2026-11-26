@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { OPEN_SCRIPT_EVENT, api, type User } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { OPEN_SCRIPT_EVENT, WORK_EVENT, api, type User } from "./api";
 import { Login } from "./Login";
 import { ChangePassword } from "./ChangePassword";
 import { NAV, Shell, type PageId } from "./Shell";
@@ -41,12 +41,26 @@ export function App() {
   }, []);
   const logout = () => api.logout().then(() => setUser(null));
   // Sinal de vida a cada minuto: regista a entrada e mantém o ponto certo; se a aplicação fechar, o período termina no último sinal.
+  // 24 nov: de 15 em 15 s, e quando o estado muda noutro lado (ex.: o responsável terminou a formação) o ecrã atualiza logo.
+  const lastState = useRef<string | null | undefined>(undefined);
+  const [stateNotice, setStateNotice] = useState("");
   useEffect(() => {
     if (!user || user.mustChangePassword) return;
-    api.heartbeat().catch(() => undefined);
-    const t = setInterval(() => api.heartbeat().catch(() => undefined), 60_000);
-    return () => clearInterval(t);
+    const beat = () => api.heartbeat().then((r) => {
+      const prev = lastState.current;
+      lastState.current = r.state;
+      if (prev === undefined || prev === r.state) return;
+      window.dispatchEvent(new Event(WORK_EVENT));
+      if (prev === "training" && r.state === "working") setStateNotice("O seu responsável terminou a formação. Já pode voltar a ligar.");
+      else if (r.state === "training") setStateNotice("O seu responsável pôs-lhe a Formação.");
+    }).catch(() => undefined);
+    beat();
+    const t = setInterval(beat, 15_000);
+    const h = () => { lastState.current = undefined; beat(); };
+    window.addEventListener(WORK_EVENT, h);
+    return () => { clearInterval(t); window.removeEventListener(WORK_EVENT, h); };
   }, [user?.id, user?.mustChangePassword]);
+  useEffect(() => { if (!stateNotice) return; const t = setTimeout(() => setStateNotice(""), 8000); return () => clearTimeout(t); }, [stateNotice]);
   if (checking) return null;
   // 20 nov: o Administrador começa no Pipeline (não usa o Ligar); os outros no Ligar.
   if (!user) return <Login onDone={(u) => { setUser(u); if (u.theme) applyTheme(u.theme); setPage(u.role === "admin" ? "oportunidades" : "novos"); }} />;
@@ -71,6 +85,7 @@ export function App() {
       </div>
       </>}
       {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
+      {stateNotice && <div role="status" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 120, background: "#15803D", color: "#FFFFFF", borderRadius: 12, padding: "12px 18px", fontSize: 15, fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,.2)" }}>{stateNotice}</div>}
     </Shell>
   );
 }
