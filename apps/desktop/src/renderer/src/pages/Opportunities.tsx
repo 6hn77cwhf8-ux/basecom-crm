@@ -243,7 +243,7 @@ function Activity({ o, onClose, onDone }: { o: Opportunity; onClose: () => void;
 const NEEDS_OP = ["proposal", "negotiation", "documents", "won"];
 /** OP da NOS: 7 algarismos. */
 function OpField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return <Field label="OP (7 algarismos) · obrigatória a partir de Proposta enviada"><input style={{ ...input, width: 180, letterSpacing: ".08em", fontWeight: 700 }} inputMode="numeric" maxLength={7} value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))} placeholder="7123456" /></Field>;
+  return <Field label="OP (7 algarismos) · obrigatória a partir de Proposta enviada"><input aria-label="OP" style={{ ...input, width: 180, letterSpacing: ".08em", fontWeight: 700 }} inputMode="numeric" maxLength={7} value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))} placeholder="7123456" /></Field>;
 }
 
 function Move({ o, initial, onClose, onDone }: { o: Opportunity; initial?: string; onClose: () => void; onDone: () => void }) {
