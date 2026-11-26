@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LateTasksBox, TaskBanner, useDueTasks } from "./pages/TaskReminder";
+import { HelpAlerts, HelpButton } from "./pages/Help";
 import { fmtBalance, fmtHours } from "@basecom/shared";
 import { Avatar, btn, btnDark, c, dialPref, ErrorText, font, resizePhoto, tint, tone } from "./ui";
 import { IncomingBanner, PhoneDialog } from "./pages/Phone";
@@ -84,8 +85,9 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
           );
         })}
         <LateTasksBox due={due} open={open} onAgenda={() => onNavigate("agenda")} />
+        {user.role !== "admin" && <div style={{ marginTop: due.length ? 0 : "auto" }}><HelpButton open={open} /></div>}
         <button onClick={onLogout} title="Terminar sessão" aria-label="Terminar sessão"
-          style={{ marginTop: due.length ? 0 : "auto", marginBottom: 10, height: 32, border: `1px solid ${c.line}`, borderRadius: 8, background: c.card, color: c.ink, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          style={{ marginTop: due.length || user.role !== "admin" ? 0 : "auto", marginBottom: 10, height: 32, border: `1px solid ${c.line}`, borderRadius: 8, background: c.card, color: c.ink, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
           <Icon d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />{open && "Terminar sessão"}
         </button>
         <div style={{ paddingTop: 14, borderTop: `1px solid ${c.line}`, display: "flex", alignItems: "center", gap: 10 }}>
@@ -107,6 +109,8 @@ export function Shell({ user, page, onNavigate, onLogout, onOpenCompany, onUser,
       {!open && <MyDayPanel onAgenda={() => onNavigate("agenda")} onOpps={() => onNavigate("oportunidades")} onOpenCompany={onOpenCompany} />}
       <IncomingBanner onOpenCompany={onOpenCompany} bigScript={user.role !== "admin"} />
       <TaskBanner due={due} onOpenCompany={onOpenCompany} />
+      <ShellUpdateNote />
+      {user.role !== "sales" && <HelpAlerts onOpenCompany={onOpenCompany} />}
       <ClientBanner hidden={page === "novos"} onOpenCompany={onOpenCompany} />
       {phoneOpen && <PhoneDialog onClose={() => setPhoneOpen(false)} />}
       <main style={{ flex: 1, minWidth: 0, padding: "24px 32px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>{children}</main>
@@ -330,5 +334,18 @@ function DialPref() {
       <span style={{ display: "flex", flexDirection: "column", gap: 2 }}><b>Ligar pelo computador</b>
         <span style={{ fontSize: 12, color: c.muted }}>Sem telemóvel BASECOM ligado, «Iniciar chamada» abre a chamada no computador (no Mac, pelo FaceTime e o iPhone). No fim, carregue em «Desligar» no CRM. Fica só neste computador.</span></span>
     </label>
+  );
+}
+
+/** 26 nov: programa do computador antigo (sem caixas por cima de tudo nem ecrã proporcional): pede para reinstalar. */
+function ShellUpdateNote() {
+  const b = (window as unknown as { basecom?: { version?: string; overlay?: unknown } }).basecom;
+  const [hide, setHide] = useState(() => { try { return sessionStorage.getItem("bc_shell_note") === "1"; } catch { return false; } });
+  if (!b || b.overlay || hide) return null;
+  return (
+    <div role="status" style={{ position: "fixed", left: "50%", bottom: 16, transform: "translateX(-50%)", zIndex: 110, background: c.card, border: `1px solid ${c.line}`, borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,.15)", padding: "10px 14px", fontSize: 13, display: "flex", gap: 10, alignItems: "center" }}>
+      Há uma versão nova do programa BASECOM CRM para o computador (caixas de chamada por cima de tudo e ecrã proporcional). Peça ao Administrador o instalador.
+      <button style={{ border: 0, background: "none", cursor: "pointer", fontWeight: 700, color: c.muted }} onClick={() => { setHide(true); try { sessionStorage.setItem("bc_shell_note", "1"); } catch { /* */ } }}>Fechar</button>
+    </div>
   );
 }

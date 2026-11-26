@@ -9,6 +9,7 @@ import { ClientWorkCard } from "./ClientWork";
 import { FloatingCall, MuteButton } from "./FloatingCall";
 import { createPortal } from "react-dom";
 import { DatePicker } from "./DatePicker";
+import { overlay } from "../overlay";
 
 /** «review»: chamada terminada, a rever o script antes de voltar ao resultado (o tempo e o que já escreveu mantêm-se). */
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "review" | "countdown" | "empty";
@@ -104,8 +105,18 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   useEffect(() => { if (phase === "countdown" || phase === "ready" || phase === "idle") setReceived(false); }, [phase]);
   // Acabou a recebida e a marcação tinha sido cancelada: a empresa volta (início da fila), sem marcar sozinho.
   useEffect(() => { if (!incoming.active && reloadAfter.current) { reloadAfter.current = false; load(false); } }, [incoming.active]);
+  // 26 nov: chamada em curso por cima de todas as aplicações quando o CRM não está à frente (programa do computador 0.16+).
+  useEffect(() => {
+    if (!overlay || !cur) return;
+    if (phase !== "calling") { overlay.hide("call"); return; }
+    overlay.show("call", { tone: "dark", subtitle: received ? "Chamada recebida" : "Chamada em curso", title: cur.company.name, lines: [cur.phone ? formatPhone(cur.phone.value) : ""], since: startedAt,
+      buttons: [...(viaPhone ? [{ id: "mute", label: muted ? "Som" : "Mute" }] : []), { id: "hangup", label: "Desligar", kind: "danger" }, { id: "crm", label: "CRM" }] });
+  }, [phase, cur?.company.id, muted, viaPhone]);
+  useEffect(() => () => overlay?.hide("call"), []);
+  const callActions = useRef({ mute: () => undefined as unknown, hangup: () => undefined as unknown });
+  useEffect(() => overlay?.onAction((kind, action) => { if (kind !== "call") return; if (action === "mute") callActions.current.mute(); if (action === "hangup") callActions.current.hangup(); }), []);
   // 24 nov: durante a chamada os avisos de tarefa não fazem som.
-  useEffect(() => { if (phase !== "calling") return; document.body.dataset.inCall = "1"; return () => { delete document.body.dataset.inCall; }; }, [phase]);
+  useEffect(() => { if (phase !== "calling" || !cur) return; document.body.dataset.inCall = "1"; document.body.dataset.callCompanyId = cur.company.id; return () => { delete document.body.dataset.inCall; delete document.body.dataset.callCompanyId; }; }, [phase, cur?.company.id]);
   const toggleMute = () => api.phoneMute(!muted).then((r) => setMuted(r.on)).catch((e) => setError((e as Error).message));
   useEffect(() => { setMuted(false); }, [callId]);
 
@@ -160,6 +171,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
     await api.endCall(callId).catch(() => undefined);
     liveEnded(Date.now());
   }
+  callActions.current = { mute: () => toggleMute(), hangup: () => hangUp() };
   async function hangUp(g: Group = "noanswer") {
     if (!callId) return;
     await api.endCall(callId).catch(() => undefined);

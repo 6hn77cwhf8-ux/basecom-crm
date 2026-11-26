@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatPhone } from "@basecom/shared";
 import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, type Incoming, type PhoneDevice, type SearchHit } from "../api";
 import { QuickCall } from "./QuickCall";
+import { overlay } from "../overlay";
 import { btn, btnDark, c, ErrorText } from "../ui";
 import { Modal } from "./Wallet";
 
@@ -94,6 +95,26 @@ export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenComp
     window.addEventListener(INCOMING_DISMISS, h);
     return () => window.removeEventListener(INCOMING_DISMISS, h);
   }, []);
+  // 26 nov: a chamada a entrar também aparece por cima de todas as aplicações (programa do computador 0.16+).
+  const ringing = !answered && !!inc && inc.id !== dismissed && !inc.endedAt ? inc : null;
+  const openScript = (x: Incoming) => {
+    if (bigScript && x.companies.length === 1) { window.dispatchEvent(new CustomEvent(OPEN_SCRIPT_EVENT, { detail: { companyId: x.companies[0]!.id, number: x.number } })); setDismissed(x.id); }
+    else setAnswered(x);
+  };
+  const openRef = useRef(openScript); openRef.current = openScript;
+  const ringRef = useRef(ringing); ringRef.current = ringing;
+  useEffect(() => {
+    if (!overlay) return;
+    if (!ringing) { overlay.hide("incoming"); return; }
+    const num = /^\d{9}$/.test(ringing.number) ? formatPhone(ringing.number) : ringing.number;
+    overlay.show("incoming", { tone: "green", subtitle: "Chamada a entrar", title: ringing.companies.length > 1 ? `${ringing.companies.length} empresas com este número` : ringing.company ?? "Número desconhecido",
+      lines: [`${num}${ringing.owner ? ` · carteira de ${ringing.owner}` : ""}`], buttons: [{ id: "script", label: "Abrir script", kind: "primary" }, { id: "ignore", label: "Não atender" }] });
+  }, [ringing?.id]);
+  useEffect(() => overlay?.onAction((kind, action) => {
+    const r = ringRef.current;
+    if (kind !== "incoming" || !r) return;
+    if (action === "script") openRef.current(r); else if (action === "ignore") setDismissed(r.id);
+  }), []);
   if (answered) return <IncomingCall inc={answered} onDone={() => { setDismissed(answered.id); setAnswered(null); }} />;
   if (!inc || inc.id === dismissed) return null;
   return (
