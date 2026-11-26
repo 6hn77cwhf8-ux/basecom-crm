@@ -197,3 +197,10 @@ Decidido pelo Claude (o Leonardo pediu para responder às perguntas):
 - **Nova recusa «Tem gestor»:** volta às campanhas ao fim de **120 dias** (configurável); fecha só com o motivo.
 - **Ponto em horas:** «7 h 32» (abaixo de 1 hora, «45 min»), igual na Equipa comercial, no «O meu dia» e no Excel.
 - **Propostas com IA dentro do CRM:** ideia para o futuro (fim do Arranque B ou fase C); só anotado.
+
+## Pedidos de 26/11/2026 — decididos, por construir (juntar à 0.16; NÃO publicar sem ordem do Leonardo)
+
+1. **Empresa com oportunidade em curso no Ligar** (follow-up, callback ou campanha): etiqueta «Em oportunidade · etapa · OP» e três botões — «Iniciar chamada»; «Saltar» (sem resultado nem tentativa, volta mais tarde); «Follow-up» (dia e hora; sai da fila até lá, sem ligar). O Follow-up só aparece em empresas com oportunidade aberta.
+2. **Cartão do Pipeline → «Em cliente» direto:** abre com a empresa e a OP do cartão (não se volta a escrever); só pergunta Proposta ou Venda. Sem OP no cartão, pede-a uma única vez e fica guardada.
+3. **Etapa mudada numa chamada muda no Pipeline:** Interessado → Interesse; Proposta enviada → Proposta; Em negociação → Negociação; Venda → Ganha; Recusa → Perdida (mesmo motivo). Numa empresa com oportunidade, o resultado mostra «Etapa» para mudar à mão (com OP a partir de Proposta).
+4. **Perdida (Pipeline, Em cliente ou recusa numa chamada) anula tudo o que está em espera dessa empresa:** callbacks, follow-ups, «Não atende» a voltar a tentar, entradas de campanha por trabalhar e tarefas da oportunidade. Só volta no fim do prazo do motivo. Tickets e tarefas que não são de vendas ficam. (Caso real: empresa dada como Perdida voltou a cair por um «Não atendeu» anterior.)
