@@ -5,6 +5,7 @@ import { auditLog, campaignEntries, companies, companyNotes, opportunities, task
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
+import { cancelPendingWork } from "../companies/cancel.js";
 
 /**
  * Oportunidades (catálogo, secção 3): etapas, regra dos sete dias (alerta ao 5.º, atrasada ao 7.º, nunca fecha sozinha),
@@ -95,6 +96,7 @@ export async function winOpportunity(db: Db, user: PublicUser, id: string, input
   const sold = soldTypesOrError(input.soldTypes ?? {});
   const now = new Date();
   await db.transaction(async (tx) => {
+    await cancelPendingWork(tx as unknown as Db, o.companyId);
     await tx.update(opportunities).set({ stage: "won", nosOp: op, ...sold, ...(o.saleTypes ? {} : { saleTypes: sold.soldTypes, proposedValue: sold.soldValue }), closedAt: now, closedBy: user.id, closedVia: "pipeline", lastActivityAt: now }).where(eq(opportunities.id, id));
     const co = (await tx.query.companies.findFirst({ where: eq(companies.id, o.companyId) }))!;
     if (!co.ownerId) {
@@ -122,6 +124,8 @@ export async function loseOpportunity(db: Db, user: PublicUser, id: string, reas
   const days = reason.effect === "cooldown" ? reason.days ?? 0 : (cat.opportunities as OpportunityRules).lostReopenDays;
   const eligible = (nc?.eligibleAt ?? new Date(now.getTime() + days * 86_400_000)).toISOString().slice(0, 10);
   await db.transaction(async (tx) => {
+    // 26 nov: Perdida anula tudo o que estava em espera (campanhas, callbacks, «Não atende», tarefas da oportunidade).
+    await cancelPendingWork(tx as unknown as Db, o.companyId);
     await tx.update(opportunities).set({ stage: "lost", lostReasonId: reason.id, closedAt: now, closedBy: user.id, closedVia: via, lastActivityAt: now }).where(eq(opportunities.id, id));
     if (reason.effect === "company_closed") {
       await tx.update(companies).set({ inactive: true, updatedAt: now }).where(eq(companies.id, o.companyId));

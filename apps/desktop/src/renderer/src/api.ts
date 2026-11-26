@@ -56,7 +56,7 @@ export type DialerEntry = {
   otherPhones: { id: string; value: string; type: string | null }[];
   script: string; decisors: string[];
   scripts: { opening: string; pitch: string }; vars: Record<string, string>; people: { salutation: string | null; name: string }[];
-  history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string }[];
+  history: { at: string; user: string | null; outcome: string | null; text: string | null; kind: string; imported?: boolean }[];
   /** 18 nov: ainda não houve nenhum não atende nesta empresa (SMS «Tentámos ligar»). */
   firstNoAnswer?: boolean;
 };

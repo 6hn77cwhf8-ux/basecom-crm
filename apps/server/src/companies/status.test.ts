@@ -6,7 +6,8 @@ import { toPublic } from "../auth/service.js";
 import { createCampaign } from "../campaigns/service.js";
 import { companyScriptView, endCall, nextEntry, saveResult, startCall } from "../dialer/service.js";
 import { createCompany } from "./create.js";
-import { pipelineStats } from "../opportunities/service.js";
+import { createOpportunity, loseOpportunity, pipelineStats } from "../opportunities/service.js";
+import { tasks } from "../db/schema.js";
 import { opportunities } from "../db/schema.js";
 import { callStats } from "../time/service.js";
 import { editL2B, liftDissatisfied, markFormerClient } from "./status.js";
@@ -120,6 +121,36 @@ describe.skipIf(!url)("correções de 18/11: ex-cliente, L2B, Insatisfeito NOS, 
     await expect(saveResult(db, toPublic(ana), c.id, { outcomeId: "not_interested", reasonId: "loyal_other", competitor: { operator: "MEO" }, date: new Date().toISOString().slice(0, 10) })).rejects.toThrow(/futura/);
     await saveResult(db, toPublic(ana), c.id, { outcomeId: "not_interested", reasonId: "price" });
     expect(await entries(co)).toEqual([]);
+  });
+
+  it("26 nov: recusa numa campanha anula as outras campanhas, callbacks e oportunidade; a fila salta empresas em prazo; Perdida anula o que está em espera", async () => {
+    const co = await company(21);
+    const kA = (await createCampaign(db, toPublic(admin), { name: `A ${tag}`, mode: "new", script: "", filters: { districts: [district], accountType: "prospect" }, memberIds: [ana.id] })).id;
+    const kB = (await createCampaign(db, toPublic(admin), { name: `B ${tag}`, mode: "new", script: "", filters: { districts: [district], accountType: "prospect" }, memberIds: [ana.id] })).id;
+    campIds.push(kA, kB);
+    expect(await entries(co)).toEqual(expect.arrayContaining([kA, kB]));
+    const opp = await createOpportunity(db, toPublic(ana), { companyId: co });
+    await db.insert(tasks).values({ companyId: co, type: "Follow-up WhatsApp", assignedTo: ana.id, dueAt: new Date(Date.now() + 86_400_000), description: "x", origin: "call", opportunityId: opp.id, createdBy: ana.id });
+    const eA = (await db.select().from(campaignEntries).where(and(eq(campaignEntries.companyId, co), eq(campaignEntries.campaignId, kA))))[0]!;
+    const c = await startCall(db, toPublic(ana), { companyId: co, entryId: eA.id, source: "new" });
+    await endCall(db, toPublic(ana), c.id);
+    await saveResult(db, toPublic(ana), c.id, { outcomeId: "not_interested", reasonId: "loyal_other", competitor: { operator: "Vodafone" }, date: "2028-10-02" });
+    expect(await entries(co)).toEqual([]);
+    expect((await db.query.opportunities.findFirst({ where: eq(opportunities.id, opp.id) }))).toMatchObject({ stage: "lost", lostReasonId: "loyal_other", closedVia: "call" });
+    const open = await db.select().from(tasks).where(and(eq(tasks.companyId, co), eq(tasks.status, "open")));
+    expect(open.map((t) => t.type)).not.toContain("Follow-up WhatsApp"); // a da oportunidade foi anulada
+    expect(open.map((t) => t.description)).toContain("Primeiro contacto após «Fidelizado a outra operadora»"); // a nova, da recusa, fica
+    // Mesmo que alguém volte a pôr a empresa numa fila, o Ligar não a dá enquanto o prazo da recusa durar.
+    await db.update(campaignEntries).set({ status: "pending", lockedBy: null, lockedUntil: null, nextAt: null }).where(and(eq(campaignEntries.companyId, co), eq(campaignEntries.campaignId, kB)));
+    for (let i = 0; i < 20; i++) { const n = await nextEntry(db, toPublic(ana), kB); if (!n) break; expect(n.company.id).not.toBe(co); await db.update(campaignEntries).set({ status: "done" }).where(eq(campaignEntries.id, n.entry.id)); }
+
+    // Perdida no Pipeline com callback em espera noutra campanha: tudo anulado.
+    const co2 = await company(22);
+    const opp2 = await createOpportunity(db, toPublic(ana), { companyId: co2 });
+    await db.insert(campaignEntries).values({ campaignId: kB, companyId: co2, assignedTo: ana.id, lastOutcome: "call_later", nextAt: new Date(Date.now() + 3600_000) });
+    expect((await entries(co2)).length).toBeGreaterThan(0);
+    await loseOpportunity(db, toPublic(ana), opp2.id, "approach");
+    expect(await entries(co2)).toEqual([]);
   });
 
   it("script grande de uma recebida: usa a campanha onde a empresa está; sem campanha, o script por omissão", async () => {

@@ -5,6 +5,7 @@ import { auditLog, calls, campaignEntries, campaignMembers, campaigns, companies
 import { AuthError, type PublicUser } from "../auth/service.js";
 import { getSetting } from "../settings.js";
 import { markFormerClient } from "../companies/status.js";
+import { callableNow, cancelPendingWork } from "../companies/cancel.js";
 import { currentState, OP_CODE, setState, startClient, type WorkKind } from "../time/service.js";
 import { notifyLeadOrAdmin } from "../notifications/service.js";
 import { queueDial, queueHangup } from "../phone/service.js";
@@ -34,7 +35,7 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
       select e.id from campaign_entries e join campaigns k on k.id = e.campaign_id join companies c on c.id = e.company_id
       where e.assigned_to = ${user.id}::uuid and e.status = 'pending' and e.next_at <= now() and k.status = 'active' and e.last_outcome in ('call_later', 'followup_call')
         and (e.locked_until is null or e.locked_until < now() or e.locked_by = ${user.id}::uuid)
-        and not c.do_not_contact and not c.inactive
+        and ${callableNow}
         and not exists (select 1 from campaign_entries o where o.company_id = e.company_id and o.id <> e.id and o.locked_by <> ${user.id}::uuid and o.locked_until > now())
       order by e.next_at, e.id limit 1 for update of e skip locked)
     returning id`);
@@ -49,7 +50,7 @@ export async function nextEntry(db: Db, user: PublicUser, campaignId: string) {
         and (e.assigned_to is null or e.assigned_to = ${user.id}::uuid)
         and (e.next_at is null or e.next_at <= now())
         and (e.locked_until is null or e.locked_until < now() or e.locked_by = ${user.id}::uuid)
-        and not c.do_not_contact and not c.inactive
+        and ${callableNow}
         -- A mesma empresa pode estar em várias campanhas: nunca a dá a duas pessoas ao mesmo tempo.
         and not exists (select 1 from campaign_entries o where o.company_id = e.company_id and o.id <> e.id and o.locked_by <> ${user.id}::uuid and o.locked_until > now())
       order by (e.locked_by = ${user.id}::uuid and e.locked_until >= now()) desc nulls last,
@@ -165,16 +166,17 @@ export async function dialerAssignments(db: Db) {
 /** Feedback anterior, mais recente primeiro: chamadas no CRM e histórico importado. */
 export async function companyFeed(db: Db, companyId: string, limit = 20) {
   const r = await db.execute(sql`(
-      select c.saved_at as at, u.name as "user", c.outcome_id as outcome, c.reason_id as reason, c.comment as text, 'call' as kind
+      select c.saved_at as at, u.name as "user", c.outcome_id as outcome, c.reason_id as reason, c.comment as text, 'call' as kind, false as imported
       from calls c join users u on u.id = c.user_id where c.company_id = ${companyId}::uuid and c.saved_at is not null
     ) union all (
-      select n.at, case when n.batch_id is null then u.name else null end, null, null, n.text, n.kind
+      -- 26 nov: «Importado» só no que veio de uma importação (batch_id); o resto foi escrito no CRM.
+      select n.at, case when n.batch_id is null then u.name else null end, null, null, n.text, n.kind, n.batch_id is not null
       from company_notes n left join users u on u.id = n.user_id where n.company_id = ${companyId}::uuid and n.kind in ('feedback', 'campaign', 'note')
     ) order by at desc limit ${limit}`);
   // Feedback anterior (18 nov): mostra sempre o resultado escolhido (e o motivo), antes do comentário.
   const cat = await getSetting(db, "catalogs");
   const label = (id: string | null, list: { id: string; label: string }[]) => (id ? list.find((x) => x.id === id)?.label ?? null : null);
-  return (r.rows as { at: string; user: string | null; outcome: string | null; reason: string | null; text: string | null; kind: string }[]).map(({ reason, ...x }) => (
+  return (r.rows as { at: string; user: string | null; outcome: string | null; reason: string | null; text: string | null; kind: string; imported: boolean }[]).map(({ reason, ...x }) => (
     x.kind === "call" ? { ...x, text: [label(x.outcome, cat.outcomes as Outcome[]), label(reason, cat.reasons as Reason[]), x.text].filter(Boolean).join(" · ") || null } : x
   ));
 }
@@ -365,6 +367,9 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       await tx.update(campaignEntries).set({ status: "done", lastOutcome: outcome.id, lastAttemptAt: now, lockedBy: null, lockedUntil: null })
         .where(and(eq(campaignEntries.companyId, co.id), eq(campaignEntries.status, "pending")));
     }
+    // 26 nov: nova conversa sem recusa (callback, interesse, proposta…): o prazo de uma recusa antiga deixa de valer.
+    if (!NO_CONTACT.includes(outcome.effect) && !["not_interested", "company_closed", "do_not_contact", "redial", "discarded"].includes(outcome.effect) && co.campaignEligibleFrom)
+      await tx.update(companies).set({ campaignEligibleFrom: null }).where(eq(companies.id, co.id));
     const note = [outcome.label, reason?.label, input.comment?.trim()].filter(Boolean).join(" · ");
     await tx.insert(companyNotes).values({ companyId: co.id, kind: "call", text: note, userId: user.id });
     if (input.competitor && (input.competitor.operator || input.competitor.text)) {
@@ -452,6 +457,11 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
       }
       case "not_interested": {
         await setEntry({ status: "done" });
+        // 26 nov: a recusa anula tudo o que estava em espera (outras campanhas, callbacks, «Não atende», tarefas de vendas)
+        // e fecha a oportunidade em curso como Perdida, com o mesmo motivo.
+        await cancelPendingWork(tx as unknown as Db, co.id, { exceptEntryId: entry?.id });
+        await tx.update(opportunities).set({ stage: "lost", lostReasonId: reason!.id, closedAt: now, closedBy: user.id, closedVia: "call", lastActivityAt: now })
+          .where(and(eq(opportunities.companyId, co.id), sql`${opportunities.stage} not in ('won','lost')`));
         const r = reason!;
         // NS/NR (cliente não refere o fim da fidelização): sem data; o contacto fica para daqui a X meses (6 por omissão).
         const known = input.date && input.date !== NSNR ? input.date : null;
@@ -492,6 +502,7 @@ export async function saveResult(db: Db, user: PublicUser, callId: string, input
           await tx.insert(walletChanges).values({ companyId: co.id, toOwnerId: user.id, kind: "conquest", effectiveFrom: now.toISOString().slice(0, 10), status: "applied", reason: "Primeira venda", createdBy: user.id, appliedAt: now });
           summary.push("Empresa conquistada para a sua carteira");
         }
+        await cancelPendingWork(tx as unknown as Db, co.id, { exceptEntryId: entry?.id });
         await opportunity("won").then((id) => tx.update(opportunities).set({ closedAt: now, closedBy: user.id, closedVia: "call" }).where(eq(opportunities.id, id)));
         await setEntry({ status: "done" });
         break;

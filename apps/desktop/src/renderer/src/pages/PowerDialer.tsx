@@ -361,7 +361,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginTop: 6 }}><tbody>
                 {cur.history.map((h, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${c.line}` }}>
-                    <td style={{ padding: "6px 8px 6px 0", whiteSpace: "nowrap", color: c.muted, width: 1 }}>{h.kind === "call" ? fmtDate(h.at) : "Importado"}</td>
+                    <td style={{ padding: "6px 8px 6px 0", whiteSpace: "nowrap", color: c.muted, width: 1 }}>{h.imported ? "Importado" : fmtDate(h.at)}</td>
                     <td style={{ padding: "6px 8px", whiteSpace: "nowrap", width: 1 }}>{h.user ?? "—"}</td>
                     <td style={{ padding: "6px 0" }}>{h.text}</td>
                   </tr>

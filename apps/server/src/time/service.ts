@@ -8,6 +8,7 @@ import { notify, notifyLeadOrAdmin } from "../notifications/service.js";
 import { canSee, visibleUserIds } from "../teams/service.js";
 import { incomingStats } from "../phone/service.js";
 import { docsReminders, loseOpportunity, soldTypesOrError } from "../opportunities/service.js";
+import { cancelPendingWork } from "../companies/cancel.js";
 import { queueFollowUp } from "../dialer/service.js";
 
 /**
@@ -156,6 +157,7 @@ export async function endClient(db: Db, user: PublicUser, input?: CloseClientInp
       else {
         // 23 nov: venda confirmada ao cêntimo; a proposta (se houver) fica guardada à parte. Fecha como Ganha.
         const sold = soldTypesOrError(input.saleTypes);
+        await cancelPendingWork(tx as unknown as Db, companyId);
         await tx.update(opportunities).set({ ...sold, ...(opp!.saleTypes ? {} : { saleTypes: sold.soldTypes, proposedValue: sold.soldValue }), stage: "won",
           ...(opp!.closedAt ? {} : { closedAt: now, closedBy: user.id, closedVia: "client" }), lastActivityAt: now }).where(eq(opportunities.id, opp!.id));
         if (co && !co.ownerId) {
