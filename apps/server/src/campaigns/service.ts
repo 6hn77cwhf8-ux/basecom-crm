@@ -35,6 +35,11 @@ export const filtersSchema = z.object({
   l2bRanges: z.array(z.tuple([z.number().min(0), z.number().min(0).nullable()])).max(20).optional(),
   l2bMin: z.number().min(0).optional(),
   l2bMax: z.number().min(0).optional(),
+  /** 25 nov: meses que faltam para o fim da fidelização, de X a Y (junta com os outros filtros de juntar). */
+  monthsLeftMin: z.number().int().min(0).max(120).optional(),
+  monthsLeftMax: z.number().int().min(0).max(120).optional(),
+  /** Valor L2B: «join» soma empresas (OU) com os filtros de juntar; por omissão restringe (E). */
+  l2bMode: z.enum(["join", "restrict"]).optional(),
   /** Meses para o fim da permanência: até 9, até 21, mais de 21. */
   loyaltyMonths: z.array(z.enum(["le9", "le21", "gt21"])).max(3).optional(),
   /** Trazer para esta campanha empresas por trabalhar noutras campanhas (exceto as reservadas a um comercial). */
@@ -44,23 +49,45 @@ export type CampaignFilters = z.infer<typeof filtersSchema>;
 
 const inList = (col: SQL, v?: string[]) => (v && v.length ? sql`${col} in (${sql.join(v.map((x) => sql`${x}`), sql`, `)})` : undefined);
 
-/** Filtros escolhidos pelo Administrador (alias «c»). */
+/** Meses que faltam para o fim da fidelização (alias «c»): pela data de fim (desconta sozinho); sem data, os meses da base. */
+export const monthsLeftSql = sql`(case when c.loyalty_end is not null
+  then greatest(0, (extract(year from age(c.loyalty_end, current_date)) * 12 + extract(month from age(c.loyalty_end, current_date)))::int)
+  else c.loyalty_months end)`;
+
+/**
+ * Filtros escolhidos pelo Administrador (alias «c»). 24 nov: os filtros de «juntar» somam empresas entre si (OU) —
+ * Tags, Meses que faltam, Fim de fidelização, Campanha NBO e o Valor L2B quando está em «Juntar»; os outros restringem (E).
+ */
 function filterCond(f: CampaignFilters) {
-  const parts: (SQL | undefined)[] = [
+  const restrict: (SQL | undefined)[] = [
     f.accountType ? sql`c.account_type = ${f.accountType}` : undefined,
     inList(sql`c.district`, f.districts), inList(sql`c.municipality`, f.municipalities), inList(sql`c.sector`, f.sectors),
     inList(sql`c.operator`, f.operators), inList(sql`c.size`, f.sizes), inList(sql`c.product`, f.products),
     inList(sql`c.technology`, f.technologies), inList(sql`c.portal_status`, f.portalStatus),
-    inList(sql`trim(split_part(c.nbo_campaign, ' — ', 1))`, f.nboCampaigns),
-    f.tags?.length ? sql`c.tags && array(select jsonb_array_elements_text(${JSON.stringify(f.tags)}::jsonb))` : undefined,
-    f.loyaltyEndFrom ? sql`c.loyalty_end >= ${f.loyaltyEndFrom}` : undefined,
-    f.loyaltyEndTo ? sql`c.loyalty_end <= ${f.loyaltyEndTo}` : undefined,
+  ];
+  const and = (xs: (SQL | undefined)[]) => { const ok = xs.filter(Boolean) as SQL[]; return ok.length ? sql`(${sql.join(ok, sql` and `)})` : undefined; };
+  const l2b = and([
     f.l2bRanges?.length ? sql`(${sql.join(f.l2bRanges.map(([a, b]) => (b == null ? sql`c.l2b_monthly >= ${a}` : sql`(c.l2b_monthly >= ${a} and c.l2b_monthly < ${b})`)), sql` or `)})` : undefined,
     f.l2bMin != null ? sql`c.l2b_monthly >= ${f.l2bMin}` : undefined,
     f.l2bMax != null ? sql`c.l2b_monthly <= ${f.l2bMax}` : undefined,
-    f.loyaltyMonths?.length ? sql`(${sql.join(f.loyaltyMonths.map((m) => (m === "le9" ? sql`c.loyalty_months <= 9` : m === "le21" ? sql`c.loyalty_months <= 21` : sql`c.loyalty_months > 21`)), sql` or `)})` : undefined,
+  ]);
+  const months = [
+    f.loyaltyMonths?.length ? sql`(${sql.join(f.loyaltyMonths.map((m) => (m === "le9" ? sql`${monthsLeftSql} <= 9` : m === "le21" ? sql`${monthsLeftSql} <= 21` : sql`${monthsLeftSql} > 21`)), sql` or `)})` : undefined,
+    f.monthsLeftMin != null || f.monthsLeftMax != null ? and([
+      f.monthsLeftMin != null ? sql`${monthsLeftSql} >= ${f.monthsLeftMin}` : undefined,
+      f.monthsLeftMax != null ? sql`${monthsLeftSql} <= ${f.monthsLeftMax}` : undefined,
+    ]) : undefined,
   ];
-  const ok = parts.filter(Boolean) as SQL[];
+  const join: (SQL | undefined)[] = [
+    f.tags?.length ? sql`c.tags && array(select jsonb_array_elements_text(${JSON.stringify(f.tags)}::jsonb))` : undefined,
+    inList(sql`trim(split_part(c.nbo_campaign, ' — ', 1))`, f.nboCampaigns),
+    and([f.loyaltyEndFrom ? sql`c.loyalty_end >= ${f.loyaltyEndFrom}` : undefined, f.loyaltyEndTo ? sql`c.loyalty_end <= ${f.loyaltyEndTo}` : undefined]),
+    ...months,
+  ];
+  if (f.l2bMode === "join") join.push(l2b); else restrict.push(l2b);
+  const joins = join.filter(Boolean) as SQL[];
+  if (joins.length) restrict.push(sql`(${sql.join(joins, sql` or `)})`);
+  const ok = restrict.filter(Boolean) as SQL[];
   return ok.length ? sql.join(ok, sql` and `) : sql`true`;
 }
 
@@ -132,8 +159,8 @@ async function checkTags(db: Db, chosen: string[] | undefined) {
   if (unknown.length) throw new AuthError(400, `Tag fora da lista de campanha: ${unknown.join(", ")}.`);
   const counts = new Map(((await db.execute(sql`select t, count(*)::int as n from companies, unnest(tags) t
     where t in (select jsonb_array_elements_text(${JSON.stringify(chosen)}::jsonb)) group by t`)).rows as { t: string; n: number }[]).map((r) => [r.t, r.n]));
-  const few = chosen.filter((t) => (counts.get(t) ?? 0) < cfg.minCompanies);
-  if (few.length) throw new AuthError(400, `Com menos de ${cfg.minCompanies} empresas (só informação): ${few.join(", ")}.`);
+  // 24 nov: todas as tags podem ser escolhidas; abaixo do mínimo o ecrã só avisa.
+  void counts;
 }
 
 export async function createCampaign(db: Db, by: PublicUser, input: { name: string; mode: "new" | "current"; script: string; scriptPitchNew?: string | null; scriptPitchCurrent?: string | null; dialMode?: "power" | "preview"; filters: CampaignFilters; memberIds: string[] }) {

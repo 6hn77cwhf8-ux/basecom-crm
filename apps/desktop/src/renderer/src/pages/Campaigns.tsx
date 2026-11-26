@@ -171,8 +171,6 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
               <Field label="Tipo de conta"><select style={input} value={f.accountType ?? ""} onChange={(e) => set("accountType", (e.target.value || undefined) as CampaignFilters["accountType"])}>
                 <option value="">Todos</option><option value="prospect">Prospetos (NN)</option><option value="client">Clientes NOS</option></select></Field>
-              <Field label="Fim de fidelização desde"><DatePicker value={f.loyaltyEndFrom ?? ""} onChange={(v) => set("loyaltyEndFrom", v || undefined)} width={180} ariaLabel="Fim de fidelização desde" /></Field>
-              <Field label="até"><DatePicker value={f.loyaltyEndTo ?? ""} onChange={(v) => set("loyaltyEndTo", v || undefined)} width={180} ariaLabel="Fim de fidelização até" /></Field>
             </div>
             <Multi label="Distrito" all={opts?.districts} value={f.districts} onChange={(v) => setF((o) => {
               // Ao mudar os distritos, os concelhos que já não pertencem a nenhum deles saem da escolha.
@@ -181,15 +179,17 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
               return { ...o, districts: v, municipalities: m?.length ? m : undefined };
             })} />
             <Multi label={f.districts?.length ? `Concelho · de ${f.districts.join(", ")}` : "Concelho"} all={munis} value={f.municipalities} onChange={(v) => set("municipalities", v)} search={!f.districts?.length} />
-            <TagPicker opts={opts} value={f.tags} onChange={(v) => set("tags", v)} />
-            {!!opts?.nboCampaigns?.length && <Multi label="Campanha NBO da NOS" all={opts.nboCampaigns.map((x) => x.v)} labels={Object.fromEntries(opts.nboCampaigns.map((x) => [x.v, `${x.v.replace(/\s*\|\s*/g, " · ")} (${fmtInt(x.n)})`]))} value={f.nboCampaigns} onChange={(v) => set("nboCampaigns", v)} />}
             <Multi label="Setor" all={opts?.sectors} value={f.sectors} onChange={(v) => set("sectors", v)} />
             <Multi label="Operadora atual" all={opts?.operators} value={f.operators} onChange={(v) => set("operators", v)} />
             <Multi label="Estado no portal NOS" all={opts?.portalStatuses} value={f.portalStatus} onChange={(v) => set("portalStatus", v)} />
             <Multi label="Tecnologia" all={opts?.technologies} value={f.technologies} onChange={(v) => set("technologies", v)} />
             <Multi label="Produto" all={opts?.products} value={f.products} onChange={(v) => set("products", v)} />
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Valor L2B (mensalidade) <span style={{ color: c.muted, fontWeight: 400 }}>{f.l2bRanges?.length || f.l2bMin != null || f.l2bMax != null ? "" : "· todos"}</span></span>
+              <span style={{ fontSize: 13, fontWeight: 600, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>Valor L2B (mensalidade) <span style={{ color: c.muted, fontWeight: 400 }}>{f.l2bRanges?.length || f.l2bMin != null || f.l2bMax != null ? "" : "· todos"}</span>
+                <span role="radiogroup" aria-label="Valor L2B junta ou restringe" style={{ display: "inline-flex", gap: 4 }}>
+                  <Toggle on={f.l2bMode !== "join"} label="Restringir" onClick={() => set("l2bMode", undefined)} />
+                  <Toggle on={f.l2bMode === "join"} label="Juntar" onClick={() => set("l2bMode", "join")} />
+                </span></span>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="number" min={0} placeholder="Mín." style={{ ...input, height: 32, width: 100 }} value={f.l2bMin ?? ""} onChange={(e) => set("l2bMin", e.target.value === "" ? undefined : Number(e.target.value))} />
                 <span>–</span>
@@ -208,19 +208,30 @@ function CampaignForm({ campaign, onClose, onSaved }: { campaign: Campaign | nul
                 })}
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Meses para o fim da permanência <span style={{ color: c.muted, fontWeight: 400 }}>{f.loyaltyMonths?.length ? "" : "· todos"}</span></span>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {([["le9", "Até 9 meses"], ["le21", "Até 21 meses"], ["gt21", "Mais de 21 meses"]] as const).map(([k, l]) => {
-                  const on = !!f.loyaltyMonths?.includes(k);
-                  return <Toggle key={k} on={on} label={`${l} (${fmtInt(opts?.loyaltyBuckets?.[k] ?? 0)})`} onClick={() => {
-                    const cur = f.loyaltyMonths ?? [];
-                    const next = on ? cur.filter((x) => x !== k) : [...cur, k];
-                    set("loyaltyMonths", next.length ? next : undefined);
-                  }} />;
-                })}
+            <fieldset style={{ border: `2px solid ${c.brand}`, borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+              <legend style={{ fontSize: 13, fontWeight: 800, padding: "0 6px" }}>Juntar grupos de clientes</legend>
+              <span style={{ fontSize: 12, color: c.muted }}>Estes filtros SOMAM empresas: entram todas as que cumprem qualquer um deles (tags, meses, datas, NBO{f.l2bMode === "join" ? ", L2B" : ""}). Os filtros de cima continuam a restringir (ex.: só no Porto).</span>
+              <TagPicker opts={opts} value={f.tags} onChange={(v) => set("tags", v)} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Meses que faltam para o fim da fidelização <span style={{ color: c.muted, fontWeight: 400 }}>{f.monthsLeftMin != null || f.monthsLeftMax != null || f.loyaltyMonths?.length ? "" : "· não usado"}</span></span>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13 }}>Faltam de</span>
+                  <input type="number" min={0} max={120} aria-label="Meses que faltam, de" style={{ ...input, height: 32, width: 80 }} value={f.monthsLeftMin ?? ""} onChange={(e) => set("monthsLeftMin", e.target.value === "" ? undefined : Number(e.target.value))} />
+                  <span style={{ fontSize: 13 }}>a</span>
+                  <input type="number" min={0} max={120} aria-label="Meses que faltam, até" style={{ ...input, height: 32, width: 80 }} value={f.monthsLeftMax ?? ""} onChange={(e) => set("monthsLeftMax", e.target.value === "" ? undefined : Number(e.target.value))} />
+                  <span style={{ fontSize: 13 }}>meses</span>
+                  <Toggle on={f.monthsLeftMin === 0 && f.monthsLeftMax === 8} label="≤ 8 meses" onClick={() => setF((o) => ({ ...o, monthsLeftMin: 0, monthsLeftMax: 8 }))} />
+                  {(f.monthsLeftMin != null || f.monthsLeftMax != null) && <button type="button" style={{ ...btn, height: 30, fontSize: 12 }} onClick={() => setF((o) => ({ ...o, monthsLeftMin: undefined, monthsLeftMax: undefined }))}>Limpar</button>}
+                </div>
+                <span style={{ fontSize: 12, color: c.muted }}>Contam a partir do fim de fidelização da ficha e descontam sozinhos todos os meses.</span>
+                {!!f.loyaltyMonths?.length && <span style={{ fontSize: 12, color: c.muted }}>Escalões antigos nesta campanha: {f.loyaltyMonths.join(", ")}</span>}
               </div>
-            </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Field label="Fim de fidelização desde"><DatePicker value={f.loyaltyEndFrom ?? ""} onChange={(v) => set("loyaltyEndFrom", v || undefined)} width={180} ariaLabel="Fim de fidelização desde" /></Field>
+                <Field label="até"><DatePicker value={f.loyaltyEndTo ?? ""} onChange={(v) => set("loyaltyEndTo", v || undefined)} width={180} ariaLabel="Fim de fidelização até" /></Field>
+              </div>
+              {!!opts?.nboCampaigns?.length && <Multi label="Campanha NBO da NOS" all={opts.nboCampaigns.map((x) => x.v)} labels={Object.fromEntries(opts.nboCampaigns.map((x) => [x.v, `${x.v.replace(/\s*\|\s*/g, " · ")} (${fmtInt(x.n)})`]))} value={f.nboCampaigns} onChange={(v) => set("nboCampaigns", v)} />}
+            </fieldset>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={!!f.onlyWithoutOwner} onChange={(e) => set("onlyWithoutOwner", e.target.checked || undefined)} /> Só empresas sem carteira</label>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={!!f.takeFromOtherCampaigns} onChange={(e) => set("takeFromOtherCampaigns", e.target.checked || undefined)} /> Trazer empresas que estão por trabalhar noutras campanhas (saem dessas; as reservadas a um comercial ficam)</label>
             <div role="status" style={{ padding: "10px 12px", borderRadius: 10, background: count && count.total === 0 ? c.warnSoft : c.brandSoft, fontSize: 14, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -271,16 +282,15 @@ function TagPicker({ opts, value, onChange }: { opts: FilterOptions | null; valu
   const flip = (x: string) => { const nv = v.includes(x) ? v.filter((y) => y !== x) : [...v, x]; onChange(nv.length ? nv : undefined); };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>Tags <span style={{ color: c.muted, fontWeight: 400 }}>{v.length ? `· ${v.length} escolhida(s) · entra quem tiver qualquer uma` : "· todas"}</span></span>
+      <span style={{ fontSize: 13, fontWeight: 600 }}>Tags <span style={{ color: c.muted, fontWeight: 400 }}>{v.length ? `· ${v.length} escolhida(s) · entra quem tiver qualquer uma` : "· não usado"}</span></span>
+      <span style={{ fontSize: 12, color: c.muted }}>«poucas» = menos de {fmtInt(min)} empresas (pode escolher na mesma).</span>
       {opts.tagConfig.groups.map((g) => (
         <div key={g.name} style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 12, color: c.muted, width: 92 }}>{g.name}</span>
           {g.tags.map((t) => {
             const count = n.get(t) ?? 0;
-            const few = count < min && !v.includes(t);
-            return few
-              ? <span key={t} title={`Menos de ${fmtInt(min)} empresas: só informação`} style={{ ...btn, height: 30, fontSize: 12, display: "inline-flex", alignItems: "center", color: c.muted, borderStyle: "dashed", cursor: "default" }}>{t} ({fmtInt(count)}) · só informação</span>
-              : <Toggle key={t} on={v.includes(t)} label={`${t} (${fmtInt(count)})`} onClick={() => flip(t)} />;
+            const few = count < min;
+            return <Toggle key={t} on={v.includes(t)} label={`${t} (${fmtInt(count)})${few ? " · poucas" : ""}`} onClick={() => flip(t)} />;
           })}
         </div>
       ))}

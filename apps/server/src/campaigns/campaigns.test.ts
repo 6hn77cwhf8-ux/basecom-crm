@@ -87,7 +87,7 @@ describe.skipIf(!url)("campanhas: que empresas entram", () => {
     expect((await previewCampaign(db, { districts: [district] }, [ana.id])).total).toBe(4);
   });
 
-  it("tags: entra quem tiver qualquer uma das escolhidas; com menos do mínimo não dá para criar a campanha", async () => {
+  it("tags: entra quem tiver qualquer uma das escolhidas; abaixo do mínimo também se escolhe", async () => {
     await company("com-mj", { tags: ["MJ", "Zona-Porto"] });
     await company("com-porto", { tags: ["Zona-Porto"] });
     await company("sem-tags", {});
@@ -96,8 +96,28 @@ describe.skipIf(!url)("campanhas: que empresas entram", () => {
     expect((await previewCampaign(db, { ...base, tags: ["MJ"] }, [ana.id])).total).toBe(1);
     expect((await previewCampaign(db, { ...base, tags: ["MJ", "Zona-Porto"] }, [ana.id])).total).toBe(2);
     expect(all).toBeGreaterThanOrEqual(3);
-    await expect(createCampaign(db, toPublic(admin), { name: `Tags ${tag}`, mode: "new", script: "", filters: { ...base, tags: ["MJ"] }, memberIds: [ana.id] })).rejects.toThrow(/menos de 250/);
+    // 24 nov: abaixo do mínimo de empresas a tag também se escolhe (o ecrã só avisa).
+    created.push((await createCampaign(db, toPublic(admin), { name: `Tags ${tag}`, mode: "new", script: "", filters: { ...base, tags: ["MJ"] }, memberIds: [ana.id] })).id);
     await expect(createCampaign(db, toPublic(admin), { name: `Tags ${tag}`, mode: "new", script: "", filters: { ...base, tags: ["Inventada"] }, memberIds: [ana.id] })).rejects.toThrow(/fora da lista/);
+  });
+
+  it("24-25 nov: Tags, meses que faltam, fim de fidelização e NBO juntam (OU); o resto restringe (E); L2B escolhe", async () => {
+    const d2 = `${district}J`;
+    const mk = async (k: string, o: Partial<typeof companies.$inferInsert>) => { await company(k, { district: d2, ...o }); };
+    await mk("tag-a", { tags: ["Fim-Fid-Conc-6-12m"] });
+    await mk("meses-5", { loyaltyMonths: 5 });
+    await mk("fim-data", { loyaltyEnd: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10) });
+    await mk("nada", {});
+    await mk("tag-porto-fora", { tags: ["Fim-Fid-Conc-6-12m"], district: `${district}X` });
+    const base = { districts: [d2] };
+    // Tag OU até 9 meses: as duas (e não as que cumprem as duas ao mesmo tempo); o distrito continua a restringir.
+    expect((await previewCampaign(db, { ...base, tags: ["Fim-Fid-Conc-6-12m"], loyaltyMonths: ["le9"] }, [ana.id])).total).toBe(3);
+    // «Faltam de 0 a 8 meses» usa a data de fim (desconta sozinha) e, sem data, os meses da base.
+    expect((await previewCampaign(db, { ...base, monthsLeftMin: 0, monthsLeftMax: 8 }, [ana.id])).total).toBe(2);
+    // L2B: a restringir, só as que têm L2B; a juntar, soma.
+    await mk("l2b-alto", { l2bMonthly: "300" });
+    expect((await previewCampaign(db, { ...base, tags: ["Fim-Fid-Conc-6-12m"], l2bMin: 200 }, [ana.id])).total).toBe(0);
+    expect((await previewCampaign(db, { ...base, tags: ["Fim-Fid-Conc-6-12m"], l2bMin: 200, l2bMode: "join" }, [ana.id])).total).toBe(2);
   });
 
   it("valor L2B e meses para o fim da permanência; trazer de outra campanha move as empresas", async () => {
