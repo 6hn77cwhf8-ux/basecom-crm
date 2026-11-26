@@ -107,7 +107,13 @@ async function buildView(db: Db, user: PublicUser, co: typeof companies.$inferSe
     comercial: user.name, empresa: co.name, campanha: k?.name ?? "", nbo: nboHead(co.nboCampaign),
     decisor1, decisor2: decisor2 ? `${decisor2.salutation ? decisor2.salutation + " " : ""}${decisor2.personName}` : "",
   };
+  // 26 nov: oportunidade em curso (Ligar / Saltar / Follow-up e etapa) e origem de um callback (faixa laranja).
+  const opp = (await db.select().from(opportunities).where(and(eq(opportunities.companyId, co.id), sql`${opportunities.stage} not in ('won','lost')`)).orderBy(desc(opportunities.createdAt)))[0];
+  const isCallback = !!e && ["call_later", "followup_call"].includes(e.lastOutcome ?? "");
+  const cbBy = isCallback && e?.assignedTo ? (await db.query.users.findFirst({ where: eq(users.id, e.assignedTo) }))?.name ?? null : null;
   return {
+    opportunity: opp ? { id: opp.id, stage: opp.stage, nosOp: opp.nosOp } : null,
+    callback: isCallback ? { kind: e!.lastOutcome === "followup_call" ? "followup" : "callback", campaign: k?.filters && (k.filters as { system?: string }).system ? null : k?.name ?? null, by: cbBy, at: e!.nextAt?.toISOString() ?? null } : null,
     entry: e ? { id: e.id, attempts: e.attempts, lastOutcome: e.lastOutcome, assignedToMe: e.assignedTo === user.id } : { id: "", attempts: 0, lastOutcome: null, assignedToMe: false },
     campaign: k ? { id: k.id, name: k.name, mode: k.mode, dialMode: k.dialMode } : { id: "", name: "Sem campanha", mode: co.accountType === "client" ? "current" : "new", dialMode: "power" },
     company: { id: co.id, name: co.name, nif: co.nif, accountType: co.accountType, walletKind: co.walletKind, owner, municipality: co.municipality, operator: co.operator, loyaltyEnd: co.loyaltyEnd, l2bMonthly: co.l2bMonthly, district: co.district, loyaltyMonths: co.loyaltyMonths, walletKindConfirmed: co.walletKindConfirmed,
@@ -184,13 +190,47 @@ export async function companyFeed(db: Db, companyId: string, limit = 20) {
 
 /** Preview: saltar a empresa com motivo (fica no histórico); volta no dia útil seguinte. */
 export async function skipEntry(db: Db, user: PublicUser, entryId: string, reason: string) {
-  if (reason.trim().length < 5) throw new AuthError(400, "Indique o motivo para saltar.");
   const e = await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, entryId) });
   if (!e || e.lockedBy !== user.id) throw new AuthError(404, "Empresa não reservada para si.");
+  // 26 nov: empresa com oportunidade em curso salta sem motivo (sem resultado nem tentativa; volta mais tarde).
+  const inOpp = (await db.select({ id: opportunities.id }).from(opportunities).where(and(eq(opportunities.companyId, e.companyId), sql`${opportunities.stage} not in ('won','lost')`))).length > 0;
+  if (inOpp && reason.trim().length < 5) reason = "Em oportunidade";
+  if (reason.trim().length < 5) throw new AuthError(400, "Indique o motivo para saltar.");
   const k = (await db.query.campaigns.findFirst({ where: eq(campaigns.id, e.campaignId) }))!;
   const next = nextWorkingDayStart(new Date());
   await db.update(campaignEntries).set({ lockedBy: null, lockedUntil: null, nextAt: next }).where(eq(campaignEntries.id, entryId));
   await db.insert(companyNotes).values({ companyId: e.companyId, kind: "note", userId: user.id, text: `Saltada na campanha «${k.name}»: ${reason.trim()}` });
+}
+
+/** Follow-up a partir do Ligar (26 nov): só em empresas com oportunidade em curso; sai da fila até à hora marcada. */
+export async function followUpEntry(db: Db, user: PublicUser, entryId: string, at: Date) {
+  const e = await db.query.campaignEntries.findFirst({ where: eq(campaignEntries.id, entryId) });
+  if (!e || e.lockedBy !== user.id) throw new AuthError(404, "Empresa não reservada para si.");
+  const opp = (await db.select().from(opportunities).where(and(eq(opportunities.companyId, e.companyId), sql`${opportunities.stage} not in ('won','lost')`)))[0];
+  if (!opp) throw new AuthError(400, "O follow-up só existe em empresas com oportunidade em curso.");
+  if (at.getTime() < Date.now() - 60_000) throw new AuthError(400, "Escolha uma data futura.");
+  const when = nextWorkingMoment(at);
+  await queueFollowUp(db, e.companyId, user.id, when, e.id);
+  await db.update(opportunities).set({ lastActivityAt: new Date() }).where(eq(opportunities.id, opp.id));
+  await db.insert(companyNotes).values({ companyId: e.companyId, kind: "note", userId: user.id, text: `Follow-up de chamada marcado para ${when.toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Lisbon" })} (sem ligar)` });
+  return { at: when.toISOString() };
+}
+
+/**
+ * Chamada sem resultado (24 nov): ligar ao cliente durante a proposta (Em cliente). Não conta como chamada de campanha;
+ * fica no histórico com a duração (ou «não atendeu») e uma nota opcional.
+ */
+export async function closeCallWithoutResult(db: Db, user: PublicUser, callId: string, note?: string) {
+  const c = await db.query.calls.findFirst({ where: eq(calls.id, callId) });
+  if (!c || c.userId !== user.id) throw new AuthError(404, "Chamada não encontrada.");
+  if (c.savedAt) return;
+  if (!c.endedAt) await queueHangup(db, user.id, callId);
+  const ended = c.endedAt ?? new Date();
+  const secs = Math.max(0, Math.round((ended.getTime() - c.startedAt.getTime()) / 1000));
+  await db.update(calls).set({ endedAt: ended, savedAt: new Date(), effect: "client_work" }).where(eq(calls.id, callId));
+  const cur = (await db.execute(sql`select op_code as "op" from time_entries where user_id = ${user.id}::uuid and ended_at is null and state = 'client' limit 1`)).rows[0] as { op?: string } | undefined;
+  const dur = c.answered === false ? "não atendeu" : `${Math.floor(secs / 60)} min ${String(secs % 60).padStart(2, "0")} s`;
+  await db.insert(companyNotes).values({ companyId: c.companyId, kind: "note", userId: user.id, text: `Chamada durante a proposta${cur?.op ? ` · OP ${cur.op}` : ""} · ${dur}${note?.trim() ? ` · ${note.trim()}` : ""}` });
 }
 
 export async function releaseEntry(db: Db, user: PublicUser, entryId: string) {

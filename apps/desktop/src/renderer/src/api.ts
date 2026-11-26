@@ -50,6 +50,9 @@ export type PipelineAgg = { open: number; openValue: number; late: number; won: 
 export type PipelineStats = { metric: "eur" | "points"; cycle: string; total: PipelineAgg; byUser: (PipelineAgg & { id: string; name: string; photo: string | null; team: string | null })[]; byTeam: (PipelineAgg & { name: string })[] };
 export type Catalogs = { catalogs: { outcomes: Outcome[]; reasons: Reason[]; attempts: { maxAttemptsTotal: number } & Record<string, number>; taskTypes: string[]; opportunities?: { channels?: string[] } }; timeLimits: { resultSeconds: number; nextCallSeconds: number } & Record<string, number> };
 export type DialerEntry = {
+  /** 26 nov: oportunidade em curso e origem de um callback/follow-up (faixa laranja). */
+  opportunity?: { id: string; stage: string; nosOp: string | null } | null;
+  callback?: { kind: "callback" | "followup"; campaign: string | null; by: string | null; at: string | null } | null;
   entry: { id: string; attempts: number; lastOutcome: string | null; assignedToMe: boolean };
   campaign: { id: string; name: string; mode: "new" | "current"; dialMode: "power" | "preview" };
   company: { id: string; name: string; nif: string; accountType: "client" | "prospect"; walletKind: "NC" | "FC"; owner: string | null; municipality: string | null; operator: string | null; loyaltyEnd: string | null; l2bMonthly: string | null; needsKind: boolean; district: string | null; loyaltyMonths: number | null; walletKindConfirmed: boolean };
@@ -196,6 +199,8 @@ export const api = {
   pipelineStats: () => call<PipelineStats>("/opportunities/stats"),
   dialerStall: (reason: string, state: Record<string, string | number | boolean | null>) => call<{ ok: boolean }>("/dialer/stall", { method: "POST", body: JSON.stringify({ reason, state }) }),
   companyScriptView: (companyId: string) => call<DialerEntry>(`/companies/${companyId}/script-view`),
+  dialerFollowUp: (entryId: string, at: string) => call<{ at: string }>(`/dialer/entries/${entryId}/followup`, { method: "POST", body: JSON.stringify({ at }) }),
+  callNoResult: (callId: string, note?: string) => call(`/calls/${callId}/no-result`, { method: "POST", body: JSON.stringify({ note }) }),
   dialerSkip: (entryId: string, reason: string) => call(`/dialer/entries/${entryId}/skip`, { method: "POST", body: JSON.stringify({ reason }) }),
   dialerRelease: (entryId: string) => call(`/dialer/entries/${entryId}/release`, { method: "POST", body: "{}" }),
   startCall: (b: { companyId: string; contactId?: string | null; entryId?: string | null; source: string; consultedNos?: boolean; phone?: string }) => call<{ id: string; startedAt: string; viaPhone: boolean; priorResultSeconds?: number }>("/calls", { method: "POST", body: JSON.stringify(b) }),

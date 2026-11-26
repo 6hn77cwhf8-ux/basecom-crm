@@ -297,9 +297,9 @@ export async function teamToday(db: Db, actor: PublicUser) {
 export async function callStats(db: Db, userId: string) {
   const short = (await getSetting(db, "timeLimits")).shortCallSeconds ?? 5;
   const r = await db.execute(sql`select
-      count(*) filter (where effect not in ('redial', 'discarded') and extract(epoch from (coalesce(ended_at, saved_at) - started_at)) >= ${short})::int as calls,
+      count(*) filter (where effect not in ('redial', 'discarded', 'client_work') and extract(epoch from (coalesce(ended_at, saved_at) - started_at)) >= ${short})::int as calls,
       count(*) filter (where effect = 'not_interested')::int as refusals,
-      count(*) filter (where effect = 'redial' or (effect <> 'discarded' and extract(epoch from (coalesce(ended_at, saved_at) - started_at)) < ${short}))::int as short
+      count(*) filter (where effect = 'redial' or (effect not in ('discarded', 'client_work') and extract(epoch from (coalesce(ended_at, saved_at) - started_at)) < ${short}))::int as short
     from calls where user_id = ${userId}::uuid and saved_at is not null
       and (saved_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date`);
   const row = r.rows[0] as { calls: number; refusals: number; short: number };

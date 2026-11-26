@@ -8,6 +8,7 @@ import { PhoneDialog, useCallEnd, usePhone } from "./Phone";
 import { ClientWorkCard } from "./ClientWork";
 import { FloatingCall, MuteButton } from "./FloatingCall";
 import { createPortal } from "react-dom";
+import { DatePicker } from "./DatePicker";
 
 /** «review»: chamada terminada, a rever o script antes de voltar ao resultado (o tempo e o que já escreveu mantêm-se). */
 type Phase = "idle" | "loading" | "ready" | "calling" | "result" | "review" | "countdown" | "empty";
@@ -118,7 +119,8 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       const n = await api.dialerNext(campaignId);
       setCur(n); setConsulted(false); consultedRef.current = false; setSkipping(false); setSkipReason(""); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
       if (!n) { setPhase("empty"); return; }
-      if (autoCall && n.phone) await start(n); else setPhase("ready");
+      // 26 nov: empresa com oportunidade em curso não marca sozinha: o comercial escolhe Ligar, Saltar ou Follow-up.
+      if (autoCall && n.phone && !n.opportunity) await start(n); else setPhase("ready");
     } catch (e) { setError((e as Error).message); setPhase("idle"); }
   }, [campaignId]);
   useEffect(() => { if (isAdmin) { try { localStorage.setItem("bc_campaign", campaignId); } catch { /* sem armazenamento */ } } setCur(null); setPhase("idle"); if (campaignId) load(false); }, [campaignId]);
@@ -294,11 +296,12 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
         /* Script e feedback anterior à esquerda; à direita, o cliente com o telefone em baixo (mais espaço para o cliente). */
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12, flex: 1, minHeight: 0 }}>
           <div style={{ display: "contents" }}>
-            <section style={{ ...card, gridColumn: 1, gridRow: 1, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflow: "auto" }}>
+            <section style={{ ...card, gridColumn: 1, gridRow: 1, padding: "24px 32px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflow: "auto", ...(cur.callback ? { border: `3px solid ${CB_ORANGE}` } : {}) }}>
+              {cur.callback && <CallbackBanner cb={cur.callback} />}
               <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: c.muted }}>Script · {step === "opening" ? "1. Abertura" : "2. Apresentação"}</span>
-                {cur.entry.assignedToMe && cur.entry.lastOutcome === "call_later" && phase !== "calling" && <Chip tone="brand">Callback{cur.campaign.id !== campaignId ? ` · ${cur.campaign.name}` : ""}</Chip>}
+                {cur.opportunity && <OppBadge o={cur.opportunity} onChanged={() => load(false)} onError={setError} />}
                 {phase === "calling" && <Chip tone="brand">{received ? "Chamada recebida" : "Em chamada"} · {mmss(callSecs)}</Chip>}
                 {phase === "review" && <Chip tone="warn">Chamada terminada · resultado por registar</Chip>}
               </div>
@@ -417,6 +420,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
                       )}
                     </div>
                   )}
+                  {cur.opportunity && cur.entry.id && <OppActions entryId={cur.entry.id} onDone={() => load(false)} onError={setError} />}
                   <button style={{ ...btnDark, height: 48, fontSize: 16 }} disabled={!cur.phone || phase === "loading" || !working || locked || (cur.campaign.dialMode === "preview" && !consulted)} onClick={() => !locked && start().catch((e) => setError(e.message))}>{!working ? "Em pausa" : locked ? "Aguarde…" : "Iniciar chamada"}</button></>
                 : <div style={{ display: "flex", gap: 8 }}>
                     {viaPhone && <MuteButton muted={muted} onClick={toggleMute} />}
@@ -478,4 +482,54 @@ function Highlight({ text, marks }: { text: string; marks: string[] }) {
 }
 function Empty({ text, action }: { text: string; action?: React.ReactNode }) {
   return <section style={{ ...card, padding: 40, textAlign: "center", color: c.muted, display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>{text}{action}</section>;
+}
+
+const CB_ORANGE = "#EA580C";
+const STAGE_PT: Record<string, string> = { interest: "Interesse", survey: "Levantamento", proposal: "Proposta enviada", negotiation: "Em negociação", documents: "Aguarda docs" };
+const NEEDS_OP = ["proposal", "negotiation", "documents"];
+
+/** 26 nov: callback ou follow-up de outra campanha — faixa laranja larga, para o comercial perceber de onde vem. */
+function CallbackBanner({ cb }: { cb: NonNullable<DialerEntry["callback"]> }) {
+  const at = cb.at ? new Date(cb.at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) : null;
+  return (
+    <div role="status" style={{ background: CB_ORANGE, color: "#FFFFFF", borderRadius: 12, padding: "12px 16px", fontSize: 18, fontWeight: 800, letterSpacing: ".02em" }}>
+      {cb.kind === "followup" ? "FOLLOW-UP" : "CALLBACK"}{cb.campaign ? ` · campanha ${cb.campaign}` : ""}{cb.by ? ` · marcado por ${cb.by}` : ""}{at ? ` para as ${at}` : ""}
+    </div>
+  );
+}
+
+/** Etiqueta «Em oportunidade · etapa · OP», com mudança de etapa (OP pedida a partir de Proposta). */
+function OppBadge({ o, onChanged, onError }: { o: NonNullable<DialerEntry["opportunity"]>; onChanged: () => void; onError: (m: string) => void }) {
+  const [stage, setStage] = useState(o.stage);
+  const [op, setOp] = useState("");
+  const askOp = NEEDS_OP.includes(stage) && !o.nosOp && stage !== o.stage;
+  return (
+    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 12, fontWeight: 700, background: c.brandSoft, borderRadius: 999, padding: "4px 6px 4px 12px" }}>
+      Em oportunidade{o.nosOp ? ` · OP ${o.nosOp}` : ""} ·
+      <select aria-label="Etapa da oportunidade" value={stage} onChange={(e) => setStage(e.target.value)} style={{ ...input, height: 28, fontSize: 12, padding: "0 6px" }}>
+        {Object.entries(STAGE_PT).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      {askOp && <input aria-label="OP" inputMode="numeric" maxLength={7} placeholder="OP" value={op} onChange={(e) => setOp(e.target.value.replace(/\D/g, ""))} style={{ ...input, height: 28, width: 90, fontSize: 12 }} />}
+      {stage !== o.stage && <button type="button" style={{ ...btnDark, height: 28, fontSize: 12, padding: "0 10px" }} disabled={askOp && op.length !== 7}
+        onClick={() => api.moveOpportunity(o.id, stage, "Mudada no Ligar", askOp ? op : undefined).then(onChanged).catch((e) => onError(e.message))}>Mudar etapa</button>}
+    </span>
+  );
+}
+
+/** Empresa em oportunidade: Saltar (sem resultado nem tentativa) e Follow-up (sai da fila até à hora marcada). */
+function OppActions({ entryId, onDone, onError }: { entryId: string; onDone: () => void; onError: (m: string) => void }) {
+  const [fu, setFu] = useState(false);
+  const [at, setAt] = useState("");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button type="button" style={{ ...btn, flex: 1, height: 38 }} onClick={() => api.dialerSkip(entryId, "Em oportunidade").then(onDone).catch((e) => onError(e.message))}>Saltar</button>
+        <button type="button" style={{ ...btn, flex: 1, height: 38, borderColor: CB_ORANGE, color: CB_ORANGE }} onClick={() => setFu(!fu)}>Follow-up</button>
+      </div>
+      {fu && <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <DatePicker withTime workdaysOnly value={at} onChange={setAt} width={220} ariaLabel="Follow-up: data e hora" min={new Date().toISOString().slice(0, 10)} />
+        <button type="button" style={{ ...btnDark, height: 38 }} disabled={!at} onClick={() => api.dialerFollowUp(entryId, new Date(at).toISOString()).then(onDone).catch((e) => onError(e.message))}>Marcar follow-up</button>
+      </div>}
+    </div>
+  );
 }

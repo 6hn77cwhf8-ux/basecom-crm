@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_PROPOSAL_CHANNELS, FOLLOW_UPS, type FollowUp, proposalPoints, saleTypesError, SALE_KINDS, type SaleKind } from "@basecom/shared";
+import { formatPhone, DEFAULT_PROPOSAL_CHANNELS, FOLLOW_UPS, type FollowUp, proposalPoints, saleTypesError, SALE_KINDS, type SaleKind } from "@basecom/shared";
 import { api, WORK_EVENT, type ClientWork, type DaySummary, type SearchHit, type User, type WorkKind } from "../api";
-import { btn, btnDark, c, card, CopyButton, ErrorText, Field, input } from "../ui";
+import { btn, btnDark, c, card, CopyButton, dialOnComputer, ErrorText, Field, input } from "../ui";
 import { DatePicker } from "./DatePicker";
 import { Modal } from "./Wallet";
 import { MessageDialog } from "./MessageDialog";
 import { Lose } from "./Opportunities";
+import { useCallEnd } from "./Phone";
 import { emptyL2B, L2BFields, l2bReady, l2bValue, type L2BDraft } from "./L2BFields";
 import type { Reason } from "../api";
 
@@ -133,6 +134,7 @@ export function ClientWorkCard({ me, work, onEnded, onChanged, onOpenCompany }: 
           {work.companyId && <button style={{ ...btn, height: 52 }} onClick={() => setMsg(true)}>Mensagem</button>}
           {work.companyId && work.opCode && <button style={{ ...btn, height: 52 }} disabled={busy} onClick={() => api.startClient({ companyId: work.companyId!, kind: other, opCode: work.opCode! }).then(onChanged).catch((e) => setErr(e.message))}>Mudar para {KIND_LABEL[other]}</button>}
           {work.companyId && work.opCode && <button style={{ ...btn, height: 52, color: c.danger }} disabled={busy} onClick={() => setGivingUp(true)}>Cliente desistiu</button>}
+          {work.companyId && <CallClient companyId={work.companyId} onError={setErr} />}
         </div>
         {closing && <CloseClientDialog work={work} onClose={() => setClosing(false)} onDone={(d) => { setClosing(false); onEnded(d); }} />}
         {givingUp && <GiveUpDialog work={work} onClose={() => setGivingUp(false)} onDone={(d) => { setGivingUp(false); onEnded(d); }} />}
@@ -290,4 +292,35 @@ function GiveUpDialog({ work, onClose, onDone }: { work: ClientWork; onClose: ()
     afterProposal
     submit={(reasonId, comment, extra, l2b) => api.giveUpClient({ reasonId, comment, ...extra, l2b }).then((d) => { result = d; })}
     onClose={onClose} onDone={() => { if (result) onDone(result); }} />;
+}
+
+/**
+ * «Ligar ao cliente» durante a proposta (24 nov): liga pelo telemóvel sem pedir resultado. No fim, nota opcional;
+ * fica no histórico e não conta como chamada de campanha. O tempo Em cliente continua.
+ */
+function CallClient({ companyId, onError }: { companyId: string; onError: (m: string) => void }) {
+  const [call, setCall] = useState<{ id: string; phone: string } | null>(null);
+  const [ended, setEnded] = useState(false);
+  const [note, setNote] = useState("");
+  useCallEnd(call?.id ?? null, !!call && !ended, () => setEnded(true));
+  async function start() {
+    try {
+      const co = await api.company(companyId);
+      const ph = co.contacts.find((x) => x.kind === "phone" && x.status === "valid" && x.isPrimary) ?? co.contacts.find((x) => x.kind === "phone" && x.status === "valid");
+      if (!ph) { onError("Esta empresa não tem telefone válido."); return; }
+      const r = await api.startCall({ companyId, contactId: ph.id, source: "cliente" });
+      if (!r.viaPhone) dialOnComputer(ph.value);
+      setCall({ id: r.id, phone: ph.value }); setEnded(false); setNote("");
+    } catch (e) { onError((e as Error).message); }
+  }
+  const finish = (withNote: boolean) => { if (!call) return; api.callNoResult(call.id, withNote ? note : undefined).then(() => setCall(null)).catch((e) => onError(e.message)); };
+  if (!call) return <button style={{ ...btn, height: 52 }} onClick={start}>Ligar ao cliente</button>;
+  if (!ended) return <button style={{ ...btnDark, height: 52, background: "#D70015", borderColor: "#D70015" }} onClick={() => api.endCall(call.id).then(() => setEnded(true)).catch((e) => onError(e.message))}>Desligar · {formatPhone(call.phone)}</button>;
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <input style={{ ...input, height: 52, width: 260 }} autoFocus placeholder="Nota (opcional): ex. já lhe enviei" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button style={{ ...btnDark, height: 52 }} onClick={() => finish(true)}>Guardar nota</button>
+      <button style={{ ...btn, height: 52 }} onClick={() => finish(false)}>Fechar</button>
+    </div>
+  );
 }

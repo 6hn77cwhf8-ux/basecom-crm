@@ -97,7 +97,7 @@ const fmt = (d: Date) => d.toLocaleString("pt-PT", { timeZone: "Europe/Lisbon", 
  */
 export async function myDay(db: Db, user: PublicUser) {
   const r = await db.execute(sql`select
-      count(*) filter (where effect not in ('no_answer', 'busy', 'voicemail', 'wrong_number', 'redial', 'discarded'))::int as effective,
+      count(*) filter (where effect not in ('no_answer', 'busy', 'voicemail', 'wrong_number', 'redial', 'discarded', 'client_work'))::int as effective,
       count(*) filter (where effect in ('interested', 'proposal_sent', 'negotiating'))::int as proposals,
       count(*) filter (where effect = 'sale')::int as sales
     from calls where user_id = ${user.id}::uuid and saved_at is not null

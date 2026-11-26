@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
 import { auditLog } from "../db/schema.js";
-import { companyScriptView, discardCall, skipEntry, completeTask, dialerAssignments, myDialerCampaign, setDialerCampaign, endCall, entryView, myTasks, nextEntry, releaseEntry, saveResult, startCall } from "../dialer/service.js";
+import { closeCallWithoutResult, followUpEntry, companyScriptView, discardCall, skipEntry, completeTask, dialerAssignments, myDialerCampaign, setDialerCampaign, endCall, entryView, myTasks, nextEntry, releaseEntry, saveResult, startCall } from "../dialer/service.js";
 
 /** Power Dialer, chamadas e Agenda: todos os perfis (cada um sobre o seu trabalho). */
 export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -23,6 +23,8 @@ export async function dialerRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.post("/dialer/next", any, async (req) => ({ next: await nextEntry(db, req.user!, z.object({ campaignId: z.string().uuid() }).parse(req.body).campaignId) }));
   app.get("/dialer/entries/:id", any, async (req) => entryView(db, req.user!, id.parse(req.params).id));
   app.post("/dialer/entries/:id/skip", any, async (req) => { await skipEntry(db, req.user!, id.parse(req.params).id, z.object({ reason: z.string().max(500) }).parse(req.body).reason); return { ok: true }; });
+  app.post("/dialer/entries/:id/followup", any, async (req) => followUpEntry(db, req.user!, id.parse(req.params).id, new Date(z.object({ at: z.string().datetime() }).parse(req.body).at)));
+  app.post("/calls/:id/no-result", any, async (req) => { await closeCallWithoutResult(db, req.user!, id.parse(req.params).id, z.object({ note: z.string().max(500).optional() }).parse(req.body ?? {}).note); return { ok: true }; });
   app.post("/dialer/entries/:id/release", any, async (req) => { await releaseEntry(db, req.user!, id.parse(req.params).id); return { ok: true }; });
   app.post("/calls", any, async (req) => {
     const b = z.object({ companyId: z.string().uuid(), contactId: z.string().uuid().nullable().optional(), entryId: z.string().uuid().nullable().optional(), source: z.enum(["new", "current", "wallet", "ficha", "agenda", "recebida"]), consultedNos: z.boolean().optional(), phone: z.string().max(20).optional() }).parse(req.body);

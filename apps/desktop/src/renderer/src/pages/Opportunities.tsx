@@ -36,7 +36,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
   const [owner, setOwner] = useState("");
   const [people, setPeople] = useState<{ id: string; name: string; role: string; photo: string | null }[]>([]);
   const [cat, setCat] = useState<Catalogs | null>(null);
-  const [dialog, setDialog] = useState<{ kind: "activity" | "lose" | "move" | "win"; o: Opportunity; stage?: string } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "activity" | "lose" | "move" | "win" | "client"; o: Opportunity; stage?: string } | null>(null);
   const [error, setError] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
   const photoOf = (id: string) => people.find((p) => p.id === id)?.photo ?? null;
   const cardProps = (o: Opportunity) => ({
     o, photo: o.ownerPhoto ?? photoOf(o.ownerId), showOwner: isAdmin, onDrag: (on: boolean) => setDragId(on ? o.id : null), dragging: dragId === o.id,
-    onOpen: () => onOpenCompany(o.companyId), onAction: (kind: "activity" | "lose" | "move") => setDialog({ kind, o }),
+    onOpen: () => onOpenCompany(o.companyId), onAction: (kind: "activity" | "lose" | "move" | "client") => setDialog({ kind, o }),
     onWin: () => setDialog({ kind: "win", o }),
   });
   const pill = (on: boolean) => ({ border: 0, height: 32, padding: "0 12px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: on ? 700 : 600, background: on ? c.ink : "transparent", color: on ? c.onInk : c.muted });
@@ -122,6 +122,7 @@ export function Opportunities({ me, onOpenCompany }: { me: User; onOpenCompany: 
         </div>
       )}
       {dialog?.kind === "activity" && <Activity o={dialog.o} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
+      {dialog?.kind === "client" && <ToClient o={dialog.o} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "win" && <Win o={dialog.o} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "move" && <Move o={dialog.o} initial={dialog.stage} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
       {dialog?.kind === "lose" && cat && <Lose o={dialog.o} reasons={cat.catalogs.reasons.filter((r) => r.active)} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
@@ -133,7 +134,7 @@ const link = { border: 0, background: "none", padding: 0, cursor: "pointer", fon
 const small = { ...btn, height: 28, fontSize: 12, padding: "0 8px" };
 const statusPill = (lvl: string) => (lvl === "late" ? { label: "Atrasada", bg: c.dangerSoft, ink: c.danger } : lvl === "warn" ? { label: "Alerta", bg: c.warnSoft, ink: c.warn } : { label: "Em dia", bg: c.okSoft, ink: c.ok });
 
-function OppCard({ o, photo, bar, showOwner, onOpen, onAction, onWin, onDrag, dragging }: { o: Opportunity; photo: string | null; bar: string; showOwner: boolean; onDrag: (on: boolean) => void; dragging: boolean; onOpen: () => void; onAction: (k: "activity" | "lose" | "move") => void; onWin: () => void }) {
+function OppCard({ o, photo, bar, showOwner, onOpen, onAction, onWin, onDrag, dragging }: { o: Opportunity; photo: string | null; bar: string; showOwner: boolean; onDrag: (on: boolean) => void; dragging: boolean; onOpen: () => void; onAction: (k: "activity" | "lose" | "move" | "client") => void; onWin: () => void }) {
   const lvl = o.alert?.level ?? "ok";
   const st = statusPill(lvl);
   const days = o.alert?.days ?? 0;
@@ -161,6 +162,7 @@ function OppCard({ o, photo, bar, showOwner, onOpen, onAction, onWin, onDrag, dr
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         <button style={small} onClick={() => onAction("activity")}>Atividade</button>
         <button style={small} onClick={() => onAction("move")}>Etapa</button>
+        <button style={{ ...small, fontWeight: 700 }} onClick={() => onAction("client")}>Em cliente</button>
         <button style={{ ...small, color: c.ok }} onClick={onWin}>Ganha</button>
         <button style={{ ...small, color: c.danger }} onClick={() => onAction("lose")}>Perdida</button>
       </div>
@@ -262,6 +264,32 @@ function Move({ o, initial, onClose, onDone }: { o: Opportunity; initial?: strin
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn} onClick={onClose}>Voltar</button>
           <button style={btnDark} disabled={stage === o.stage || (askOp && op.length !== 7)} onClick={() => api.moveOpportunity(o.id, stage, comment || undefined, askOp ? op : undefined).then(onDone).catch((e) => setErr(e.message))}>Mudar</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** 26 nov: do cartão direto para «Em cliente», com a empresa e a OP do cartão; a OP só se escreve uma vez. */
+function ToClient({ o, onClose, onDone }: { o: Opportunity; onClose: () => void; onDone: () => void }) {
+  const [kind, setKind] = useState<"proposal" | "sale">(o.stage === "documents" ? "sale" : "proposal");
+  const [op, setOp] = useState("");
+  const [err, setErr] = useState("");
+  const pill = (on: boolean) => ({ ...btn, height: 40, background: on ? c.ink : c.card, color: on ? c.onInk : c.ink, borderColor: on ? c.ink : c.line });
+  const code = o.nosOp ?? op;
+  return (
+    <Modal title={`Em cliente · ${o.company}`} onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div role="radiogroup" aria-label="Proposta ou venda" style={{ display: "flex", gap: 8 }}>
+          <button type="button" role="radio" aria-checked={kind === "proposal"} style={pill(kind === "proposal")} onClick={() => setKind("proposal")}>Proposta</button>
+          <button type="button" role="radio" aria-checked={kind === "sale"} style={pill(kind === "sale")} onClick={() => setKind("sale")}>Venda</button>
+        </div>
+        {o.nosOp ? <span style={{ fontSize: 14 }}>OP <b>{o.nosOp}</b></span> : <OpField value={op} onChange={setOp} />}
+        <span style={{ fontSize: 12, color: c.muted }}>Começa a contar o tempo Em cliente. No fim, «Guardar e fechar» ou «Cliente desistiu».</span>
+        <ErrorText>{err}</ErrorText>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={btn} onClick={onClose}>Voltar</button>
+          <button style={btnDark} disabled={code.length !== 7} onClick={() => api.startClient({ companyId: o.companyId, kind, opCode: code }).then(onDone).catch((e) => setErr(e.message))}>Começar Em cliente</button>
         </div>
       </div>
     </Modal>
