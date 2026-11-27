@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { requireAuth } from "./auth.js";
-import { callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, missedCount, myDevice, nextCommand, pairDevice, queueMute, receivedList, unpairDevice } from "../phone/service.js";
+import { queueAnswer, callStatus, createPairingCode, deviceEvent, deviceFromToken, latestIncoming, missedCount, myDevice, nextCommand, pairDevice, queueMute, receivedList, unpairDevice } from "../phone/service.js";
 
 /** Telefonia: rotas do CRM (sessão do utilizador) e da app Android (token do telemóvel, cabeçalho «Authorization: Device …»). */
 export async function phoneRoutes(app: FastifyInstance, opts: { db: Db }) {
@@ -18,6 +18,7 @@ export async function phoneRoutes(app: FastifyInstance, opts: { db: Db }) {
   app.get("/phone/incoming", any, async (req) => ({ incoming: await latestIncoming(db, req.user!) }));
   app.get("/phone/received", any, async (req) => ({ calls: await receivedList(db, req.user!) }));
   app.get("/phone/missed-count", any, async (req) => ({ n: await missedCount(db, req.user!.id) }));
+  app.post("/phone/answer", any, async (req) => queueAnswer(db, req.user!.id));
   app.post("/phone/mute", any, async (req) => queueMute(db, req.user!.id, z.object({ on: z.boolean() }).parse(req.body).on));
 
   // App Android

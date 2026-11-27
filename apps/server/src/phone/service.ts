@@ -230,6 +230,14 @@ export async function queueMute(db: Db, userId: string, on: boolean) {
   return { ok: true, on };
 }
 
+/** 27 nov: «Atender» no CRM — o telemóvel BASECOM atende a chamada que está a tocar. */
+export async function queueAnswer(db: Db, userId: string) {
+  const d = await myDevice(db, userId);
+  if (!d?.online) throw new AuthError(409, "O telemóvel BASECOM não está ligado. Atenda no telemóvel.");
+  await db.insert(phoneCommands).values({ deviceId: d.id, number: "", kind: "answer" });
+  return { ok: true };
+}
+
 export async function receivedToday(db: Db, userId: string) {
   const r = await db.execute(sql`select count(*)::int as n from incoming_calls where user_id = ${userId}::uuid
     and (ringing_at at time zone 'Europe/Lisbon')::date = (now() at time zone 'Europe/Lisbon')::date`);

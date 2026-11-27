@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: apps/android
     env:
-      VERSION_NAME: 0.15.${{ github.run_number }}
+      VERSION_NAME: 0.16.${{ github.run_number }}
       VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4

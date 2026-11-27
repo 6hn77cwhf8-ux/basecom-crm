@@ -100,6 +100,15 @@ export const INCOMING_EVENT = "bc-incoming";
 export const INCOMING_DISMISS = "bc-incoming-dismiss";
 /** «Abrir script» numa chamada a entrar (20 nov): o Ligar abre o script grande dessa empresa. */
 export const OPEN_SCRIPT_EVENT = "bc-open-script";
+/**
+ * 27 nov: o pedido «abrir o script desta empresa» fica guardado até o Ligar o ler. Sem isto, quando a chamada entra
+ * fora do Ligar, o Ligar abria depois do pedido e mostrava a empresa seguinte da fila (empresa errada).
+ */
+export const pendingScript: { current: { companyId: string; number: string; contactId?: string; at: number } | null } = { current: null };
+export function openScript(detail: { companyId: string; number: string; contactId?: string }) {
+  pendingScript.current = { ...detail, at: Date.now() };
+  window.dispatchEvent(new CustomEvent(OPEN_SCRIPT_EVENT, { detail }));
+}
 export const WORK_EVENT = "bc-work-changed";
 function workChanged<T>(x: T): T { try { window.dispatchEvent(new Event(WORK_EVENT)); } catch { /* fora do navegador */ } return x; }
 
@@ -244,6 +253,7 @@ export const api = {
   heartbeat: () => call<{ state: WorkState }>("/time/heartbeat", { method: "POST", body: "{}" }),
   setWorkState: (state: WorkState, userId?: string) => call<DaySummary>("/time/state", { method: "POST", body: JSON.stringify({ state, userId }) }),
   startClient: (b: { companyId: string; kind: WorkKind; opCode: string }) => call<DaySummary>("/time/client", { method: "POST", body: JSON.stringify(b) }).then(workChanged),
+  phoneAnswer: () => call<{ ok: boolean }>("/phone/answer", { method: "POST", body: "{}" }),
   phoneMute: (on: boolean) => call<{ ok: boolean; on: boolean }>("/phone/mute", { method: "POST", body: JSON.stringify({ on }) }),
   receivedCalls: () => call<{ calls: ReceivedCall[] }>("/phone/received").then((r) => r.calls),
   badges: () => call<{ agenda: number; novos: number; oportunidades: number }>("/me/badges"),

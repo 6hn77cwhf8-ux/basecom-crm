@@ -140,6 +140,7 @@ class PhoneService : Service() {
                 if (cmd != null) main.post {
                     when (cmd.optString("kind")) {
                         "hangup" -> hangUp()
+                        "answer" -> answer()
                         "mute" -> mute(cmd.optString("text") == "1")
                         "sms" -> sendSms(cmd.optString("id"), cmd.getString("number"), cmd.optString("text"))
                         else -> dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
@@ -217,6 +218,13 @@ class PhoneService : Service() {
     private fun hangUp() {
         if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) return
         try { getSystemService(TelecomManager::class.java).endCall() } catch (_: Exception) {}
+    }
+
+    /** «Atender» no CRM (27 nov): atende a chamada que está a tocar (mesma autorização de atender/terminar chamadas). */
+    @Suppress("DEPRECATION")
+    private fun answer() {
+        if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) return
+        try { getSystemService(TelecomManager::class.java).acceptRingingCall() } catch (_: Exception) {}
     }
 
     /** Mute pedido no CRM (desenho 13): desliga ou volta a ligar o microfone durante a chamada. */

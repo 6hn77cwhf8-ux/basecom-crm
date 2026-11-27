@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatPhone, renderScript, spokenName } from "@basecom/shared";
-import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, pendingScript, type Campaign, type Catalogs, type ClientWork, type DialerEntry, type ResultInput, type User } from "../api";
 import { btn, btnDark, c, card, Chip, ErrorText, fmtDate, fmtEur, input, dialOnComputer } from "../ui";
 import { GROUPS, ResultPanel, type Group } from "./ResultPanel";
 import { WorkStates } from "./WorkState";
@@ -81,7 +81,10 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   // (na entrada da campanha onde ela está). Uma chamada feita que ainda estava a marcar é cancelada (o CRM segue o telemóvel).
   const [received, setReceived] = useState(false);
   const openReceivedRef = useRef<(companyId: string, number: string, dial?: { contactId: string }) => void>(() => undefined);
+  const holdRef = useRef(false);
+  useEffect(() => { if (phase === "ready" || phase === "countdown" || phase === "empty") holdRef.current = false; }, [phase]);
   openReceivedRef.current = async (companyId: string, number: string, dial?: { contactId: string }) => {
+    holdRef.current = true;
     if (phase === "result" || phase === "review") { setError(`Registe primeiro o resultado de ${cur?.company.name ?? "a chamada anterior"}; depois abra o script da chamada recebida.`); return; }
     setError("");
     if (phase === "calling" && callId) await api.discardCall(callId).catch(() => undefined);
@@ -95,11 +98,14 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       if (dial && !r.viaPhone) dialOnComputer(number);
       setPrior(r.priorResultSeconds ?? 0);
       setCallId(r.id); setStartedAt(Date.now()); setViaPhone(dial ? r.viaPhone : true); setLive(false); setQueued(false); pendingRef.current = null; setReceived(!dial); setPhase("calling");
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { holdRef.current = false; setError((e as Error).message); }
   };
   useEffect(() => {
-    const h = (e: Event) => { const d = (e as CustomEvent<{ companyId: string; number: string; contactId?: string }>).detail; openReceivedRef.current(d.companyId, d.number, d.contactId ? { contactId: d.contactId } : undefined); };
+    const h = (e: Event) => { const d = (e as CustomEvent<{ companyId: string; number: string; contactId?: string }>).detail; pendingScript.current = null; openReceivedRef.current(d.companyId, d.number, d.contactId ? { contactId: d.contactId } : undefined); };
     window.addEventListener(OPEN_SCRIPT_EVENT, h);
+    // O Ligar acabou de abrir por causa de uma chamada: abre a empresa certa (e não a seguinte da fila).
+    const p = pendingScript.current;
+    if (p && Date.now() - p.at < 60_000) { pendingScript.current = null; setTimeout(() => openReceivedRef.current(p.companyId, p.number, p.contactId ? { contactId: p.contactId } : undefined), 0); }
     return () => window.removeEventListener(OPEN_SCRIPT_EVENT, h);
   }, []);
   useEffect(() => { if (phase === "countdown" || phase === "ready" || phase === "idle") setReceived(false); }, [phase]);
@@ -139,7 +145,12 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       if (autoCall && n.phone && !n.opportunity) await start(n); else setPhase("ready");
     } catch (e) { setError((e as Error).message); setPhase("idle"); }
   }, [campaignId]);
-  useEffect(() => { if (isAdmin) { try { localStorage.setItem("bc_campaign", campaignId); } catch { /* sem armazenamento */ } } setCur(null); setPhase("idle"); if (campaignId) load(false); }, [campaignId]);
+  useEffect(() => {
+    if (isAdmin) { try { localStorage.setItem("bc_campaign", campaignId); } catch { /* sem armazenamento */ } }
+    // 27 nov: com uma chamada recebida aberta (ou a abrir), a campanha a carregar não troca a empresa no ecrã.
+    if (holdRef.current) return;
+    setCur(null); setPhase("idle"); if (campaignId) load(false);
+  }, [campaignId]);
   // Sem tempos mortos: nunca fica sem campanha. Entra na definida pelo Administrador; se não houver, na primeira disponível.
   useEffect(() => {
     if (!list.length) return;
@@ -454,7 +465,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
                     <button style={{ ...btnDark, flex: 1, height: 48, fontSize: 16, background: "#D70015", borderColor: "#D70015" }} onClick={() => hangUp()}>Desligar · {mmss(callSecs)}</button>
                   </div>}
               {phone.device?.online
-                ? <span style={{ fontSize: 12, color: c.ok }}>{phase === "calling" && viaPhone ? "O telemóvel está a marcar. Quando a chamada acabar, o resultado abre sozinho." : "Telemóvel ligado: «Iniciar chamada» marca no telemóvel."} <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.muted, textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Telemóvel</button></span>
+                ? <span style={{ fontSize: 12, color: c.ok }}>{phase === "calling" && received ? "Chamada recebida em curso no telemóvel. Quando acabar, o resultado abre sozinho." : phase === "calling" && viaPhone ? "O telemóvel está a marcar. Quando a chamada acabar, o resultado abre sozinho." : "Telemóvel ligado: «Iniciar chamada» marca no telemóvel."} <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.muted, textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Telemóvel</button></span>
                 : <span style={{ fontSize: 12, color: c.muted }}>Marque o número no telemóvel e carregue em «Iniciar chamada». No fim, carregue no resultado (ou em «Desligar»). <button onClick={() => setPhoneDialog(true)} style={{ border: 0, background: "none", padding: 0, color: c.brand, textDecoration: "underline", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{phone.device ? "Telemóvel sem sinal" : "Emparelhar telemóvel"}</button></span>}
             </section>
           </aside>

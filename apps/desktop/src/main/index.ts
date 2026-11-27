@@ -80,7 +80,8 @@ function overlayHtml(kind: string, d: OverlayData) {
 
 function openOverlay(kind: string, d: OverlayData) {
   overlayData.set(kind, d);
-  if (kind === "call" && mainWin && mainWin.isFocused() && !mainWin.isMinimized()) { closeOverlay(kind, false); return; }
+  // 27 nov: com o CRM à frente usa-se a caixa do próprio CRM (nunca duas caixas); a de cima de tudo só com o CRM atrás ou minimizado.
+  if ((kind === "call" || kind === "incoming") && mainWin && mainWin.isFocused() && !mainWin.isMinimized() && mainWin.isVisible()) { closeOverlay(kind, false); return; }
   const [w, h] = SIZES[kind] ?? [380, 200];
   let win = overlays.get(kind);
   if (!win || win.isDestroyed()) {
@@ -108,14 +109,14 @@ function closeOverlay(kind: string, forget = true) {
   if (win && !win.isDestroyed()) win.close();
   overlays.delete(kind);
 }
-function refreshCallBar() { const d = overlayData.get("call"); if (d) openOverlay("call", d); }
+function refreshCallBar() { for (const k of ["call", "incoming"]) { const d = overlayData.get(k); if (d) openOverlay(k, d); } }
 
 ipcMain.on("overlay-show", (_e, kind: string, data: OverlayData) => { if (typeof kind === "string" && SIZES[kind]) openOverlay(kind, data ?? {}); });
 ipcMain.on("overlay-hide", (_e, kind: string) => closeOverlay(kind));
 ipcMain.on("overlay-act", (e, action: string) => {
   const kind = [...overlays.entries()].find(([, w]) => !w.isDestroyed() && w.webContents.id === e.sender.id)?.[0];
   if (!kind || !mainWin || mainWin.isDestroyed()) return;
-  if (action === "crm" || action === "script" || action === "open") { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); }
+  if (action === "crm" || action === "script" || action === "answer" || action === "open") { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); }
   mainWin.webContents.send("overlay-action", kind, action);
 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatPhone } from "@basecom/shared";
-import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, type Incoming, type PhoneDevice, type SearchHit } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, openScript as openScriptFor, type Incoming, type PhoneDevice, type SearchHit } from "../api";
 import { QuickCall } from "./QuickCall";
 import { overlay } from "../overlay";
 import { btn, btnDark, c, ErrorText } from "../ui";
@@ -97,25 +97,34 @@ export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenComp
   }, []);
   // 26 nov: a chamada a entrar também aparece por cima de todas as aplicações (programa do computador 0.16+).
   const ringing = !answered && !!inc && inc.id !== dismissed && !inc.endedAt ? inc : null;
-  const openScript = (x: Incoming) => {
-    if (bigScript && x.companies.length === 1) { window.dispatchEvent(new CustomEvent(OPEN_SCRIPT_EVENT, { detail: { companyId: x.companies[0]!.id, number: x.number } })); setDismissed(x.id); }
+  // 27 nov: «Atender e abrir script» atende no telemóvel (pelo CRM) e abre o script grande da empresa que está a ligar.
+  const openScript = (x: Incoming, answer = true) => {
+    if (answer && !x.answeredAt) api.phoneAnswer().catch(() => undefined);
+    if (bigScript && x.companies.length === 1) { openScriptFor({ companyId: x.companies[0]!.id, number: x.number }); setDismissed(x.id); }
     else setAnswered(x);
   };
   const openRef = useRef(openScript); openRef.current = openScript;
+  // 27 nov: com o CRM à frente usa-se só a caixa do CRM; a de cima de tudo só quando o CRM está atrás ou minimizado.
+  const [front, setFront] = useState(() => document.hasFocus());
+  useEffect(() => {
+    const on = () => setFront(true), off = () => setFront(false);
+    window.addEventListener("focus", on); window.addEventListener("blur", off);
+    return () => { window.removeEventListener("focus", on); window.removeEventListener("blur", off); };
+  }, []);
   const ringRef = useRef(ringing); ringRef.current = ringing;
   useEffect(() => {
     if (!overlay) return;
-    if (!ringing) { overlay.hide("incoming"); return; }
+    if (!ringing || front) { overlay.hide("incoming"); return; }
     const num = /^\d{9}$/.test(ringing.number) ? formatPhone(ringing.number) : ringing.number;
     overlay.show("incoming", { tone: "green", subtitle: "Chamada a entrar", title: ringing.companies.length > 1 ? `${ringing.companies.length} empresas com este número` : ringing.company ?? "Número desconhecido",
-      lines: [`${num}${ringing.owner ? ` · carteira de ${ringing.owner}` : ""}`], buttons: [{ id: "script", label: "Abrir script", kind: "primary" }, { id: "ignore", label: "Não atender" }] });
-  }, [ringing?.id]);
+      lines: [`${num}${ringing.owner ? ` · carteira de ${ringing.owner}` : ""}`], buttons: [{ id: "script", label: "Atender e abrir script", kind: "primary" }, { id: "ignore", label: "Não atender" }] });
+  }, [ringing?.id, front]);
   useEffect(() => overlay?.onAction((kind, action) => {
     const r = ringRef.current;
     if (kind !== "incoming" || !r) return;
-    if (action === "script") openRef.current(r); else if (action === "ignore") setDismissed(r.id);
+    if (action === "answer" || action === "script") openRef.current(r); else if (action === "ignore") setDismissed(r.id);
   }), []);
-  if (answered) return <IncomingCall inc={answered} onDone={() => { setDismissed(answered.id); setAnswered(null); }} />;
+  if (answered) return <IncomingCall bigScript={bigScript} inc={answered} onDone={() => { setDismissed(answered.id); setAnswered(null); }} />;
   if (!inc || inc.id === dismissed) return null;
   return (
     <div role="alert" style={{ position: "fixed", right: 24, top: 20, zIndex: 60, width: 380, background: c.card, border: `2px solid ${c.brand}`, borderRadius: 14, boxShadow: "0 12px 40px rgba(0,0,0,.18)", padding: 14, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -124,11 +133,7 @@ export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenComp
       <span style={{ fontSize: 14, fontVariantNumeric: "tabular-nums" }}>{/^\d{9}$/.test(inc.number) ? formatPhone(inc.number) : inc.number}{inc.owner ? ` · carteira de ${inc.owner}` : ""}{inc.companyId ? ` · ${inc.openTasks} tarefa(s) aberta(s)` : ""}</span>
       <span style={{ fontSize: 12, color: c.muted }}>Ao atender no telemóvel, abre a janela da chamada.</span>
       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-        <button style={{ ...btnDark, height: 32, fontSize: 13 }} onClick={() => {
-          // Uma só empresa com este número: abre o script grande no Ligar. Várias ou nenhuma: escolher primeiro (janela).
-          if (bigScript && inc.companies.length === 1) { window.dispatchEvent(new CustomEvent(OPEN_SCRIPT_EVENT, { detail: { companyId: inc.companies[0]!.id, number: inc.number } })); setDismissed(inc.id); }
-          else setAnswered(inc);
-        }}>Abrir script</button>
+        <button style={{ ...btnDark, height: 32, fontSize: 13 }} onClick={() => openScript(inc)}>Atender e abrir script</button>
         {inc.companyId && <button style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => { onOpenCompany(inc.companyId!); }}>Abrir ficha</button>}
         <button style={{ ...btn, height: 32, fontSize: 13 }} onClick={() => setDismissed(inc.id)}>Fechar</button>
       </div>
@@ -137,7 +142,7 @@ export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenComp
 }
 
 /** Chamada recebida atendida: escolher a empresa (se houver várias ou nenhuma) e abrir a janela de chamada. */
-function IncomingCall({ inc, onDone }: { inc: Incoming; onDone: () => void }) {
+function IncomingCall({ inc, onDone, bigScript }: { inc: Incoming; onDone: () => void; bigScript?: boolean }) {
   const [co, setCo] = useState<{ id: string; name: string; nif: string } | null>(inc.companies.length === 1 ? inc.companies[0]! : null);
   const [info, setInfo] = useState<{ walletKind?: "NC" | "FC"; needsKind: boolean } | null>(null);
   const [q, setQ] = useState("");
@@ -152,6 +157,9 @@ function IncomingCall({ inc, onDone }: { inc: Incoming; onDone: () => void }) {
     return () => clearTimeout(t);
   }, [q, co]);
   const num = /^\d{9}$/.test(inc.number) ? formatPhone(inc.number) : inc.number;
+  // 27 nov: comercial e Chefe de Equipa: escolhida a empresa, abre o script grande no Ligar (nunca a janela pequena).
+  useEffect(() => { if (co && bigScript) { openScriptFor({ companyId: co.id, number: inc.number }); onDone(); } }, [co?.id]);
+  if (co && bigScript) return null;
   if (co && info) return <QuickCall received company={{ ...co, walletKind: info.walletKind }} contact={{ value: inc.number }} needsKind={info.needsKind} onClose={onDone} onSaved={onDone} />;
   return (
     <Modal title={`Chamada recebida · ${num}`} onClose={onDone} width={620}>
