@@ -3,6 +3,11 @@
 Lista de pedidos do Leonardo (Administrador) que ficam para uma próxima versão.
 Cada linha só sai daqui depois de feita, testada e publicada com a autorização dele.
 
+## Publicado a 27/11/2026
+
+- **0.16.1 (12:44):** chamada a entrar com uma só caixa, «Atender e abrir script» atende no telemóvel e abre o script grande da empresa certa. App Android 0.16.21.
+- **0.16.2 (12:58):** SMS «Tentámos ligar» com dois modelos (Novos clientes e Clientes atuais), editáveis em Configurações › Mensagens; comercial «A trabalhar» parado fora do Ligar volta sozinho ao Ligar ao fim de 3 min (Configurações › Limites de tempo; 0 desliga). **Por confirmar em uso real:** o regresso automático (o ensaio local não chegou a ficar com a comercial no estado «A trabalhar»).
+
 ## Exportação do ponto (Excel) — pedido de 16/11/2026, fase de testes
 
 Não é para hoje nem para amanhã: fica para quando se juntarem as alterações dos testes.
