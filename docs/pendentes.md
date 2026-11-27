@@ -8,6 +8,13 @@ Cada linha só sai daqui depois de feita, testada e publicada com a autorizaçã
 - **0.16.1 (12:44):** chamada a entrar com uma só caixa, «Atender e abrir script» atende no telemóvel e abre o script grande da empresa certa. App Android 0.16.21.
 - **0.16.2 (12:58):** SMS «Tentámos ligar» com dois modelos (Novos clientes e Clientes atuais), editáveis em Configurações › Mensagens; comercial «A trabalhar» parado fora do Ligar volta sozinho ao Ligar ao fim de 3 min (Configurações › Limites de tempo; 0 desliga). **Por confirmar em uso real:** o regresso automático (o ensaio local não chegou a ficar com a comercial no estado «A trabalhar»).
 
+## Pronta, por publicar (ramo v0163) — à espera da ordem do Leonardo
+
+- **0.16.3 — chamadas a entrar (relato de 27/11, telemóvel TCL 20R 5G, app 0.16.21):**
+  - «Empresa errada»: ao atender, a contagem para a seguinte retomava e o Ligar carregava (e podia marcar) a empresa seguinte da fila por cima da que estava a ligar. Corrigido.
+  - «Continua a tocar»: a app tenta atender da forma normal e, se ao fim de 1,5 s ainda tocar, como o botão de uns auriculares. Diz ao CRM se conseguiu; se não, aparece no CRM o aviso vermelho «Atenda no telemóvel: …» com o motivo, que também fica na auditoria («telemovel_nao_atendeu»).
+  - Depois de publicar: atualizar a app Android nos telemóveis e repetir o teste no TCL 20R 5G.
+
 ## Exportação do ponto (Excel) — pedido de 16/11/2026, fase de testes
 
 Não é para hoje nem para amanhã: fica para quando se juntarem as alterações dos testes.
