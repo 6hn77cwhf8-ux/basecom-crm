@@ -82,12 +82,17 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   const [received, setReceived] = useState(false);
   const openReceivedRef = useRef<(companyId: string, number: string, dial?: { contactId: string }) => void>(() => undefined);
   const holdRef = useRef(false);
+  // 27 nov (0.16.3): cada abertura de recebida muda este número; um carregamento da fila que começou antes é ignorado
+  // (antes, ao atender, a contagem retomava e trocava o ecrã pela empresa seguinte — «empresa errada»).
+  const recvSeq = useRef(0);
   useEffect(() => { if (phase === "ready" || phase === "countdown" || phase === "empty") holdRef.current = false; }, [phase]);
   openReceivedRef.current = async (companyId: string, number: string, dial?: { contactId: string }) => {
-    holdRef.current = true;
+    holdRef.current = true; recvSeq.current++; reloadAfter.current = false;
     if (phase === "result" || phase === "review") { setError(`Registe primeiro o resultado de ${cur?.company.name ?? "a chamada anterior"}; depois abra o script da chamada recebida.`); return; }
     setError("");
-    if (phase === "calling" && callId) await api.discardCall(callId).catch(() => undefined);
+    const before = phase;
+    setPhase("loading"); // trava a contagem para a seguinte enquanto abre a empresa que ligou
+    if (before === "calling" && callId) await api.discardCall(callId).catch(() => undefined);
     try {
       const v = await api.companyScriptView(companyId);
       setCur(v); setConsulted(false); consultedRef.current = false; setSkipping(false); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
@@ -98,7 +103,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
       if (dial && !r.viaPhone) dialOnComputer(number);
       setPrior(r.priorResultSeconds ?? 0);
       setCallId(r.id); setStartedAt(Date.now()); setViaPhone(dial ? r.viaPhone : true); setLive(false); setQueued(false); pendingRef.current = null; setReceived(!dial); setPhase("calling");
-    } catch (e) { holdRef.current = false; setError((e as Error).message); }
+    } catch (e) { holdRef.current = false; setPhase(cur ? "ready" : "idle"); setError((e as Error).message); }
   };
   useEffect(() => {
     const h = (e: Event) => { const d = (e as CustomEvent<{ companyId: string; number: string; contactId?: string }>).detail; pendingScript.current = null; openReceivedRef.current(d.companyId, d.number, d.contactId ? { contactId: d.contactId } : undefined); };
@@ -110,7 +115,7 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
   }, []);
   useEffect(() => { if (phase === "countdown" || phase === "ready" || phase === "idle") setReceived(false); }, [phase]);
   // Acabou a recebida e a marcação tinha sido cancelada: a empresa volta (início da fila), sem marcar sozinho.
-  useEffect(() => { if (!incoming.active && reloadAfter.current) { reloadAfter.current = false; load(false); } }, [incoming.active]);
+  useEffect(() => { if (!incoming.active && reloadAfter.current && !holdRef.current) { reloadAfter.current = false; load(false); } }, [incoming.active]);
   // 26 nov: chamada em curso por cima de todas as aplicações quando o CRM não está à frente (programa do computador 0.16+).
   useEffect(() => {
     if (!overlay || !cur) return;
@@ -136,14 +141,16 @@ export function PowerDialer({ me, onOpenCompany, active = true, onShow, onReceiv
 
   const load = useCallback(async (autoCall: boolean) => {
     if (!campaignId) { setPhase("idle"); return; }
+    const seq = recvSeq.current;
     setPhase("loading"); setError(""); setCallId(null);
     try {
       const n = await api.dialerNext(campaignId);
+      if (recvSeq.current !== seq) return; // entretanto abriu-se uma chamada recebida: fica essa empresa
       setCur(n); setConsulted(false); consultedRef.current = false; setSkipping(false); setSkipReason(""); setStep("opening"); setDecisor(null); setChanging(false); setNewName(""); setNewSal("");
       if (!n) { setPhase("empty"); return; }
       // 26 nov: empresa com oportunidade em curso não marca sozinha: o comercial escolhe Ligar, Saltar ou Follow-up.
       if (autoCall && n.phone && !n.opportunity) await start(n); else setPhase("ready");
-    } catch (e) { setError((e as Error).message); setPhase("idle"); }
+    } catch (e) { if (recvSeq.current !== seq) return; setError((e as Error).message); setPhase("idle"); }
   }, [campaignId]);
   useEffect(() => {
     if (isAdmin) { try { localStorage.setItem("bc_campaign", campaignId); } catch { /* sem armazenamento */ } }

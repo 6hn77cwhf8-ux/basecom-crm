@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { OPEN_SCRIPT_EVENT, WORK_EVENT, api, type User } from "./api";
+import { OPEN_SCRIPT_EVENT, PHONE_NOTICE, WORK_EVENT, api, type User } from "./api";
 import { Login } from "./Login";
 import { ChangePassword } from "./ChangePassword";
 import { NAV, Shell, type PageId } from "./Shell";
@@ -77,6 +77,10 @@ export function App() {
     return () => { clearInterval(t); evs.forEach((e) => window.removeEventListener(e, touch)); };
   }, [user?.id, user?.role]);
   useEffect(() => { if (!stateNotice) return; const t = setTimeout(() => setStateNotice(""), 8000); return () => clearTimeout(t); }, [stateNotice]);
+  // 27 nov (0.16.3): o telemóvel não atendeu pelo CRM — aviso vermelho (fica 12 s ou até fechar).
+  const [phoneNotice, setPhoneNotice] = useState("");
+  useEffect(() => { const h = (e: Event) => setPhoneNotice((e as CustomEvent<string>).detail); window.addEventListener(PHONE_NOTICE, h); return () => window.removeEventListener(PHONE_NOTICE, h); }, []);
+  useEffect(() => { if (!phoneNotice) return; const t = setTimeout(() => setPhoneNotice(""), 12_000); return () => clearTimeout(t); }, [phoneNotice]);
   if (checking) return null;
   // 20 nov: o Administrador começa no Pipeline (não usa o Ligar); os outros no Ligar.
   if (!user) return <Login onDone={(u) => { setUser(u); if (u.theme) applyTheme(u.theme); setPage(u.role === "admin" ? "oportunidades" : "novos"); }} />;
@@ -101,6 +105,7 @@ export function App() {
       </div>
       </>}
       {companyId && <CompanyDrawer id={companyId} me={user} onClose={() => setCompanyId(null)} />}
+      {phoneNotice && <div role="alert" onClick={() => setPhoneNotice("")} style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 140, background: "#B91C1C", color: "#FFFFFF", borderRadius: 12, padding: "12px 18px", fontSize: 15, fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,.2)", maxWidth: "90vw", cursor: "pointer" }}>{phoneNotice}</div>}
       {stateNotice && <div role="status" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 120, background: "#15803D", color: "#FFFFFF", borderRadius: 12, padding: "12px 18px", fontSize: 15, fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,.2)" }}>{stateNotice}</div>}
     </Shell>
   );

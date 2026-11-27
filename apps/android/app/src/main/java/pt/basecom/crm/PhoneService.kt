@@ -20,6 +20,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.CallLog
+import android.view.KeyEvent
 import android.telecom.TelecomManager
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager
@@ -140,7 +141,7 @@ class PhoneService : Service() {
                 if (cmd != null) main.post {
                     when (cmd.optString("kind")) {
                         "hangup" -> hangUp()
-                        "answer" -> answer()
+                        "answer" -> answer(cmd.optString("id"))
                         "mute" -> mute(cmd.optString("text") == "1")
                         "sms" -> sendSms(cmd.optString("id"), cmd.getString("number"), cmd.optString("text"))
                         else -> dial(cmd.getString("number"), cmd.optString("callId").ifBlank { null })
@@ -220,11 +221,44 @@ class PhoneService : Service() {
         try { getSystemService(TelecomManager::class.java).endCall() } catch (_: Exception) {}
     }
 
-    /** «Atender» no CRM (27 nov): atende a chamada que está a tocar (mesma autorização de atender/terminar chamadas). */
+    /**
+     * «Atender» no CRM (27 nov): atende a chamada que está a tocar (mesma autorização de atender/terminar chamadas).
+     * 27 nov (0.16.3): alguns telemóveis ignoram o pedido normal; se ao fim de 1,5 s ainda estiver a tocar, tenta como
+     * o botão de uns auriculares. No fim diz ao CRM se atendeu (o CRM avisa o comercial para atender no telemóvel).
+     */
     @Suppress("DEPRECATION")
-    private fun answer() {
-        if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) return
-        try { getSystemService(TelecomManager::class.java).acceptRingingCall() } catch (_: Exception) {}
+    private fun answer(commandId: String) {
+        if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
+            reportCommand(commandId, "failed", "Falta a autorização «Atender chamadas» na app BASECOM."); return
+        }
+        var err: String? = null
+        try { getSystemService(TelecomManager::class.java).acceptRingingCall() } catch (e: Exception) { err = e.message ?: e.javaClass.simpleName }
+        main.postDelayed({
+            if (callStateNow() == TelephonyManager.CALL_STATE_RINGING) {
+                try {
+                    val am = getSystemService(AudioManager::class.java)
+                    am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HEADSETHOOK))
+                    am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK))
+                } catch (e: Exception) { if (err == null) err = e.message ?: e.javaClass.simpleName }
+            }
+            main.postDelayed({
+                when (callStateNow()) {
+                    TelephonyManager.CALL_STATE_OFFHOOK -> reportCommand(commandId, "done", null)
+                    TelephonyManager.CALL_STATE_RINGING -> reportCommand(commandId, "failed", "O telemóvel (${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}) não deixou atender pelo CRM${err?.let { ": $it" } ?: "."}")
+                    else -> reportCommand(commandId, "done", null) // já não estava a tocar (o cliente desligou): nada a avisar
+                }
+            }, 1_500)
+        }, 1_500)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun callStateNow(): Int = try { (getSystemService(TELEPHONY_SERVICE) as TelephonyManager).callState } catch (_: Exception) { -1 }
+
+    private fun reportCommand(commandId: String, result: String, error: String?) {
+        if (commandId.isBlank()) return
+        events.execute {
+            try { api.event(JSONObject().put("type", "command_result").put("commandId", commandId).put("result", result).apply { if (error != null) put("error", error) }) } catch (_: Exception) {}
+        }
     }
 
     /** Mute pedido no CRM (desenho 13): desliga ou volta a ligar o microfone durante a chamada. */

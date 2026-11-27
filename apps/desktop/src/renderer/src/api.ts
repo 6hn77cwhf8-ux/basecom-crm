@@ -100,6 +100,21 @@ export const INCOMING_EVENT = "bc-incoming";
 export const INCOMING_DISMISS = "bc-incoming-dismiss";
 /** «Abrir script» numa chamada a entrar (20 nov): o Ligar abre o script grande dessa empresa. */
 export const OPEN_SCRIPT_EVENT = "bc-open-script";
+/** 27 nov (0.16.3): aviso vermelho quando o telemóvel não atende pelo CRM (o comercial atende no telemóvel). */
+export const PHONE_NOTICE = "bc-phone-notice";
+export function answerOnPhone() {
+  const fail = (m: string) => window.dispatchEvent(new CustomEvent(PHONE_NOTICE, { detail: `Atenda no telemóvel: ${m}` }));
+  api.phoneAnswer().then(async (r) => {
+    if (!r.id) return;
+    for (let i = 0; i < 10; i++) {
+      await new Promise((res) => setTimeout(res, 1000));
+      const c = await api.phoneCommand(r.id).catch(() => null);
+      if (!c || c.status === "done") return;
+      if (c.status === "failed") { fail(c.error ?? "o telemóvel não deixou atender pelo CRM."); return; }
+    }
+    fail("o telemóvel não respondeu ao pedido para atender (confirme que a app BASECOM está aberta e atualizada).");
+  }).catch((e) => fail((e as Error).message));
+}
 /**
  * 27 nov: o pedido «abrir o script desta empresa» fica guardado até o Ligar o ler. Sem isto, quando a chamada entra
  * fora do Ligar, o Ligar abria depois do pedido e mostrava a empresa seguinte da fila (empresa errada).
@@ -253,7 +268,8 @@ export const api = {
   heartbeat: () => call<{ state: WorkState }>("/time/heartbeat", { method: "POST", body: "{}" }),
   setWorkState: (state: WorkState, userId?: string) => call<DaySummary>("/time/state", { method: "POST", body: JSON.stringify({ state, userId }) }),
   startClient: (b: { companyId: string; kind: WorkKind; opCode: string }) => call<DaySummary>("/time/client", { method: "POST", body: JSON.stringify(b) }).then(workChanged),
-  phoneAnswer: () => call<{ ok: boolean }>("/phone/answer", { method: "POST", body: "{}" }),
+  phoneAnswer: () => call<{ ok: boolean; id?: string }>("/phone/answer", { method: "POST", body: "{}" }),
+  phoneCommand: (id: string) => call<{ status: string; error: string | null }>(`/phone/command/${id}`),
   phoneMute: (on: boolean) => call<{ ok: boolean; on: boolean }>("/phone/mute", { method: "POST", body: JSON.stringify({ on }) }),
   receivedCalls: () => call<{ calls: ReceivedCall[] }>("/phone/received").then((r) => r.calls),
   badges: () => call<{ agenda: number; novos: number; oportunidades: number }>("/me/badges"),

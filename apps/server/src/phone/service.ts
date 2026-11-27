@@ -120,7 +120,9 @@ export type DeviceEvent =
   | { type: "incoming_missed"; number: string; at: string }
   | { type: "incoming_ended"; incomingId: string; endedAt: string; durationSeconds: number }
   /** 20 nov: a app enviou a SMS sozinha (ou falhou, ou abriu a mensagem por falta de autorização). */
-  | { type: "sms_result"; commandId: string; result: "sent" | "failed" | "opened"; error?: string };
+  | { type: "sms_result"; commandId: string; result: "sent" | "failed" | "opened"; error?: string }
+  /** 27 nov (0.16.3): resultado de «Atender» pedido no CRM (done = atendeu · failed = o telemóvel não deixou, com o motivo). */
+  | { type: "command_result"; commandId: string; result: "done" | "failed"; error?: string };
 
 /** Empresas com este número (pode haver mais de uma). */
 async function companiesFor(db: Db, national: string) {
@@ -163,6 +165,13 @@ export async function deviceEvent(db: Db, device: { id: string; userId: string }
       const text = ev.result === "sent" ? `SMS enviada pelo telemóvel BASECOM para ${c.number}` : ev.result === "failed" ? `SMS não enviada para ${c.number}${ev.error ? ` (${ev.error.slice(0, 120)})` : ""}` : `SMS aberta no telemóvel para ${c.number} (sem autorização para enviar sozinha)`;
       await db.insert(companyNotes).values({ companyId: c.companyId, kind: "message", userId: device.userId, text });
     }
+    return { ok: true };
+  }
+  if (ev.type === "command_result") {
+    const c = await db.query.phoneCommands.findFirst({ where: eq(phoneCommands.id, ev.commandId) });
+    if (!c || c.deviceId !== device.id) throw new AuthError(404, "Pedido não encontrado.");
+    await db.update(phoneCommands).set({ status: ev.result, text: ev.error?.slice(0, 300) ?? null }).where(eq(phoneCommands.id, c.id));
+    if (ev.result === "failed") await db.insert(auditLog).values({ userId: device.userId, action: "telemovel_nao_atendeu", entity: "user", entityId: device.userId, details: (ev.error ?? "").slice(0, 300) }).catch(() => undefined);
     return { ok: true };
   }
   if (ev.type === "incoming_answered") {
@@ -234,8 +243,16 @@ export async function queueMute(db: Db, userId: string, on: boolean) {
 export async function queueAnswer(db: Db, userId: string) {
   const d = await myDevice(db, userId);
   if (!d?.online) throw new AuthError(409, "O telemóvel BASECOM não está ligado. Atenda no telemóvel.");
-  await db.insert(phoneCommands).values({ deviceId: d.id, number: "", kind: "answer" });
-  return { ok: true };
+  const [c] = await db.insert(phoneCommands).values({ deviceId: d.id, number: "", kind: "answer" }).returning({ id: phoneCommands.id });
+  return { ok: true, id: c!.id };
+}
+
+/** 27 nov (0.16.3): estado de um pedido ao telemóvel (o CRM vê se «Atender» resultou). */
+export async function commandStatus(db: Db, userId: string, id: string) {
+  const d = await myDevice(db, userId);
+  const c = d ? await db.query.phoneCommands.findFirst({ where: and(eq(phoneCommands.id, id), eq(phoneCommands.deviceId, d.id)) }) : undefined;
+  if (!c) throw new AuthError(404, "Pedido não encontrado.");
+  return { status: c.status, error: c.status === "failed" ? c.text : null };
 }
 
 export async function receivedToday(db: Db, userId: string) {

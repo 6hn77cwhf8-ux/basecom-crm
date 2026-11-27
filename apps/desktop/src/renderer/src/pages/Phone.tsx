@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatPhone } from "@basecom/shared";
-import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, openScript as openScriptFor, type Incoming, type PhoneDevice, type SearchHit } from "../api";
+import { api, INCOMING_DISMISS, INCOMING_EVENT, OPEN_SCRIPT_EVENT, openScript as openScriptFor, answerOnPhone, type Incoming, type PhoneDevice, type SearchHit } from "../api";
 import { QuickCall } from "./QuickCall";
 import { overlay } from "../overlay";
 import { btn, btnDark, c, ErrorText } from "../ui";
@@ -99,7 +99,7 @@ export function IncomingBanner({ onOpenCompany, bigScript = true }: { onOpenComp
   const ringing = !answered && !!inc && inc.id !== dismissed && !inc.endedAt ? inc : null;
   // 27 nov: «Atender e abrir script» atende no telemóvel (pelo CRM) e abre o script grande da empresa que está a ligar.
   const openScript = (x: Incoming, answer = true) => {
-    if (answer && !x.answeredAt) api.phoneAnswer().catch(() => undefined);
+    if (answer && !x.answeredAt) answerOnPhone();
     if (bigScript && x.companies.length === 1) { openScriptFor({ companyId: x.companies[0]!.id, number: x.number }); setDismissed(x.id); }
     else setAnswered(x);
   };
