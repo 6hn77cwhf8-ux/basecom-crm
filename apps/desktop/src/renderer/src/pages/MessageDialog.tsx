@@ -31,7 +31,7 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
       setD(cd); setTemplates(t); setSignature(kit.signature);
       setOp(opps.find((o) => !o.closedAt && o.nosOp)?.nosOp ?? null);
       // «Tentámos ligar» é a SMS do 1.º não atende: não é o modelo por omissão aqui.
-      const first = t.find((x) => x.id !== "tried_call") ?? t[0];
+      const first = t.find((x) => !x.id.startsWith("tried_call")) ?? t[0];
       if (!initialTemplate && first) setTpl(first.id);
     }).catch((e) => setErr(e.message));
   }, [companyId]);
@@ -43,7 +43,7 @@ export function MessageDialog({ companyId, me, initialTemplate, onClose, onSent 
   useEffect(() => { setTo(options.find((x) => x.isPrimary)?.value ?? options[0]?.value ?? ""); }, [options]);
   useEffect(() => {
     const t = templates.find((x) => x.id === tpl);
-    if (t && d) setText(renderMessage(t.text, vars) + (signature && channel !== "sms" && t.id !== "tried_call" ? `\n\n${signature}` : ""));
+    if (t && d) setText(renderMessage(t.text, vars) + (signature && channel !== "sms" && !t.id.startsWith("tried_call") ? `\n\n${signature}` : ""));
   }, [tpl, templates, d, op, signature, channel]);
 
   const label = (v: string) => { const x = options.find((o) => o.value === v); return `${channel === "email" ? v : formatPhone(v)}${x?.personName ? ` · ${x.salutation ? x.salutation + " " : ""}${x.personName}` : ""}`; };

@@ -40,8 +40,10 @@ export const SETTINGS = {
       shortCallSeconds: z.number().int().min(0).max(60).default(5),
       /** 23 nov: depois de guardar o resultado, «Iniciar chamada» fica inativo X segundos. */
       nextCallLockSeconds: z.number().int().min(0).max(30).default(3),
+      /** 27 nov: «A trabalhar» parado fora do Ligar (sem mexer) volta sozinho ao Ligar ao fim de X minutos (0 = desligado). */
+      idleReturnMinutes: z.number().int().min(0).max(60).default(3),
     }),
-    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1, resultAlertSeconds: 100, shortCallSeconds: 5, nextCallLockSeconds: 3 },
+    defaults: { resultSeconds: 15, nextCallSeconds: 10, campaignSwitchMinutes: 2, trainingMinutes: 5, breakMinutes: 24, dailyMinutes: 480, saturdayMinutes: 255, officeMinutes: 15, clientAlertMinutes: 10, callbackMaxMonths: 1, resultAlertSeconds: 100, shortCallSeconds: 5, nextCallLockSeconds: 3, idleReturnMinutes: 3 },
   },
   /** Importação da base de empresas (documento «Importação e reconciliação», decisões de 10 nov). */
   importBase: {

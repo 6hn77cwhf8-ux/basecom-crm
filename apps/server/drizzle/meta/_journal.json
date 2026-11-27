@@ -239,6 +239,13 @@
       "when": 1795721340530,
       "tag": "0033_recusas_l2b",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795783486310,
+      "tag": "0034_sms_clientes_atuais",
+      "breakpoints": true
     }
   ]
 }

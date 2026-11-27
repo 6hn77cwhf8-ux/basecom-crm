@@ -28,8 +28,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   /** Botão «Abrir ficha» ao lado do nome (18 nov). */
   onOpenCompany?: () => void;
   /** SMS «Tentámos ligar» no 1.º não atende (18 nov): telemóvel do cliente e campos do modelo. */
-  triedSms?: { to: string; vars: { decisor?: string; empresa?: string; comercial?: string; telemovel?: string } };
-  onSms?: (text: string) => void;
+  triedSms?: { to: string; mode?: "new" | "current"; vars: { decisor?: string; empresa?: string; comercial?: string; telemovel?: string } };
+  onSms?: (text: string, templateId?: string) => void;
   /** NC/FC da empresa (FC conta 50 % na previsão de pontos). */
   walletKind?: "NC" | "FC";
   backLabel?: string;
@@ -50,6 +50,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const [kind, setKind] = useState<"NC" | "FC" | "NN" | null>(null);
   const [followUp, setFollowUp] = useState<FollowUp | null>(null);
   const [smsText, setSmsText] = useState("");
+  const [smsTemplate, setSmsTemplate] = useState("tried_call");
   const [op, setOp] = useState("");
   // Tipos de venda e valor de cada um (€/mês): até 2 (FID + XSell ou FID + Upsell; NN sozinho).
   const [types, setTypes] = useState<TypesDraft>({});
@@ -85,7 +86,8 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
   const showSms = !!triedSms && eff === "no_answer" && /^9\d{8}$/.test(triedSms.to.replace(/\D/g, ""));
   useEffect(() => {
     if (!showSms || smsText) return;
-    api.messageTemplates().then((t) => { const m = t.find((x) => x.id === "tried_call"); if (m) setSmsText(renderMessage(m.text, triedSms!.vars)); }).catch(() => undefined);
+    // 27 nov: SMS por tipo de campanha — Clientes atuais usa a sua (se ativa); senão, a de Novos clientes.
+    api.messageTemplates().then((t) => { const m = (triedSms!.mode === "current" ? t.find((x) => x.id === "tried_call_current") : undefined) ?? t.find((x) => x.id === "tried_call"); if (m) { setSmsText(renderMessage(m.text, triedSms!.vars)); setSmsTemplate(m.id); } }).catch(() => undefined);
   }, [showSms]);
 
   const nextContact = useMemo(() => {
@@ -99,7 +101,7 @@ export function ResultPanel({ cat, group, company, endedAt, busy, error, hidden,
 
   function save(withSms = false) {
     if (!ready || !outcome) return;
-    if (withSms && smsText.trim()) onSms?.(smsText.trim());
+    if (withSms && smsText.trim()) onSms?.(smsText.trim(), smsTemplate);
     onSave({
       outcomeId: outcome.id, reasonId: reason?.id, comment: comment.trim() || undefined, date: date || undefined, at: toIso(at),
       services: services.trim() || undefined,

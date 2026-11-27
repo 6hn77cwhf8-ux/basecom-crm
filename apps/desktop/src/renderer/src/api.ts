@@ -9,7 +9,7 @@ export type AuditEntry = { id: string; action: string; userName: string; targetN
 export type Settings = {
   messages: { templates: { id: string; label: string; text: string; active: boolean }[]; signature?: string };
   auth: { maxFailedLogins: number; lockMinutes: number; sessionHours: number };
-  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number; resultAlertSeconds: number; shortCallSeconds: number; nextCallLockSeconds?: number };
+  timeLimits: { resultSeconds: number; nextCallSeconds: number; campaignSwitchMinutes: number; trainingMinutes: number; breakMinutes: number; dailyMinutes: number; saturdayMinutes: number; officeMinutes: number; clientAlertMinutes: number; callbackMaxMonths: number; resultAlertSeconds: number; shortCallSeconds: number; nextCallLockSeconds?: number; idleReturnMinutes?: number };
   nosRevenue: { NN: number; XSell: number; FID: number; Upsell: number };
   tags: TagSettings;
 };

@@ -8,8 +8,11 @@ export type MessageVars = Partial<Record<(typeof MESSAGE_FIELDS)[number], string
 
 export const DEFAULT_MESSAGE_TEMPLATES: MessageTemplate[] = [
   // SMS automática no 1.º não atende (18 nov): só «NOS Empresas», com o pedido para devolver a chamada.
-  { id: "tried_call", label: "Tentámos ligar (1.º não atende)", active: true,
+  { id: "tried_call", label: "Tentámos ligar · Novos clientes (1.º não atende)", active: true,
     text: "{saudacao}, {decisor}. Tentámos ligar-lhe da NOS Empresas sobre as comunicações da {empresa}.\n\nLigue-nos para este número quando lhe der jeito — são 2 minutos.\n\n{comercial} · {telemovel} · NOS Empresas" },
+  // 27 nov: versão para campanhas de Clientes atuais (editável em Configurações › Mensagens).
+  { id: "tried_call_current", label: "Tentámos ligar · Clientes atuais (1.º não atende)", active: true,
+    text: "{saudacao}, {decisor}. Tentámos ligar-lhe da NOS Empresas sobre os serviços NOS da {empresa}.\n\nLigue-nos para este número quando lhe der jeito — são 2 minutos.\n\n{comercial} · {telemovel} · NOS Empresas" },
   { id: "no_answer", label: "Não conseguimos falar consigo", active: true,
     text: "Bom dia, {decisor}. Fala {comercial}, da BASECOM – parceiro NOS Empresas. Tentei contactá-lo(a) por telefone sobre os serviços da {empresa}. Quando lhe der jeito falarmos?" },
   { id: "proposal", label: "Proposta enviada", active: true,

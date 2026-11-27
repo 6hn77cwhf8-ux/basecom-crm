@@ -29,6 +29,7 @@ const FIELDS: { [K in NumericKey]: { key: keyof S[K]; label: string; unit: strin
     { key: "callbackMaxMonths", label: "Callback: no máximo", unit: "mês", note: "Mais do que isso é Recusa; o calendário não deixa escolher depois" },
     { key: "resultAlertSeconds", label: "Aviso de resultado tarde a partir de", unit: "s", note: "O Chefe de Equipa/Administrador só é avisado acima disto" },
     { key: "shortCallSeconds", label: "Chamadas curtas: menos de", unit: "s", note: "Não contam como chamada (ex.: iniciar e desligar logo)" },
+    { key: "idleReturnMinutes", label: "Parado fora do Ligar (sem mexer): volta sozinho ao Ligar ao fim de", unit: "min", note: "Só para quem está «A trabalhar» (não em chamada, Em cliente, Office ou Intervalo). 0 = desligado" },
     { key: "nextCallLockSeconds", label: "Depois de guardar o resultado, «Iniciar chamada» fica inativo", unit: "s", note: "Evita ligar logo à empresa seguinte por engano" },
     { key: "clientAlertMinutes", label: "Em cliente: alerta ao Chefe de Equipa a cada", unit: "min", note: "O tempo em cliente não tem limite" },
     { key: "breakMinutes", label: "Intervalo", unit: "min/dia", note: "Se ultrapassar, o Administrador é avisado" },

@@ -60,6 +60,22 @@ export function App() {
     window.addEventListener(WORK_EVENT, h);
     return () => { clearInterval(t); window.removeEventListener(WORK_EVENT, h); };
   }, [user?.id, user?.mustChangePassword]);
+  // 27 nov: «A trabalhar» parado fora do Ligar (ex.: nas Oportunidades) sem mexer: ao fim de X min volta sozinho ao Ligar.
+  const pageRef = useRef(page); pageRef.current = page;
+  useEffect(() => {
+    if (!user || user.role === "admin") return;
+    let limitMs = 3 * 60_000; let last = Date.now();
+    api.catalogs().then((c) => { const m = Number(c.timeLimits.idleReturnMinutes ?? 3); limitMs = m > 0 ? m * 60_000 : 0; }).catch(() => undefined);
+    const touch = () => { last = Date.now(); };
+    const evs = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"] as const;
+    evs.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    const t = setInterval(() => {
+      if (!limitMs || pageRef.current === "novos") { last = Date.now(); return; }
+      if (lastState.current !== "working" || document.body.dataset.inCall === "1" || document.querySelector("[role=dialog]")) { last = Date.now(); return; }
+      if (Date.now() - last >= limitMs) { last = Date.now(); setPage("novos"); setImporting(false); setCompanyId(null); setStateNotice("Estava parado fora do Ligar: voltou ao Ligar."); }
+    }, 10_000);
+    return () => { clearInterval(t); evs.forEach((e) => window.removeEventListener(e, touch)); };
+  }, [user?.id, user?.role]);
   useEffect(() => { if (!stateNotice) return; const t = setTimeout(() => setStateNotice(""), 8000); return () => clearTimeout(t); }, [stateNotice]);
   if (checking) return null;
   // 20 nov: o Administrador começa no Pipeline (não usa o Ligar); os outros no Ligar.
